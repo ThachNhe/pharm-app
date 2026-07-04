@@ -1,0 +1,4 @@
+services:
+  backend:
+    container_name: backend-prod
+    command: yarn start
