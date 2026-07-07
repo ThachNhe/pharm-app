@@ -1,6 +1,6 @@
 // ─── App ───────────────────────────────────────────────────────────────────
 
-export const APP_NAME = import.meta.env.VITE_APP_NAME ?? 'My App'
+export const APP_NAME = import.meta.env.VITE_APP_NAME ?? 'PharmApp'
 export const APP_VERSION = import.meta.env.VITE_APP_VERSION ?? '1.0.0'
 export const APP_ENV = import.meta.env.MODE // 'development' | 'production'
 export const IS_DEV = APP_ENV === 'development'
