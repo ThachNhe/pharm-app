@@ -20,6 +20,9 @@ services:
     command: yarn dev:docker
     restart: unless-stopped
 
+  postgres:
+    container_name: pharm-db-dev
+
   mailhog:
     image: mailhog/mailhog:v1.0.1
     container_name: pharm-mailhog-dev

@@ -3,6 +3,8 @@ services:
     build:
       context: ./backend
     image: backend
+    env_file:
+      - ./env/dev/backend.env
     environment:
       - DATABASE_URL=${DATABASE_URL}
     ports:
