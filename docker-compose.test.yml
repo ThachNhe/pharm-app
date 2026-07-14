@@ -1,4 +1,4 @@
 services:
   backend:
     container_name: backend-test
-    command: yarn test
+    command: sh -c "if [ ! -d node_modules/vitest ]; then npm install --include=dev; fi; exec npm test"

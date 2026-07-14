@@ -20,6 +20,8 @@ RUN npm ci
 # Copy source code with proper ownership
 COPY --chown=node:node . .
 
+RUN npm run build
+
 EXPOSE 3000
 
 # Use dumb-init to handle signals properly

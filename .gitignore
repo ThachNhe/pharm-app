@@ -32,6 +32,7 @@ build/
 frontend/dist/
 backend/coverage/
 coverage/
+backend/src/generated/prisma/
 
 # Logs
 logs/

@@ -17,7 +17,7 @@ services:
 
   backend:
     container_name: pharm-backend-dev
-    command: yarn dev:docker
+    command: sh -c "if [ ! -d node_modules/tsx ]; then npm install --include=dev; fi; exec npm run dev:docker"
     restart: unless-stopped
 
   postgres:
@@ -26,6 +26,8 @@ services:
   mailhog:
     image: mailhog/mailhog:v1.0.1
     container_name: pharm-mailhog-dev
+    networks:
+      - node-network
     ports:
       - "${MAILHOG_PORT:-8025}:8025"
       - "1025:1025"
