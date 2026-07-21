@@ -14,10 +14,10 @@
   "scripts": {
     "start": "node dist/index.js",
     "start:pm2": "pm2 start ecosystem.config.json --no-daemon",
-    "dev": "cross-env NODE_ENV=development node --import tsx/esm src/index.ts",
-    "dev:docker": "cross-env NODE_ENV=development node --import tsx/esm src/index.ts",
+    "dev": "cross-env NODE_ENV=development tsx watch src/index.ts",
+    "dev:docker": "cross-env NODE_ENV=development tsx watch src/index.ts",
     "build": "prisma generate && tsc -p tsconfig.build.json",
-    "test": "cross-env NODE_ENV=test prisma generate && cross-env NODE_ENV=test prisma db push --force-reset --accept-data-loss && vitest run",
+    "test": "cross-env NODE_ENV=test prisma generate && cross-env NODE_ENV=test prisma db push --force-reset --accept-data-loss && cross-env NODE_ENV=test vitest run",
     "test:watch": "cross-env NODE_ENV=test vitest",
     "coverage": "cross-env NODE_ENV=test vitest run --coverage",
     "lint": "tsc --noEmit -p tsconfig.json",
