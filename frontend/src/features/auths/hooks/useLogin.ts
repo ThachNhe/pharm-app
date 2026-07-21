@@ -1,10 +1,18 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useRouter } from '@tanstack/react-router'
+import axios from 'axios'
 import { useAuthStore } from '@/stores/useAuthStore'
 import { useUIStore } from '@/stores/useUIStore'
 import { QUERY_KEYS, ROUTES } from '@/lib/constants'
 import { authService } from '../services/auth.service.ts'
 import type { LoginFormValues, RegisterFormValues } from '../types/auth.types.ts'
+
+const getErrorMessage = (error: unknown, fallback: string) => {
+  if (axios.isAxiosError<{ message?: string }>(error)) {
+    return error.response?.data?.message ?? error.message ?? fallback
+  }
+  return error instanceof Error ? error.message : fallback
+}
 
 // ─── useLogin ──────────────────────────────────────────────────────────────
 
@@ -18,7 +26,7 @@ export function useLogin() {
       authService.login({ email, password }),
 
     onSuccess: (data) => {
-      login(data.user, data.accessToken, data.refreshToken)
+      login(data.user, data.accessToken)
       addToast({
         type: 'success',
         title: 'Đăng nhập thành công',
@@ -27,11 +35,11 @@ export function useLogin() {
       router.navigate({ to: ROUTES.DASHBOARD })
     },
 
-    onError: (error: Error) => {
+    onError: (error) => {
       addToast({
         type: 'error',
         title: 'Đăng nhập thất bại',
-        description: error.message ?? 'Email hoặc mật khẩu không đúng',
+        description: getErrorMessage(error, 'Email hoặc mật khẩu không đúng'),
       })
     },
   })
@@ -56,11 +64,11 @@ export function useRegister() {
       router.navigate({ to: ROUTES.LOGIN })
     },
 
-    onError: (error: Error) => {
+    onError: (error) => {
       addToast({
         type: 'error',
         title: 'Đăng ký thất bại',
-        description: error.message ?? 'Đã xảy ra lỗi, vui lòng thử lại',
+        description: getErrorMessage(error, 'Đã xảy ra lỗi, vui lòng thử lại'),
       })
     },
   })
@@ -81,7 +89,7 @@ export function useLogout() {
       // Always clear local state regardless of server response
       logout()
       queryClient.clear()
-      router.navigate({ to: ROUTES.LOGIN })
+      router.navigate({ to: ROUTES.HOME })
     },
 
     onError: () => {

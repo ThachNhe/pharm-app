@@ -22,6 +22,7 @@ import { Input } from '@/components/ui/input'
 import { APP_NAME, ROUTES } from '@/lib/constants'
 import { cn } from '@/lib/utils'
 import { useAuthStore } from '@/stores/useAuthStore'
+import { authService } from '@/features/auths/services/auth.service'
 import { adminService } from './services/admin.service'
 import type { MedicineUnit, StoreRole } from './types'
 
@@ -216,7 +217,7 @@ export function AdminPage() {
   const [message, setMessage] = useState<string | null>(null)
   const queryClient = useQueryClient()
   const router = useRouter()
-  const { user, isAuthenticated, logout } = useAuthStore()
+  const { user, isAuthenticated, isHydrating, logout } = useAuthStore()
 
   const contextQuery = useQuery({
     queryKey: ['admin', 'context'],
@@ -335,9 +336,14 @@ export function AdminPage() {
     onSuccess: invalidateAdmin,
   })
 
-  const handleLogout = () => {
-    logout()
-    router.navigate({ to: ROUTES.HOME })
+  const handleLogout = async () => {
+    try {
+      await authService.logout()
+    } finally {
+      logout()
+      queryClient.clear()
+      router.navigate({ to: ROUTES.HOME })
+    }
   }
 
   const handleCreateStore = (event: FormEvent<HTMLFormElement>) => {
@@ -399,6 +405,20 @@ export function AdminPage() {
       Math.max(item.revenue, item.profit),
     ),
   )
+
+  if (isHydrating) {
+    return (
+      <main className="grid min-h-screen place-items-center bg-background p-4">
+        <Panel className="max-w-md text-center">
+          <RefreshCw className="mx-auto mb-4 size-10 animate-spin text-primary" />
+          <h1 className="text-xl font-semibold">Đang kiểm tra phiên</h1>
+          <p className="mt-2 text-sm text-muted-foreground">
+            Hệ thống đang xác thực lại phiên làm việc.
+          </p>
+        </Panel>
+      </main>
+    )
+  }
 
   if (!isAuthenticated) {
     return (

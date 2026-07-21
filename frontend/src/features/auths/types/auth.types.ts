@@ -5,7 +5,6 @@ import type { User } from '@/types/common.types'
 
 export interface AuthTokens {
   accessToken: string
-  refreshToken: string
   expiresIn: number
 }
 
@@ -49,7 +48,6 @@ export type RegisterPayload = Omit<RegisterFormValues, 'confirmPassword'>
 export interface LoginApiResponse {
   user: User
   accessToken: string
-  refreshToken: string
   expiresIn: number
 }
 
@@ -57,10 +55,6 @@ export interface BackendLoginApiResponse {
   user: User
   tokens: {
     access: {
-      token: string
-      expires: string
-    }
-    refresh: {
       token: string
       expires: string
     }

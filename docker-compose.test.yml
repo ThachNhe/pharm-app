@@ -1,4 +1,18 @@
 services:
   backend:
     container_name: backend-test
+    environment:
+      - DATABASE_URL=postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/pharmdb_test
     command: sh -c "if [ ! -d node_modules/vitest ]; then npm install --include=dev; fi; exec npm test"
+
+  postgres:
+    container_name: pharm-postgres-test-db
+    environment:
+      POSTGRES_DB: pharmdb_test
+    ports:
+      - "5433:5432"
+    volumes:
+      - postgres_test_data:/var/lib/postgresql/data
+
+volumes:
+  postgres_test_data:

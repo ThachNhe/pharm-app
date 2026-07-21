@@ -5,8 +5,11 @@ import {
   Pill,
   ShieldCheck,
 } from 'lucide-react'
+import { useEffect } from 'react'
+import { useRouter } from '@tanstack/react-router'
 
-import { APP_NAME } from '@/lib/constants'
+import { APP_NAME, ROUTES } from '@/lib/constants'
+import { useAuthStore } from '@/stores/useAuthStore'
 import { LoginForm } from './LoginForm'
 
 const metrics = [
@@ -34,6 +37,15 @@ const highlights = [
 ]
 
 export function LoginPage() {
+  const router = useRouter()
+  const { isAuthenticated, isHydrating } = useAuthStore()
+
+  useEffect(() => {
+    if (!isHydrating && isAuthenticated) {
+      void router.navigate({ to: ROUTES.DASHBOARD })
+    }
+  }, [isAuthenticated, isHydrating, router])
+
   return (
     <main className="min-h-screen bg-background text-foreground lg:grid lg:grid-cols-[minmax(0,1.05fr)_minmax(420px,0.95fr)]">
       <section className="hidden min-h-screen flex-col justify-between overflow-hidden bg-brand-navy px-10 py-8 text-white lg:flex xl:px-14">

@@ -1,4 +1,5 @@
 import type { PaginationMeta } from './common.types'
+import type { User } from './common.types'
 
 // ─── Base API Response ─────────────────────────────────────────────────────
 
@@ -33,7 +34,6 @@ export interface LoginRequest {
 
 export interface LoginResponse {
   accessToken: string
-  refreshToken: string
   expiresIn: number
 }
 
@@ -44,19 +44,16 @@ export interface RegisterRequest {
 }
 
 export interface RefreshTokenRequest {
-  refreshToken: string
+  refreshToken?: string
 }
 
 export interface RefreshTokenResponse {
-  accessToken?: string
-  expiresIn?: number
-  access: {
-    token: string
-    expires: string
-  }
-  refresh?: {
-    token: string
-    expires: string
+  user: User
+  tokens: {
+    access: {
+      token: string
+      expires: string
+    }
   }
 }
 

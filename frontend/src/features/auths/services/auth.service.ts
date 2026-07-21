@@ -26,7 +26,6 @@ export const authService = {
     return {
       user: data.user,
       accessToken: data.tokens.access.token,
-      refreshToken: data.tokens.refresh.token,
       expiresIn: Math.max(
         0,
         Math.floor(
@@ -47,6 +46,27 @@ export const authService = {
    */
   logout: () =>
     apiPost<ApiResponse>(API_ENDPOINTS.AUTH.LOGOUT),
+
+  /**
+   * Refresh access token from the HttpOnly refresh cookie.
+   */
+  refreshSession: async (): Promise<LoginApiResponse> => {
+    const data = await apiPost<BackendLoginApiResponse>(
+      API_ENDPOINTS.AUTH.REFRESH,
+      {},
+    )
+
+    return {
+      user: data.user,
+      accessToken: data.tokens.access.token,
+      expiresIn: Math.max(
+        0,
+        Math.floor(
+          (new Date(data.tokens.access.expires).getTime() - Date.now()) / 1000,
+        ),
+      ),
+    }
+  },
 
   /**
    * Get current authenticated user

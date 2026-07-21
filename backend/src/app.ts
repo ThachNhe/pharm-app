@@ -37,8 +37,12 @@ app.use(xss());
 app.use(compression());
 
 // enable cors
-app.use(cors());
-app.options('*', cors());
+const corsOptions = {
+  origin: true,
+  credentials: true,
+};
+app.use(cors(corsOptions));
+app.options('*', cors(corsOptions));
 
 // jwt authentication
 app.use(passport.initialize());

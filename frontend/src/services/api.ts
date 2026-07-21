@@ -8,6 +8,7 @@ import { API_ENDPOINTS } from './endpoints'
 export const api = axios.create({
   baseURL: import.meta.env.VITE_API_URL,
   timeout: 15000,
+  withCredentials: true,
   headers: {
     'Content-Type': 'application/json',
   },
@@ -32,6 +33,18 @@ const processQueue = (error: unknown, token: string | null = null) => {
   failedQueue = []
 }
 
+const authRetryExcludedEndpoints = [
+  API_ENDPOINTS.AUTH.LOGIN,
+  API_ENDPOINTS.AUTH.REGISTER,
+  API_ENDPOINTS.AUTH.LOGOUT,
+  API_ENDPOINTS.AUTH.REFRESH,
+]
+
+const shouldSkipAuthRefresh = (url?: string) => {
+  if (!url) return true
+  return authRetryExcludedEndpoints.some((endpoint) => url.includes(endpoint))
+}
+
 // ─── Request Interceptor ───────────────────────────────────────────────────
 
 api.interceptors.request.use(
@@ -54,8 +67,12 @@ api.interceptors.response.use(
       _retry?: boolean
     }
 
-    // Handle 401 - attempt token refresh
-    if (error.response?.status === 401 && !originalRequest._retry) {
+    // Handle 401 - attempt token refresh, except auth endpoints such as login.
+    if (
+      error.response?.status === 401 &&
+      !originalRequest._retry &&
+      !shouldSkipAuthRefresh(originalRequest.url)
+    ) {
       if (isRefreshing) {
         // Queue requests while refreshing
         return new Promise((resolve, reject) => {
@@ -71,24 +88,15 @@ api.interceptors.response.use(
       originalRequest._retry = true
       isRefreshing = true
 
-      const storedToken = localStorage.getItem('auth-storage')
-      const refreshToken = storedToken
-        ? JSON.parse(storedToken)?.state?.refreshToken
-        : null
-
-      if (!refreshToken) {
-        useAuthStore.getState().logout()
-        return Promise.reject(error)
-      }
-
       try {
         const { data } = await axios.post<RefreshTokenResponse>(
           `${import.meta.env.VITE_API_URL}${API_ENDPOINTS.AUTH.REFRESH}`,
-          { refreshToken },
+          {},
+          { withCredentials: true },
         )
 
-        const accessToken = data.accessToken ?? data.access.token
-        useAuthStore.getState().setToken(accessToken)
+        const accessToken = data.tokens.access.token
+        useAuthStore.getState().login(data.user, accessToken)
         processQueue(null, accessToken)
         originalRequest.headers.Authorization = `Bearer ${accessToken}`
         return api(originalRequest)

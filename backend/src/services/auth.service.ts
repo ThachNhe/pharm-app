@@ -26,7 +26,11 @@ const loginUserWithEmailAndPassword = async (email: string, password: string) =>
  * @param {string} refreshToken
  * @returns {Promise}
  */
-const logout = async (refreshToken: string) => {
+const logout = async (refreshToken?: string) => {
+  if (!refreshToken) {
+    return;
+  }
+
   const refreshTokenDoc = await prisma.token.findFirst({
     where: {
       token: refreshToken,
@@ -34,10 +38,9 @@ const logout = async (refreshToken: string) => {
       blacklisted: false,
     },
   });
-  if (!refreshTokenDoc) {
-    throw new ApiError(httpStatus.NOT_FOUND, 'Not found');
+  if (refreshTokenDoc) {
+    await prisma.token.delete({ where: { id: refreshTokenDoc.id } });
   }
-  await prisma.token.delete({ where: { id: refreshTokenDoc.id } });
 };
 
 /**
@@ -45,15 +48,19 @@ const logout = async (refreshToken: string) => {
  * @param {string} refreshToken
  * @returns {Promise<Object>}
  */
-const refreshAuth = async (refreshToken: string) => {
+const refreshAuth = async (refreshToken?: string) => {
   try {
+    if (!refreshToken) {
+      throw new Error();
+    }
     const refreshTokenDoc = await tokenService.verifyToken(refreshToken, tokenTypes.REFRESH);
     const user = await userService.getUserById(refreshTokenDoc.userId);
     if (!user) {
       throw new Error();
     }
     await prisma.token.delete({ where: { id: refreshTokenDoc.id } });
-    return tokenService.generateAuthTokens(user);
+    const tokens = await tokenService.generateAuthTokens(user);
+    return { user, tokens };
   } catch (error) {
     throw new ApiError(httpStatus.UNAUTHORIZED, 'Please authenticate');
   }

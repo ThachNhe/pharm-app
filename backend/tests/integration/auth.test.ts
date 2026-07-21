@@ -18,6 +18,15 @@ import { userOneAccessToken, adminAccessToken } from '../fixtures/token.fixture.
 
 setupTestDB();
 
+const getSetCookies = (res) => {
+  const cookies = res.headers['set-cookie'];
+  return Array.isArray(cookies) ? cookies : [cookies].filter(Boolean);
+};
+
+const expectRefreshCookie = (res) => {
+  expect(getSetCookies(res).some((cookie) => cookie.startsWith('refreshToken=') && cookie.includes('HttpOnly'))).toBe(true);
+};
+
 describe('Auth routes', () => {
   describe('POST /v1/auth/register', () => {
     let newUser;
@@ -48,8 +57,8 @@ describe('Auth routes', () => {
 
       expect(res.body.tokens).toEqual({
         access: { token: expect.anything(), expires: expect.anything() },
-        refresh: { token: expect.anything(), expires: expect.anything() },
       });
+      expectRefreshCookie(res);
     });
 
     test('should return 400 error if email is invalid', async () => {
@@ -102,8 +111,8 @@ describe('Auth routes', () => {
 
       expect(res.body.tokens).toEqual({
         access: { token: expect.anything(), expires: expect.anything() },
-        refresh: { token: expect.anything(), expires: expect.anything() },
       });
+      expectRefreshCookie(res);
     });
 
     test('should return 401 error if there are no users with that email', async () => {
@@ -137,31 +146,41 @@ describe('Auth routes', () => {
       const refreshToken = tokenService.generateToken(userOne.id, expires, tokenTypes.REFRESH);
       await tokenService.saveToken(refreshToken, userOne.id, expires, tokenTypes.REFRESH);
 
-      await request(app).post('/v1/auth/logout').send({ refreshToken }).expect(httpStatus.NO_CONTENT);
+      const res = await request(app)
+        .post('/v1/auth/logout')
+        .set('Cookie', [`refreshToken=${refreshToken}`])
+        .expect(httpStatus.NO_CONTENT);
+      expectRefreshCookie(res);
 
       const dbRefreshTokenDoc = await prisma.token.findFirst({ where: { token: refreshToken } });
       expect(dbRefreshTokenDoc).toBe(null);
     });
 
-    test('should return 400 error if refresh token is missing from request body', async () => {
-      await request(app).post('/v1/auth/logout').send().expect(httpStatus.BAD_REQUEST);
+    test('should return 204 if refresh token is missing', async () => {
+      await request(app).post('/v1/auth/logout').send().expect(httpStatus.NO_CONTENT);
     });
 
-    test('should return 404 error if refresh token is not found in the database', async () => {
+    test('should return 204 if refresh token is not found in the database', async () => {
       await insertUsers([userOne]);
       const expires = moment().add(config.jwt.refreshExpirationDays, 'days');
       const refreshToken = tokenService.generateToken(userOne.id, expires, tokenTypes.REFRESH);
 
-      await request(app).post('/v1/auth/logout').send({ refreshToken }).expect(httpStatus.NOT_FOUND);
+      await request(app)
+        .post('/v1/auth/logout')
+        .set('Cookie', [`refreshToken=${refreshToken}`])
+        .expect(httpStatus.NO_CONTENT);
     });
 
-    test('should return 404 error if refresh token is blacklisted', async () => {
+    test('should return 204 if refresh token is blacklisted', async () => {
       await insertUsers([userOne]);
       const expires = moment().add(config.jwt.refreshExpirationDays, 'days');
       const refreshToken = tokenService.generateToken(userOne.id, expires, tokenTypes.REFRESH);
       await tokenService.saveToken(refreshToken, userOne.id, expires, tokenTypes.REFRESH, true);
 
-      await request(app).post('/v1/auth/logout').send({ refreshToken }).expect(httpStatus.NOT_FOUND);
+      await request(app)
+        .post('/v1/auth/logout')
+        .set('Cookie', [`refreshToken=${refreshToken}`])
+        .expect(httpStatus.NO_CONTENT);
     });
   });
 
@@ -172,22 +191,36 @@ describe('Auth routes', () => {
       const refreshToken = tokenService.generateToken(userOne.id, expires, tokenTypes.REFRESH);
       await tokenService.saveToken(refreshToken, userOne.id, expires, tokenTypes.REFRESH);
 
-      const res = await request(app).post('/v1/auth/refresh-tokens').send({ refreshToken }).expect(httpStatus.OK);
+      const res = await request(app)
+        .post('/v1/auth/refresh-tokens')
+        .set('Cookie', [`refreshToken=${refreshToken}`])
+        .expect(httpStatus.OK);
 
       expect(res.body).toEqual({
-        access: { token: expect.anything(), expires: expect.anything() },
-        refresh: { token: expect.anything(), expires: expect.anything() },
+        user: {
+          id: expect.anything(),
+          name: userOne.name,
+          email: userOne.email,
+          role: userOne.role,
+          isEmailVerified: userOne.isEmailVerified,
+        },
+        tokens: {
+          access: { token: expect.anything(), expires: expect.anything() },
+        },
       });
+      expectRefreshCookie(res);
 
-      const dbRefreshTokenDoc = await prisma.token.findFirst({ where: { token: res.body.refresh.token } });
+      const setCookieHeader = getSetCookies(res).find((cookie) => cookie.startsWith('refreshToken='));
+      const newRefreshToken = setCookieHeader.split(';')[0].replace('refreshToken=', '');
+      const dbRefreshTokenDoc = await prisma.token.findFirst({ where: { token: newRefreshToken } });
       expect(dbRefreshTokenDoc).toMatchObject({ type: tokenTypes.REFRESH, userId: userOne.id, blacklisted: false });
 
       const dbRefreshTokenCount = await prisma.token.count();
       expect(dbRefreshTokenCount).toBe(1);
     });
 
-    test('should return 400 error if refresh token is missing from request body', async () => {
-      await request(app).post('/v1/auth/refresh-tokens').send().expect(httpStatus.BAD_REQUEST);
+    test('should return 401 error if refresh token is missing', async () => {
+      await request(app).post('/v1/auth/refresh-tokens').send().expect(httpStatus.UNAUTHORIZED);
     });
 
     test('should return 401 error if refresh token is signed using an invalid secret', async () => {
@@ -196,7 +229,10 @@ describe('Auth routes', () => {
       const refreshToken = tokenService.generateToken(userOne.id, expires, tokenTypes.REFRESH, 'invalidSecret');
       await tokenService.saveToken(refreshToken, userOne.id, expires, tokenTypes.REFRESH);
 
-      await request(app).post('/v1/auth/refresh-tokens').send({ refreshToken }).expect(httpStatus.UNAUTHORIZED);
+      await request(app)
+        .post('/v1/auth/refresh-tokens')
+        .set('Cookie', [`refreshToken=${refreshToken}`])
+        .expect(httpStatus.UNAUTHORIZED);
     });
 
     test('should return 401 error if refresh token is not found in the database', async () => {
@@ -204,7 +240,10 @@ describe('Auth routes', () => {
       const expires = moment().add(config.jwt.refreshExpirationDays, 'days');
       const refreshToken = tokenService.generateToken(userOne.id, expires, tokenTypes.REFRESH);
 
-      await request(app).post('/v1/auth/refresh-tokens').send({ refreshToken }).expect(httpStatus.UNAUTHORIZED);
+      await request(app)
+        .post('/v1/auth/refresh-tokens')
+        .set('Cookie', [`refreshToken=${refreshToken}`])
+        .expect(httpStatus.UNAUTHORIZED);
     });
 
     test('should return 401 error if refresh token is blacklisted', async () => {
@@ -213,7 +252,10 @@ describe('Auth routes', () => {
       const refreshToken = tokenService.generateToken(userOne.id, expires, tokenTypes.REFRESH);
       await tokenService.saveToken(refreshToken, userOne.id, expires, tokenTypes.REFRESH, true);
 
-      await request(app).post('/v1/auth/refresh-tokens').send({ refreshToken }).expect(httpStatus.UNAUTHORIZED);
+      await request(app)
+        .post('/v1/auth/refresh-tokens')
+        .set('Cookie', [`refreshToken=${refreshToken}`])
+        .expect(httpStatus.UNAUTHORIZED);
     });
 
     test('should return 401 error if refresh token is expired', async () => {
@@ -222,7 +264,10 @@ describe('Auth routes', () => {
       const refreshToken = tokenService.generateToken(userOne.id, expires);
       await tokenService.saveToken(refreshToken, userOne.id, expires, tokenTypes.REFRESH);
 
-      await request(app).post('/v1/auth/refresh-tokens').send({ refreshToken }).expect(httpStatus.UNAUTHORIZED);
+      await request(app)
+        .post('/v1/auth/refresh-tokens')
+        .set('Cookie', [`refreshToken=${refreshToken}`])
+        .expect(httpStatus.UNAUTHORIZED);
     });
 
     test('should return 401 error if user is not found', async () => {
@@ -232,7 +277,10 @@ describe('Auth routes', () => {
       await tokenService.saveToken(refreshToken, userOne.id, expires, tokenTypes.REFRESH);
       await prisma.user.delete({ where: { id: userOne.id } });
 
-      await request(app).post('/v1/auth/refresh-tokens').send({ refreshToken }).expect(httpStatus.UNAUTHORIZED);
+      await request(app)
+        .post('/v1/auth/refresh-tokens')
+        .set('Cookie', [`refreshToken=${refreshToken}`])
+        .expect(httpStatus.UNAUTHORIZED);
     });
   });
 
