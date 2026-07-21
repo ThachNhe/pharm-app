@@ -3,13 +3,6 @@ import { devtools, persist } from 'zustand/middleware'
 
 type Theme = 'light' | 'dark' | 'system'
 
-interface Toast {
-  id: string
-  title: string
-  description?: string
-  type: 'success' | 'error' | 'warning' | 'info'
-}
-
 interface UIState {
   // Theme
   theme: Theme
@@ -26,11 +19,6 @@ interface UIState {
   isGlobalLoading: boolean
   setGlobalLoading: (loading: boolean) => void
 
-  // Toasts
-  toasts: Toast[]
-  addToast: (toast: Omit<Toast, 'id'>) => void
-  removeToast: (id: string) => void
-  clearToasts: () => void
 }
 
 export const useUIStore = create<UIState>()(
@@ -64,28 +52,6 @@ export const useUIStore = create<UIState>()(
         setGlobalLoading: (loading) =>
           set({ isGlobalLoading: loading }, false, 'ui/setGlobalLoading'),
 
-        // Toasts
-        toasts: [],
-        addToast: (toast) =>
-          set(
-            (state) => ({
-              toasts: [
-                ...state.toasts,
-                { ...toast, id: crypto.randomUUID() },
-              ],
-            }),
-            false,
-            'ui/addToast',
-          ),
-        removeToast: (id) =>
-          set(
-            (state) => ({
-              toasts: state.toasts.filter((t) => t.id !== id),
-            }),
-            false,
-            'ui/removeToast',
-          ),
-        clearToasts: () => set({ toasts: [] }, false, 'ui/clearToasts'),
       }),
       {
         name: 'ui-storage',

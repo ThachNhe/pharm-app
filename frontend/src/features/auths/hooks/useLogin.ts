@@ -1,8 +1,8 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useRouter } from '@tanstack/react-router'
 import axios from 'axios'
+import { toast } from 'sonner'
 import { useAuthStore } from '@/stores/useAuthStore'
-import { useUIStore } from '@/stores/useUIStore'
 import { QUERY_KEYS, ROUTES } from '@/lib/constants'
 import { authService } from '../services/auth.service.ts'
 import type { LoginFormValues, RegisterFormValues } from '../types/auth.types.ts'
@@ -18,7 +18,6 @@ const getErrorMessage = (error: unknown, fallback: string) => {
 
 export function useLogin() {
   const { login } = useAuthStore()
-  const { addToast } = useUIStore()
   const router = useRouter()
 
   return useMutation({
@@ -27,18 +26,14 @@ export function useLogin() {
 
     onSuccess: (data) => {
       login(data.user, data.accessToken)
-      addToast({
-        type: 'success',
-        title: 'Đăng nhập thành công',
+      toast.success('Đăng nhập thành công', {
         description: `Chào mừng trở lại, ${data.user.name}!`,
       })
       router.navigate({ to: ROUTES.DASHBOARD })
     },
 
     onError: (error) => {
-      addToast({
-        type: 'error',
-        title: 'Đăng nhập thất bại',
+      toast.error('Đăng nhập thất bại', {
         description: getErrorMessage(error, 'Email hoặc mật khẩu không đúng'),
       })
     },
@@ -48,7 +43,6 @@ export function useLogin() {
 // ─── useRegister ───────────────────────────────────────────────────────────
 
 export function useRegister() {
-  const { addToast } = useUIStore()
   const router = useRouter()
 
   return useMutation({
@@ -56,18 +50,14 @@ export function useRegister() {
       authService.register({ name, email, password }),
 
     onSuccess: () => {
-      addToast({
-        type: 'success',
-        title: 'Đăng ký thành công',
+      toast.success('Đăng ký thành công', {
         description: 'Vui lòng kiểm tra email để xác nhận tài khoản.',
       })
       router.navigate({ to: ROUTES.LOGIN })
     },
 
     onError: (error) => {
-      addToast({
-        type: 'error',
-        title: 'Đăng ký thất bại',
+      toast.error('Đăng ký thất bại', {
         description: getErrorMessage(error, 'Đã xảy ra lỗi, vui lòng thử lại'),
       })
     },
@@ -78,7 +68,6 @@ export function useRegister() {
 
 export function useLogout() {
   const { logout } = useAuthStore()
-  const { addToast } = useUIStore()
   const queryClient = useQueryClient()
   const router = useRouter()
 
@@ -93,9 +82,7 @@ export function useLogout() {
     },
 
     onError: () => {
-      addToast({
-        type: 'error',
-        title: 'Lỗi đăng xuất',
+      toast.error('Lỗi đăng xuất', {
         description: 'Phiên của bạn đã được xóa cục bộ.',
       })
     },
