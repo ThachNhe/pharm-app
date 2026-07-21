@@ -1,6 +1,6 @@
 // ─── User ─────────────────────────────────────────────────────────────────
 
-export type UserRole = 'admin' | 'user' | 'moderator'
+export type UserRole = 'admin' | 'user'
 
 export interface User {
   id: string
@@ -8,8 +8,9 @@ export interface User {
   name: string
   avatar?: string
   role: UserRole
-  createdAt: string
-  updatedAt: string
+  isEmailVerified?: boolean
+  createdAt?: string
+  updatedAt?: string
 }
 
 // ─── Pagination ────────────────────────────────────────────────────────────

@@ -73,7 +73,7 @@ api.interceptors.response.use(
 
       const storedToken = localStorage.getItem('auth-storage')
       const refreshToken = storedToken
-        ? JSON.parse(storedToken)?.state?.token
+        ? JSON.parse(storedToken)?.state?.refreshToken
         : null
 
       if (!refreshToken) {
@@ -87,9 +87,10 @@ api.interceptors.response.use(
           { refreshToken },
         )
 
-        useAuthStore.getState().setToken(data.accessToken)
-        processQueue(null, data.accessToken)
-        originalRequest.headers.Authorization = `Bearer ${data.accessToken}`
+        const accessToken = data.accessToken ?? data.access.token
+        useAuthStore.getState().setToken(accessToken)
+        processQueue(null, accessToken)
+        originalRequest.headers.Authorization = `Bearer ${accessToken}`
         return api(originalRequest)
       } catch (refreshError) {
         processQueue(refreshError, null)

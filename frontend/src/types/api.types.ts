@@ -48,8 +48,16 @@ export interface RefreshTokenRequest {
 }
 
 export interface RefreshTokenResponse {
-  accessToken: string
-  expiresIn: number
+  accessToken?: string
+  expiresIn?: number
+  access: {
+    token: string
+    expires: string
+  }
+  refresh?: {
+    token: string
+    expires: string
+  }
 }
 
 // ─── Query Params helper ───────────────────────────────────────────────────

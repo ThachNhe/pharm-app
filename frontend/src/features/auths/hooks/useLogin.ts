@@ -18,7 +18,7 @@ export function useLogin() {
       authService.login({ email, password }),
 
     onSuccess: (data) => {
-      login(data.user, data.accessToken)
+      login(data.user, data.accessToken, data.refreshToken)
       addToast({
         type: 'success',
         title: 'Đăng nhập thành công',

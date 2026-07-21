@@ -16,7 +16,7 @@ export const ROUTES = {
   RESET_PASSWORD: '/reset-password',
 
   // Protected
-  DASHBOARD: '/dashboard',
+  DASHBOARD: '/admin',
   PROFILE: '/profile',
   SETTINGS: '/settings',
 

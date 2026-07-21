@@ -1,8 +1,8 @@
-import type { PublicUser } from '../utils/user.js';
+import type { AuthenticatedUser } from '../utils/user.js';
 
 declare global {
   namespace Express {
-    interface User extends PublicUser {}
+    interface User extends AuthenticatedUser {}
   }
 }
 

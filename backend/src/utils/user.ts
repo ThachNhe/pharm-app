@@ -1,6 +1,7 @@
 import type { User } from '../generated/prisma/client.js';
 
 type PublicUser = Pick<User, 'id' | 'name' | 'email' | 'role' | 'isEmailVerified'>;
+type AuthenticatedUser = PublicUser & Pick<User, 'isSystemAdmin' | 'isActive'>;
 
 const publicUserSelect = {
   id: true,
@@ -8,6 +9,12 @@ const publicUserSelect = {
   email: true,
   role: true,
   isEmailVerified: true,
+};
+
+const authenticatedUserSelect = {
+  ...publicUserSelect,
+  isSystemAdmin: true,
+  isActive: true,
 };
 
 const toPublicUser = (user: User): PublicUser => {
@@ -20,5 +27,5 @@ const toPublicUser = (user: User): PublicUser => {
   };
 };
 
-export { publicUserSelect, toPublicUser };
-export type { PublicUser };
+export { authenticatedUserSelect, publicUserSelect, toPublicUser };
+export type { AuthenticatedUser, PublicUser };

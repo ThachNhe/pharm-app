@@ -14,7 +14,7 @@ export const API_ENDPOINTS = {
     LOGIN: '/auth/login',
     REGISTER: '/auth/register',
     LOGOUT: '/auth/logout',
-    REFRESH: '/auth/refresh',
+    REFRESH: '/auth/refresh-tokens',
     ME: '/auth/me',
     FORGOT_PASSWORD: '/auth/forgot-password',
     RESET_PASSWORD: '/auth/reset-password',
@@ -30,10 +30,18 @@ export const API_ENDPOINTS = {
     AVATAR: (id: string) => `/users/${id}/avatar`,
   },
 
-  // ─── Add more domains below ───────────────────────────────────────────────
-  // PRODUCTS: {
-  //   LIST: '/products',
-  //   BY_ID: (id: string) => `/products/${id}`,
-  //   ...
-  // },
+  ADMIN: {
+    ME: '/admin/me',
+    DASHBOARD: '/admin/dashboard',
+    STORES: '/admin/stores',
+    STORE: (id: string) => `/admin/stores/${id}`,
+    USERS: '/admin/users',
+    USER: (id: string) => `/admin/users/${id}`,
+    RESET_PASSWORD: (id: string) => `/admin/users/${id}/reset-password`,
+    MEDICINES: '/admin/medicines',
+    MEDICINE: (id: string) => `/admin/medicines/${id}`,
+    IMPORT_RECEIPTS: '/admin/import-receipts',
+    SALES: '/admin/sales',
+    PROFIT_REPORT: '/admin/reports/profit',
+  },
 } as const

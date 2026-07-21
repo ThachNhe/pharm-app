@@ -53,6 +53,20 @@ export interface LoginApiResponse {
   expiresIn: number
 }
 
+export interface BackendLoginApiResponse {
+  user: User
+  tokens: {
+    access: {
+      token: string
+      expires: string
+    }
+    refresh: {
+      token: string
+      expires: string
+    }
+  }
+}
+
 export interface RegisterApiResponse {
   user: User
   message: string

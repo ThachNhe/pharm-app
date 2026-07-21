@@ -4,6 +4,7 @@ import type {
   LoginPayload,
   RegisterPayload,
   LoginApiResponse,
+  BackendLoginApiResponse,
   RegisterApiResponse,
 } from '../types/auth.types'
 import type { User } from '@/types/common.types'
@@ -16,8 +17,24 @@ export const authService = {
    * Login with email & password
    * Returns user info + tokens
    */
-  login: (payload: LoginPayload) =>
-    apiPost<LoginApiResponse>(API_ENDPOINTS.AUTH.LOGIN, payload),
+  login: async (payload: LoginPayload): Promise<LoginApiResponse> => {
+    const data = await apiPost<BackendLoginApiResponse>(
+      API_ENDPOINTS.AUTH.LOGIN,
+      payload,
+    )
+
+    return {
+      user: data.user,
+      accessToken: data.tokens.access.token,
+      refreshToken: data.tokens.refresh.token,
+      expiresIn: Math.max(
+        0,
+        Math.floor(
+          (new Date(data.tokens.access.expires).getTime() - Date.now()) / 1000,
+        ),
+      ),
+    }
+  },
 
   /**
    * Register a new account

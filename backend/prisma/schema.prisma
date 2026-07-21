@@ -95,6 +95,7 @@ model User {
   importReceipts     ImportReceipt[]     @relation("ImportCreatedBy")
   inventoryMovements InventoryMovement[] @relation("MovementCreatedBy")
   sales              Sale[]              @relation("SaleSoldBy")
+  auditLogs          AuditLog[]          @relation("AuditActor")
 
   @@map("users")
 }
@@ -131,6 +132,7 @@ model Store {
   sales                Sale[]
   dailyProfitSummaries DailyProfitSummary[]
   importDetails        ImportDetail[]
+  auditLogs            AuditLog[]
 
   @@map("stores")
 }
@@ -171,10 +173,26 @@ model Medicine {
   saleDetails          SaleDetail[]
   stockBatches         StockBatch[]
   storeMedicines       StoreMedicine[]
+  units                MedicineUnit[]
 
   @@index([name])
   @@index([barcode])
   @@map("medicines")
+}
+
+model MedicineUnit {
+  id             String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  medicineId     String   @map("medicine_id") @db.Uuid
+  name           String   @db.VarChar(50)
+  conversionRate Decimal  @map("conversion_rate") @db.Decimal(12, 4)
+  isBaseUnit     Boolean  @default(false) @map("is_base_unit")
+  createdAt      DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt      DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(3)
+  medicine       Medicine @relation(fields: [medicineId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+
+  @@unique([medicineId, name])
+  @@index([medicineId])
+  @@map("medicine_units")
 }
 
 model StoreMedicine {
@@ -358,4 +376,22 @@ model DailyProfitSummary {
   @@unique([storeId, summaryDate])
   @@index([storeId, summaryDate])
   @@map("daily_profit_summary")
+}
+
+model AuditLog {
+  id         String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  actorId    String?  @map("actor_id") @db.Uuid
+  storeId    String?  @map("store_id") @db.Uuid
+  action     String   @db.VarChar(100)
+  targetType String   @map("target_type") @db.VarChar(100)
+  targetId   String?  @map("target_id") @db.Uuid
+  metadata   Json?
+  createdAt  DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  actor      User?    @relation("AuditActor", fields: [actorId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+  store      Store?   @relation(fields: [storeId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+
+  @@index([actorId, createdAt])
+  @@index([storeId, createdAt])
+  @@index([targetType, targetId])
+  @@map("audit_logs")
 }

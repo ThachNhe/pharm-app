@@ -2,7 +2,7 @@ import { Strategy as JwtStrategy, ExtractJwt, type VerifiedCallback } from 'pass
 import config from './config.js';
 import { tokenTypes } from './tokens.js';
 import { prisma } from './database.js';
-import { publicUserSelect } from '../utils/user.js';
+import { authenticatedUserSelect } from '../utils/user.js';
 
 const jwtOptions = {
   secretOrKey: config.jwt.secret,
@@ -16,7 +16,7 @@ const jwtVerify = async (payload, done: VerifiedCallback) => {
     }
     const user = await prisma.user.findUnique({
       where: { id: payload.sub },
-      select: publicUserSelect,
+      select: authenticatedUserSelect,
     });
     if (!user) {
       return done(null, false);
