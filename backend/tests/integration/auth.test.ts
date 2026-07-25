@@ -27,6 +27,10 @@ const expectRefreshCookie = (res) => {
   expect(getSetCookies(res).some((cookie) => cookie.startsWith('refreshToken=') && cookie.includes('HttpOnly'))).toBe(true);
 };
 
+const expectNoRefreshCookie = (res) => {
+  expect(getSetCookies(res).some((cookie) => cookie.startsWith('refreshToken='))).toBe(false);
+};
+
 const getLoginOtpCode = (sendMailSpy) => {
   const message = sendMailSpy.mock.calls.at(-1)?.[0] as { text?: string };
   return message.text?.match(/\b\d{6}\b/)?.[0];
@@ -307,7 +311,7 @@ describe('Auth routes', () => {
   });
 
   describe('POST /v1/auth/refresh-tokens', () => {
-    test('should return 200 and new auth tokens if refresh token is valid', async () => {
+    test('should return 200 and a new access token without rotating refresh token if refresh token is valid', async () => {
       await insertUsers([userOne]);
       const expires = moment().add(config.jwt.refreshExpirationDays, 'days');
       const refreshToken = tokenService.generateToken(userOne.id, expires, tokenTypes.REFRESH);
@@ -330,12 +334,10 @@ describe('Auth routes', () => {
           access: { token: expect.anything(), expires: expect.anything() },
         },
       });
-      expectRefreshCookie(res);
+      expectNoRefreshCookie(res);
 
-      const setCookieHeader = getSetCookies(res).find((cookie) => cookie.startsWith('refreshToken='));
-      const newRefreshToken = setCookieHeader.split(';')[0].replace('refreshToken=', '');
       const dbRefreshTokenDoc = await prisma.token.findFirst({
-        where: { token: tokenService.hashToken(newRefreshToken) },
+        where: { token: tokenService.hashToken(refreshToken) },
       });
       expect(dbRefreshTokenDoc).toMatchObject({ type: tokenTypes.REFRESH, userId: userOne.id, blacklisted: false });
 

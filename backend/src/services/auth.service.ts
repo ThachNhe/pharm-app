@@ -52,7 +52,7 @@ const logout = async (refreshToken?: string) => {
 };
 
 /**
- * Refresh auth tokens
+ * Refresh access token using the current refresh token cookie
  * @param {string} refreshToken
  * @returns {Promise<Object>}
  */
@@ -66,9 +66,8 @@ const refreshAuth = async (refreshToken?: string) => {
     if (!user) {
       throw new Error();
     }
-    await prisma.token.delete({ where: { id: refreshTokenDoc.id } });
-    const tokens = await tokenService.generateAuthTokens(user);
-    return { user, tokens };
+    const access = tokenService.generateAccessToken(user);
+    return { user, tokens: { access } };
   } catch (error) {
     throw new ApiError(httpStatus.UNAUTHORIZED, 'Please authenticate');
   }

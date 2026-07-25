@@ -90,23 +90,34 @@ const verifyToken = async (token: string, type: StoredTokenType): Promise<Token>
 };
 
 /**
+ * Generate access token
+ * @param {User} user
+ * @returns {Object}
+ */
+const generateAccessToken = (user: PublicUser) => {
+  const accessTokenExpires = moment().add(config.jwt.accessExpirationMinutes, 'minutes');
+  const accessToken = generateToken(user.id, accessTokenExpires, tokenTypes.ACCESS);
+
+  return {
+    token: accessToken,
+    expires: accessTokenExpires.toDate(),
+  };
+};
+
+/**
  * Generate auth tokens
  * @param {User} user
  * @returns {Promise<Object>}
  */
 const generateAuthTokens = async (user: PublicUser) => {
-  const accessTokenExpires = moment().add(config.jwt.accessExpirationMinutes, 'minutes');
-  const accessToken = generateToken(user.id, accessTokenExpires, tokenTypes.ACCESS);
+  const accessToken = generateAccessToken(user);
 
   const refreshTokenExpires = moment().add(config.jwt.refreshExpirationDays, 'days');
   const refreshToken = generateToken(user.id, refreshTokenExpires, tokenTypes.REFRESH);
   await saveToken(refreshToken, user.id, refreshTokenExpires, tokenTypes.REFRESH);
 
   return {
-    access: {
-      token: accessToken,
-      expires: accessTokenExpires.toDate(),
-    },
+    access: accessToken,
     refresh: {
       token: refreshToken,
       expires: refreshTokenExpires.toDate(),
@@ -147,6 +158,7 @@ export {
   hashToken,
   saveToken,
   verifyToken,
+  generateAccessToken,
   generateAuthTokens,
   generateResetPasswordToken,
   generateVerifyEmailToken,
