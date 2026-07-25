@@ -21,6 +21,10 @@ export interface LoginFormValues {
   rememberMe?: boolean
 }
 
+export interface LoginOtpFormValues {
+  code: string
+}
+
 export interface RegisterFormValues {
   name: string
   email: string
@@ -41,6 +45,10 @@ export interface ResetPasswordFormValues {
 // ─── API Payloads ──────────────────────────────────────────────────────────
 
 export type LoginPayload = Omit<LoginFormValues, 'rememberMe'>
+export interface VerifyLoginOtpPayload {
+  challengeId: string
+  code: string
+}
 export type RegisterPayload = Omit<RegisterFormValues, 'confirmPassword'>
 
 // ─── API Responses ─────────────────────────────────────────────────────────
@@ -49,6 +57,13 @@ export interface LoginApiResponse {
   user: User
   accessToken: string
   expiresIn: number
+}
+
+export interface LoginChallengeResponse {
+  twoFactorRequired: true
+  challengeId: string
+  email: string
+  expiresAt: string
 }
 
 export interface BackendLoginApiResponse {

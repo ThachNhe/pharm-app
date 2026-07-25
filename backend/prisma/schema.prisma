@@ -96,6 +96,7 @@ model User {
   inventoryMovements InventoryMovement[] @relation("MovementCreatedBy")
   sales              Sale[]              @relation("SaleSoldBy")
   auditLogs          AuditLog[]          @relation("AuditActor")
+  loginOtps          LoginOtp[]
 
   @@map("users")
 }
@@ -394,4 +395,20 @@ model AuditLog {
   @@index([storeId, createdAt])
   @@index([targetType, targetId])
   @@map("audit_logs")
+}
+
+model LoginOtp {
+  id         String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId     String    @map("user_id") @db.Uuid
+  codeHash   String    @map("code_hash") @db.VarChar(255)
+  expiresAt  DateTime  @map("expires_at") @db.Timestamptz(3)
+  consumedAt DateTime? @map("consumed_at") @db.Timestamptz(3)
+  attempts   Int       @default(0)
+  createdAt  DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+
+  @@index([userId])
+  @@index([expiresAt])
+  @@map("login_otps")
 }

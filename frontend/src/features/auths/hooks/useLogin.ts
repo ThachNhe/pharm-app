@@ -5,7 +5,12 @@ import { toast } from 'sonner'
 import { useAuthStore } from '@/stores/useAuthStore'
 import { QUERY_KEYS, ROUTES } from '@/lib/constants'
 import { authService } from '../services/auth.service.ts'
-import type { LoginFormValues, RegisterFormValues } from '../types/auth.types.ts'
+import type {
+  LoginChallengeResponse,
+  LoginFormValues,
+  RegisterFormValues,
+  VerifyLoginOtpPayload,
+} from '../types/auth.types.ts'
 
 const getErrorMessage = (error: unknown, fallback: string) => {
   if (axios.isAxiosError<{ message?: string }>(error)) {
@@ -16,13 +21,33 @@ const getErrorMessage = (error: unknown, fallback: string) => {
 
 // ─── useLogin ──────────────────────────────────────────────────────────────
 
-export function useLogin() {
+export function useLogin(onOtpRequired?: (challenge: LoginChallengeResponse) => void) {
+  return useMutation({
+    mutationFn: ({ email, password }: LoginFormValues) =>
+      authService.login({ email, password }),
+
+    onSuccess: (data) => {
+      toast.success('Đã gửi mã xác minh', {
+        description: `Mã đăng nhập đã được gửi tới ${data.email}.`,
+      })
+      onOtpRequired?.(data)
+    },
+
+    onError: (error) => {
+      toast.error('Đăng nhập thất bại', {
+        description: getErrorMessage(error, 'Email hoặc mật khẩu không đúng'),
+      })
+    },
+  })
+}
+
+export function useVerifyLoginOtp() {
   const { login } = useAuthStore()
   const router = useRouter()
 
   return useMutation({
-    mutationFn: ({ email, password }: LoginFormValues) =>
-      authService.login({ email, password }),
+    mutationFn: (payload: VerifyLoginOtpPayload) =>
+      authService.verifyLoginOtp(payload),
 
     onSuccess: (data) => {
       login(data.user, data.accessToken)
@@ -33,8 +58,8 @@ export function useLogin() {
     },
 
     onError: (error) => {
-      toast.error('Đăng nhập thất bại', {
-        description: getErrorMessage(error, 'Email hoặc mật khẩu không đúng'),
+      toast.error('Xác minh thất bại', {
+        description: getErrorMessage(error, 'Mã xác minh không đúng hoặc đã hết hạn'),
       })
     },
   })

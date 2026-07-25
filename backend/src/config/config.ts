@@ -20,6 +20,8 @@ const envVarsSchema = Joi.object()
     JWT_VERIFY_EMAIL_EXPIRATION_MINUTES: Joi.number()
       .default(10)
       .description('minutes after which verify email token expires'),
+    OTP_EXPIRES_MINUTES: Joi.number().default(5).description('minutes after which code expires'),
+    OTP_MAX_ATTEMPTS: Joi.number().default(5).description('max OTP attempts'),
     SMTP_HOST: Joi.string().description('server that will send the emails'),
     SMTP_PORT: Joi.number().description('port to connect to the email server'),
     SMTP_USERNAME: Joi.string().description('username for email server'),
@@ -66,6 +68,10 @@ const config = {
       ...smtpAuth,
     },
     from: envVars.EMAIL_FROM,
+  },
+  otp: {
+    expiresMinutes: envVars.OTP_EXPIRES_MINUTES,
+    maxAttempts: envVars.OTP_MAX_ATTEMPTS,
   },
   frontendUrl: envVars.FRONTEND_URL,
 };

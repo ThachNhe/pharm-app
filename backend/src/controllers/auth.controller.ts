@@ -1,6 +1,6 @@
 import httpStatus from 'http-status';
 import catchAsync from '../utils/catchAsync.js';
-import { authService, userService, tokenService, emailService } from '../services/index.js';
+import { authService, userService, tokenService, emailService, loginOtpService } from '../services/index.js';
 import { clearRefreshTokenCookie, getRefreshTokenFromRequest, setRefreshTokenCookie } from '../utils/cookies.js';
 
 const register = catchAsync(async (req, res) => {
@@ -12,7 +12,13 @@ const register = catchAsync(async (req, res) => {
 
 const login = catchAsync(async (req, res) => {
   const { email, password } = req.body;
-  const user = await authService.loginUserWithEmailAndPassword(email, password);
+  const challenge = await authService.loginUserWithEmailAndPassword(email, password);
+  res.send(challenge);
+});
+
+const verifyLoginOtp = catchAsync(async (req, res) => {
+  const { challengeId, code } = req.body;
+  const user = await loginOtpService.verifyLoginOtp(challengeId, code);
   const tokens = await tokenService.generateAuthTokens(user);
   setRefreshTokenCookie(res, tokens.refresh.token, tokens.refresh.expires);
   res.send({ user, tokens: { access: tokens.access } });
@@ -52,4 +58,14 @@ const verifyEmail = catchAsync(async (req, res) => {
   res.status(httpStatus.NO_CONTENT).send();
 });
 
-export { register, login, logout, refreshTokens, forgotPassword, resetPassword, sendVerificationEmail, verifyEmail };
+export {
+  register,
+  login,
+  verifyLoginOtp,
+  logout,
+  refreshTokens,
+  forgotPassword,
+  resetPassword,
+  sendVerificationEmail,
+  verifyEmail,
+};

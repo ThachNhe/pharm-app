@@ -2,8 +2,10 @@ import { apiPost, apiGet } from '@/services/api'
 import { API_ENDPOINTS } from '@/services/endpoints'
 import type {
   LoginPayload,
+  VerifyLoginOtpPayload,
   RegisterPayload,
   LoginApiResponse,
+  LoginChallengeResponse,
   BackendLoginApiResponse,
   RegisterApiResponse,
 } from '../types/auth.types'
@@ -15,14 +17,21 @@ import type { ApiResponse } from '@/types/api.types'
 export const authService = {
   /**
    * Login with email & password
-   * Returns user info + tokens
+   * Returns an OTP challenge. Auth tokens are issued after OTP verification.
    */
-  login: async (payload: LoginPayload): Promise<LoginApiResponse> => {
+  login: (payload: LoginPayload) =>
+    apiPost<LoginChallengeResponse>(API_ENDPOINTS.AUTH.LOGIN, payload),
+
+  /**
+   * Verify the login OTP challenge and receive the auth session.
+   */
+  verifyLoginOtp: async (
+    payload: VerifyLoginOtpPayload,
+  ): Promise<LoginApiResponse> => {
     const data = await apiPost<BackendLoginApiResponse>(
-      API_ENDPOINTS.AUTH.LOGIN,
+      API_ENDPOINTS.AUTH.VERIFY_LOGIN_OTP,
       payload,
     )
-
     return {
       user: data.user,
       accessToken: data.tokens.access.token,

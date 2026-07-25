@@ -19,6 +19,7 @@ const setupTestDB = () => {
     await prisma.supplier.deleteMany();
     await prisma.dailyProfitSummary.deleteMany();
     await prisma.userStoreRole.deleteMany();
+    await prisma.loginOtp.deleteMany();
     await prisma.token.deleteMany();
     await prisma.user.deleteMany();
     await prisma.store.deleteMany();

@@ -27,6 +27,11 @@ const expectRefreshCookie = (res) => {
   expect(getSetCookies(res).some((cookie) => cookie.startsWith('refreshToken=') && cookie.includes('HttpOnly'))).toBe(true);
 };
 
+const getLoginOtpCode = (sendMailSpy) => {
+  const message = sendMailSpy.mock.calls.at(-1)?.[0] as { text?: string };
+  return message.text?.match(/\b\d{6}\b/)?.[0];
+};
+
 describe('Auth routes', () => {
   describe('POST /v1/auth/register', () => {
     let newUser;
@@ -92,8 +97,13 @@ describe('Auth routes', () => {
   });
 
   describe('POST /v1/auth/login', () => {
-    test('should return 200 and login user if email and password match', async () => {
+    beforeEach(() => {
+      vi.spyOn(emailService.transport, 'sendMail').mockResolvedValue({} as never);
+    });
+
+    test('should return 200 and create a login OTP challenge if email and password match', async () => {
       await insertUsers([userOne]);
+      const sendMailSpy = vi.spyOn(emailService.transport, 'sendMail');
       const loginCredentials = {
         email: userOne.email,
         password: userOne.password,
@@ -101,18 +111,26 @@ describe('Auth routes', () => {
 
       const res = await request(app).post('/v1/auth/login').send(loginCredentials).expect(httpStatus.OK);
 
-      expect(res.body.user).toEqual({
-        id: expect.anything(),
-        name: userOne.name,
+      expect(res.body).toEqual({
+        twoFactorRequired: true,
+        challengeId: expect.any(String),
         email: userOne.email,
-        role: userOne.role,
-        isEmailVerified: userOne.isEmailVerified,
+        expiresAt: expect.any(String),
       });
+      expect(res.body).not.toHaveProperty('tokens');
+      expect(getSetCookies(res)).toEqual([]);
+      expect(sendMailSpy).toHaveBeenCalledWith(expect.objectContaining({ to: userOne.email }));
 
-      expect(res.body.tokens).toEqual({
-        access: { token: expect.anything(), expires: expect.anything() },
+      const otpCode = getLoginOtpCode(sendMailSpy);
+      const dbLoginOtp = await prisma.loginOtp.findUnique({
+        where: { id: res.body.challengeId },
       });
-      expectRefreshCookie(res);
+      const dbRefreshTokenCount = await prisma.token.count();
+
+      expect(otpCode).toMatch(/^\d{6}$/);
+      expect(dbLoginOtp).toMatchObject({ userId: userOne.id, consumedAt: null, attempts: 0 });
+      expect(dbLoginOtp?.codeHash).not.toBe(otpCode);
+      expect(dbRefreshTokenCount).toBe(0);
     });
 
     test('should return 401 error if there are no users with that email', async () => {
@@ -136,6 +154,110 @@ describe('Auth routes', () => {
       const res = await request(app).post('/v1/auth/login').send(loginCredentials).expect(httpStatus.UNAUTHORIZED);
 
       expect(res.body).toEqual({ code: httpStatus.UNAUTHORIZED, message: 'Incorrect email or password' });
+    });
+  });
+
+  describe('POST /v1/auth/verify-login-otp', () => {
+    beforeEach(() => {
+      vi.spyOn(emailService.transport, 'sendMail').mockResolvedValue({} as never);
+    });
+
+    test('should return 200 and auth tokens if login OTP is valid', async () => {
+      await insertUsers([userOne]);
+      const sendMailSpy = vi.spyOn(emailService.transport, 'sendMail');
+
+      const loginRes = await request(app)
+        .post('/v1/auth/login')
+        .send({ email: userOne.email, password: userOne.password })
+        .expect(httpStatus.OK);
+      const code = getLoginOtpCode(sendMailSpy);
+
+      const res = await request(app)
+        .post('/v1/auth/verify-login-otp')
+        .send({ challengeId: loginRes.body.challengeId, code })
+        .expect(httpStatus.OK);
+
+      expect(res.body).toEqual({
+        user: {
+          id: expect.anything(),
+          name: userOne.name,
+          email: userOne.email,
+          role: userOne.role,
+          isEmailVerified: userOne.isEmailVerified,
+        },
+        tokens: {
+          access: { token: expect.anything(), expires: expect.anything() },
+        },
+      });
+      expectRefreshCookie(res);
+
+      const dbLoginOtp = await prisma.loginOtp.findUnique({ where: { id: loginRes.body.challengeId } });
+      expect(dbLoginOtp?.consumedAt).toBeDefined();
+    });
+
+    test('should return 401 and increment attempts if login OTP is wrong', async () => {
+      await insertUsers([userOne]);
+
+      const loginRes = await request(app)
+        .post('/v1/auth/login')
+        .send({ email: userOne.email, password: userOne.password })
+        .expect(httpStatus.OK);
+
+      await request(app)
+        .post('/v1/auth/verify-login-otp')
+        .send({ challengeId: loginRes.body.challengeId, code: '000000' })
+        .expect(httpStatus.UNAUTHORIZED);
+
+      const dbLoginOtp = await prisma.loginOtp.findUnique({ where: { id: loginRes.body.challengeId } });
+      expect(dbLoginOtp?.attempts).toBe(1);
+      expect(dbLoginOtp?.consumedAt).toBe(null);
+    });
+
+    test('should return 401 if login OTP is reused', async () => {
+      await insertUsers([userOne]);
+      const sendMailSpy = vi.spyOn(emailService.transport, 'sendMail');
+
+      const loginRes = await request(app)
+        .post('/v1/auth/login')
+        .send({ email: userOne.email, password: userOne.password })
+        .expect(httpStatus.OK);
+      const code = getLoginOtpCode(sendMailSpy);
+
+      await request(app)
+        .post('/v1/auth/verify-login-otp')
+        .send({ challengeId: loginRes.body.challengeId, code })
+        .expect(httpStatus.OK);
+
+      await request(app)
+        .post('/v1/auth/verify-login-otp')
+        .send({ challengeId: loginRes.body.challengeId, code })
+        .expect(httpStatus.UNAUTHORIZED);
+    });
+
+    test('should return 401 if login OTP is expired', async () => {
+      await insertUsers([userOne]);
+      const challengeId = faker.datatype.uuid();
+
+      await prisma.loginOtp.create({
+        data: {
+          id: challengeId,
+          userId: userOne.id,
+          codeHash: 'expired',
+          expiresAt: moment().subtract(1, 'minute').toDate(),
+        },
+      });
+
+      await request(app)
+        .post('/v1/auth/verify-login-otp')
+        .send({ challengeId, code: '123456' })
+        .expect(httpStatus.UNAUTHORIZED);
+    });
+
+    test('should return 400 if login OTP payload is invalid', async () => {
+      await request(app)
+        .post('/v1/auth/verify-login-otp')
+        .send({ challengeId: 'not-a-uuid', code: '123' })
+        .expect(httpStatus.BAD_REQUEST);
     });
   });
 

@@ -35,6 +35,7 @@ const processQueue = (error: unknown, token: string | null = null) => {
 
 const authRetryExcludedEndpoints = [
   API_ENDPOINTS.AUTH.LOGIN,
+  API_ENDPOINTS.AUTH.VERIFY_LOGIN_OTP,
   API_ENDPOINTS.AUTH.REGISTER,
   API_ENDPOINTS.AUTH.LOGOUT,
   API_ENDPOINTS.AUTH.REFRESH,

@@ -23,6 +23,13 @@ export const loginSchema = z.object({
   password: z.string().min(1, 'Mật khẩu là bắt buộc'),
 })
 
+export const loginOtpSchema = z.object({
+  code: z
+    .string()
+    .trim()
+    .regex(/^\d{6}$/, 'Mã xác minh gồm 6 chữ số'),
+})
+
 export const registerSchema = z
   .object({
     name: z
@@ -57,6 +64,7 @@ export const resetPasswordSchema = z
 // ─── Inferred Types ────────────────────────────────────────────────────────
 
 export type LoginFormValues = z.infer<typeof loginSchema>
+export type LoginOtpFormValues = z.infer<typeof loginOtpSchema>
 export type RegisterFormValues = z.infer<typeof registerSchema>
 export type ForgotPasswordFormValues = z.infer<typeof forgotPasswordSchema>
 export type ResetPasswordFormValues = z.infer<typeof resetPasswordSchema>

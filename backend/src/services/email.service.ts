@@ -79,4 +79,11 @@ If you did not create an account, then ignore this email.`;
   await sendEmail(to, subject, text);
 };
 
-export { transport, sendEmail, sendResetPasswordEmail, sendStaffInvitationEmail, sendVerificationEmail };
+const sendLoginOtpEmail = async (to: string, code: string, expiresMinutes: number) => {
+  const subject = 'Ma xac minh dang nhap';
+  const text = `Ma xac minh dang nhap cua ban la: ${code}. Ma co hieu luc trong ${expiresMinutes} phut.`;
+
+  await transport.sendMail({ from: config.email.from, to, subject, text });
+};
+
+export { transport, sendEmail, sendResetPasswordEmail, sendStaffInvitationEmail, sendVerificationEmail, sendLoginOtpEmail };

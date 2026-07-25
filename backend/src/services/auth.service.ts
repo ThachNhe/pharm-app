@@ -2,10 +2,10 @@ import bcrypt from 'bcryptjs';
 import httpStatus from 'http-status';
 import * as tokenService from './token.service.js';
 import * as userService from './user.service.js';
+import * as loginOtpService from './loginOtp.service.js';
 import { prisma } from '../config/database.js';
 import ApiError from '../utils/ApiError.js';
 import { tokenTypes } from '../config/tokens.js';
-import { toPublicUser } from '../utils/user.js';
 
 /**
  * Login with username and password
@@ -18,7 +18,15 @@ const loginUserWithEmailAndPassword = async (email: string, password: string) =>
   if (!user || !(await bcrypt.compare(password, user.password))) {
     throw new ApiError(httpStatus.UNAUTHORIZED, 'Incorrect email or password');
   }
-  return toPublicUser(user);
+
+  const challenge = await loginOtpService.createLoginOtp(user.id, user.email);
+
+  return {
+    twoFactorRequired: true,
+    challengeId: challenge.id,
+    email: user.email,
+    expiresAt: challenge.expiresAt,
+  };
 };
 
 /**

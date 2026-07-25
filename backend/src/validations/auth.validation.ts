@@ -16,6 +16,15 @@ const login = {
   }),
 };
 
+const verifyLoginOtp = {
+  body: Joi.object().keys({
+    challengeId: Joi.string().guid({ version: 'uuidv4' }).required(),
+    code: Joi.string()
+      .pattern(/^\d{6}$/)
+      .required(),
+  }),
+};
+
 const logout = {
   body: Joi.object().keys({
     refreshToken: Joi.string(),
@@ -49,4 +58,4 @@ const verifyEmail = {
   }),
 };
 
-export { register, login, logout, refreshTokens, forgotPassword, resetPassword, verifyEmail };
+export { register, login, verifyLoginOtp, logout, refreshTokens, forgotPassword, resetPassword, verifyEmail };
