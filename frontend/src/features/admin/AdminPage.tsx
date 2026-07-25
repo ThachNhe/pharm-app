@@ -1,6 +1,9 @@
 import {
   Activity,
   Building2,
+  CircleAlert,
+  Eye,
+  EyeOff,
   FileText,
   LineChart,
   Lock,
@@ -13,9 +16,12 @@ import {
   ShieldCheck,
   Users,
 } from 'lucide-react'
-import { useMemo, useState, type FormEvent, type ReactNode } from 'react'
+import { useEffect, useMemo, useState, type FormEvent, type ReactNode } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useRouter } from '@tanstack/react-router'
+import axios from 'axios'
+import { toast } from 'sonner'
+import { z } from 'zod'
 
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -37,6 +43,26 @@ const tabs: Array<{ key: TabKey; label: string; icon: typeof Activity }> = [
   { key: 'sales', label: 'Đơn bán', icon: FileText },
   { key: 'reports', label: 'Báo cáo lãi', icon: LineChart },
 ]
+const tabKeys = tabs.map((tab) => tab.key)
+const isTabKey = (value: string | null): value is TabKey => {
+  return tabKeys.includes(value as TabKey)
+}
+
+const getInitialAdminTab = (): TabKey => {
+  if (typeof window === 'undefined') return 'overview'
+  const tab = new URLSearchParams(window.location.search).get('tab')
+  return isTabKey(tab) ? tab : 'overview'
+}
+
+const setAdminTabInUrl = (tab: TabKey) => {
+  const url = new URL(window.location.href)
+  if (tab === 'overview') {
+    url.searchParams.delete('tab')
+  } else {
+    url.searchParams.set('tab', tab)
+  }
+  window.history.replaceState(null, '', url)
+}
 
 const money = new Intl.NumberFormat('vi-VN', {
   style: 'currency',
@@ -50,6 +76,44 @@ const asString = (formData: FormData, key: string) => {
 }
 
 const baseQuery = { page: 1, limit: 10 }
+const formErrorClass = 'border-destructive/60 focus-visible:ring-destructive/30'
+
+const createAdminUserSchema = z.object({
+  storeId: z.string().min(1, 'Vui lòng chọn quầy'),
+  storeRole: z.string().min(1, 'Vui lòng chọn vai trò'),
+  name: z
+    .string()
+    .min(2, 'Họ tên phải có ít nhất 2 ký tự')
+    .max(255, 'Họ tên không được quá 255 ký tự'),
+  email: z
+    .string()
+    .min(1, 'Email là bắt buộc')
+    .email('Email không hợp lệ')
+    .max(255, 'Email không được quá 255 ký tự'),
+  phone: z.string().max(20, 'Số điện thoại không được quá 20 ký tự').optional(),
+})
+
+type CreateAdminUserField = keyof z.infer<typeof createAdminUserSchema>
+type CreateAdminUserErrors = Partial<Record<CreateAdminUserField, string>>
+
+const getErrorMessage = (error: unknown, fallback: string) => {
+  if (axios.isAxiosError<{ message?: string }>(error)) {
+    return error.response?.data?.message ?? error.message ?? fallback
+  }
+  return error instanceof Error ? error.message : fallback
+}
+
+const getCreateAdminUserErrors = (
+  error: z.ZodError,
+): CreateAdminUserErrors => {
+  return error.issues.reduce<CreateAdminUserErrors>((errors, issue) => {
+    const field = issue.path[0]
+    if (typeof field === 'string' && field in createAdminUserSchema.shape) {
+      errors[field as CreateAdminUserField] ??= issue.message
+    }
+    return errors
+  }, {})
+}
 
 function SectionTitle({
   title,
@@ -112,6 +176,12 @@ function EmptyState({ label }: { label: string }) {
       {label}
     </div>
   )
+}
+
+function FieldError({ message }: { message?: string }) {
+  if (!message) return null
+
+  return <p className="text-xs text-destructive">{message}</p>
 }
 
 function useRoleOptions(context?: Awaited<ReturnType<typeof adminService.getContext>>) {
@@ -199,7 +269,7 @@ function UnitEditor({
 }
 
 export function AdminPage() {
-  const [activeTab, setActiveTab] = useState<TabKey>('overview')
+  const [activeTab, setActiveTab] = useState<TabKey>(getInitialAdminTab)
   const [storeSearch, setStoreSearch] = useState('')
   const [userSearch, setUserSearch] = useState('')
   const [medicineSearch, setMedicineSearch] = useState('')
@@ -215,6 +285,9 @@ export function AdminPage() {
     { name: 'viên', conversionRate: 1, isBaseUnit: true },
   ])
   const [message, setMessage] = useState<string | null>(null)
+  const [createUserErrors, setCreateUserErrors] =
+    useState<CreateAdminUserErrors>({})
+  const [showOwnerPassword, setShowOwnerPassword] = useState(false)
   const queryClient = useQueryClient()
   const router = useRouter()
   const { user, isAuthenticated, isHydrating, logout } = useAuthStore()
@@ -223,7 +296,9 @@ export function AdminPage() {
     queryKey: ['admin', 'context'],
     queryFn: adminService.getContext,
     enabled: isAuthenticated,
+    retry: false,
   })
+  const hasAdminAccess = isAuthenticated && contextQuery.isSuccess
 
   const roleOptions = useRoleOptions(contextQuery.data)
   const storesForSelect = contextQuery.data?.stores ?? []
@@ -231,13 +306,13 @@ export function AdminPage() {
   const dashboardQuery = useQuery({
     queryKey: ['admin', 'dashboard'],
     queryFn: adminService.getDashboard,
-    enabled: isAuthenticated,
+    enabled: hasAdminAccess,
   })
 
   const storesQuery = useQuery({
     queryKey: ['admin', 'stores', storeSearch],
     queryFn: () => adminService.getStores({ ...baseQuery, search: storeSearch }),
-    enabled: isAuthenticated,
+    enabled: hasAdminAccess,
   })
 
   const usersQuery = useQuery({
@@ -248,14 +323,14 @@ export function AdminPage() {
         storeId: selectedStoreId,
         search: userSearch,
       }),
-    enabled: isAuthenticated,
+    enabled: hasAdminAccess,
   })
 
   const medicinesQuery = useQuery({
     queryKey: ['admin', 'medicines', medicineSearch],
     queryFn: () =>
       adminService.getMedicines({ ...baseQuery, search: medicineSearch }),
-    enabled: isAuthenticated,
+    enabled: hasAdminAccess,
   })
 
   const receiptsQuery = useQuery({
@@ -267,7 +342,7 @@ export function AdminPage() {
         from: dateRange.from,
         to: dateRange.to,
       }),
-    enabled: isAuthenticated,
+    enabled: hasAdminAccess,
   })
 
   const salesQuery = useQuery({
@@ -279,7 +354,7 @@ export function AdminPage() {
         from: dateRange.from,
         to: dateRange.to,
       }),
-    enabled: isAuthenticated,
+    enabled: hasAdminAccess,
   })
 
   const profitQuery = useQuery({
@@ -290,8 +365,19 @@ export function AdminPage() {
         from: dateRange.from,
         to: dateRange.to,
       }),
-    enabled: isAuthenticated,
+    enabled: hasAdminAccess,
   })
+
+  useEffect(() => {
+    const handlePopState = () => setActiveTab(getInitialAdminTab())
+    window.addEventListener('popstate', handlePopState)
+    return () => window.removeEventListener('popstate', handlePopState)
+  }, [])
+
+  const handleTabChange = (tab: TabKey) => {
+    setActiveTab(tab)
+    setAdminTabInUrl(tab)
+  }
 
   const invalidateAdmin = async () => {
     await queryClient.invalidateQueries({ queryKey: ['admin'] })
@@ -307,9 +393,19 @@ export function AdminPage() {
 
   const createUserMutation = useMutation({
     mutationFn: adminService.createUser,
-    onSuccess: async () => {
-      setMessage('Đã tạo tài khoản.')
+    onSuccess: async (result) => {
+      setCreateUserErrors({})
+      setMessage(
+        result.invitationEmailSent
+          ? 'Đã tạo tài khoản và gửi email thiết lập mật khẩu.'
+          : 'Đã tạo tài khoản.',
+      )
       await invalidateAdmin()
+    },
+    onError: (error) => {
+      toast.error('Không thể tạo tài khoản', {
+        description: getErrorMessage(error, 'Vui lòng kiểm tra lại thông tin.'),
+      })
     },
   })
 
@@ -367,16 +463,31 @@ export function AdminPage() {
 
   const handleCreateUser = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
-    const form = new FormData(event.currentTarget)
-    createUserMutation.mutate({
+    const formElement = event.currentTarget
+    const form = new FormData(formElement)
+    const payload = {
       storeId: asString(form, 'storeId'),
       storeRole: asString(form, 'storeRole'),
       name: asString(form, 'name'),
       email: asString(form, 'email'),
       phone: asString(form, 'phone'),
-      password: asString(form, 'password'),
+    }
+    const result = createAdminUserSchema.safeParse(payload)
+
+    if (!result.success) {
+      const errors = getCreateAdminUserErrors(result.error)
+      setCreateUserErrors(errors)
+      toast.error('Thông tin tạo tài khoản chưa hợp lệ', {
+        description:
+          Object.values(errors)[0] ?? 'Vui lòng kiểm tra lại thông tin.',
+      })
+      return
+    }
+
+    setCreateUserErrors({})
+    createUserMutation.mutate(result.data, {
+      onSuccess: () => formElement.reset(),
     })
-    event.currentTarget.reset()
   }
 
   const handleCreateMedicine = (event: FormEvent<HTMLFormElement>) => {
@@ -437,6 +548,43 @@ export function AdminPage() {
     )
   }
 
+  if (contextQuery.isLoading) {
+    return (
+      <main className="grid min-h-screen place-items-center bg-background p-4">
+        <Panel className="max-w-md text-center">
+          <RefreshCw className="mx-auto mb-4 size-10 animate-spin text-primary" />
+          <h1 className="text-xl font-semibold">Đang kiểm tra quyền</h1>
+          <p className="mt-2 text-sm text-muted-foreground">
+            Hệ thống đang xác nhận quyền truy cập Admin Panel.
+          </p>
+        </Panel>
+      </main>
+    )
+  }
+
+  if (contextQuery.isError) {
+    return (
+      <main className="grid min-h-screen place-items-center bg-background p-4">
+        <Panel className="max-w-md text-center">
+          <CircleAlert className="mx-auto mb-4 size-10 text-destructive" />
+          <h1 className="text-xl font-semibold">Không có quyền truy cập</h1>
+          <p className="mt-2 text-sm text-muted-foreground">
+            Admin Panel chỉ dành cho System Admin, Owner và Manager.
+          </p>
+          <div className="mt-5 flex justify-center gap-2">
+            <Button variant="outline" onClick={() => router.navigate({ to: ROUTES.HOME })}>
+              Về màn đăng nhập
+            </Button>
+            <Button onClick={handleLogout}>
+              <LogOut className="size-4" />
+              Đăng xuất
+            </Button>
+          </div>
+        </Panel>
+      </main>
+    )
+  }
+
   return (
     <main className="min-h-screen bg-background text-foreground">
       <div className="grid min-h-screen lg:grid-cols-[260px_minmax(0,1fr)]">
@@ -456,7 +604,7 @@ export function AdminPage() {
               <button
                 key={key}
                 type="button"
-                onClick={() => setActiveTab(key)}
+                onClick={() => handleTabChange(key)}
                 className={cn(
                   'flex h-10 w-full items-center gap-3 rounded-lg px-3 text-left text-sm transition-colors',
                   activeTab === key
@@ -644,11 +792,29 @@ export function AdminPage() {
                           <Input name="ownerName" placeholder="Tên owner" />
                           <Input name="ownerEmail" type="email" placeholder="Email owner" />
                           <Input name="ownerPhone" placeholder="SĐT owner" />
-                          <Input
-                            name="ownerPassword"
-                            type="password"
-                            placeholder="Mật khẩu tạm"
-                          />
+                          <div className="relative">
+                            <Input
+                              name="ownerPassword"
+                              type={showOwnerPassword ? 'text' : 'password'}
+                              placeholder="Mật khẩu tạm"
+                              className="pr-11"
+                            />
+                            <button
+                              type="button"
+                              onClick={() => setShowOwnerPassword((show) => !show)}
+                              aria-label={
+                                showOwnerPassword ? 'Ẩn mật khẩu' : 'Hiện mật khẩu'
+                              }
+                              className="absolute right-2 top-1/2 grid size-8 -translate-y-1/2 place-items-center rounded-md text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground"
+                              tabIndex={-1}
+                            >
+                              {showOwnerPassword ? (
+                                <EyeOff className="size-4" />
+                              ) : (
+                                <Eye className="size-4" />
+                              )}
+                            </button>
+                          </div>
                         </div>
                       </div>
                       <Button className="w-full" disabled={createStoreMutation.isPending}>
@@ -737,11 +903,28 @@ export function AdminPage() {
 
                 <Panel>
                   <SectionTitle title="Tạo tài khoản" />
-                  <form onSubmit={handleCreateUser} className="mt-4 space-y-3">
+                  <form
+                    onSubmit={handleCreateUser}
+                    onChange={(event) => {
+                      const field = (event.target as unknown as HTMLInputElement | HTMLSelectElement)
+                        .name as CreateAdminUserField
+                      if (!field || !createUserErrors[field]) return
+                      setCreateUserErrors((errors) => {
+                        const next = { ...errors }
+                        delete next[field]
+                        return next
+                      })
+                    }}
+                    className="mt-4 space-y-3"
+                  >
                     <select
                       name="storeId"
                       required
-                      className="h-10 w-full rounded-lg border border-input bg-input-background px-3 text-sm"
+                      aria-invalid={Boolean(createUserErrors.storeId)}
+                      className={cn(
+                        'h-10 w-full rounded-lg border border-input bg-input-background px-3 text-sm',
+                        createUserErrors.storeId && formErrorClass,
+                      )}
                     >
                       <option value="">Chọn quầy</option>
                       {storesForSelect.map((store) => (
@@ -750,10 +933,15 @@ export function AdminPage() {
                         </option>
                       ))}
                     </select>
+                    <FieldError message={createUserErrors.storeId} />
                     <select
                       name="storeRole"
                       required
-                      className="h-10 w-full rounded-lg border border-input bg-input-background px-3 text-sm"
+                      aria-invalid={Boolean(createUserErrors.storeRole)}
+                      className={cn(
+                        'h-10 w-full rounded-lg border border-input bg-input-background px-3 text-sm',
+                        createUserErrors.storeRole && formErrorClass,
+                      )}
                     >
                       {roleOptions.map((role) => (
                         <option key={role} value={role}>
@@ -761,15 +949,31 @@ export function AdminPage() {
                         </option>
                       ))}
                     </select>
-                    <Input name="name" required placeholder="Họ tên" />
-                    <Input name="email" type="email" required placeholder="Email" />
-                    <Input name="phone" placeholder="Số điện thoại" />
+                    <FieldError message={createUserErrors.storeRole} />
                     <Input
-                      name="password"
-                      type="password"
+                      name="name"
                       required
-                      placeholder="Mật khẩu tạm"
+                      placeholder="Họ tên"
+                      aria-invalid={Boolean(createUserErrors.name)}
+                      className={cn(createUserErrors.name && formErrorClass)}
                     />
+                    <FieldError message={createUserErrors.name} />
+                    <Input
+                      name="email"
+                      type="email"
+                      required
+                      placeholder="Email"
+                      aria-invalid={Boolean(createUserErrors.email)}
+                      className={cn(createUserErrors.email && formErrorClass)}
+                    />
+                    <FieldError message={createUserErrors.email} />
+                    <Input
+                      name="phone"
+                      placeholder="Số điện thoại"
+                      aria-invalid={Boolean(createUserErrors.phone)}
+                      className={cn(createUserErrors.phone && formErrorClass)}
+                    />
+                    <FieldError message={createUserErrors.phone} />
                     <Button className="w-full" disabled={createUserMutation.isPending}>
                       <Plus className="size-4" />
                       Tạo tài khoản

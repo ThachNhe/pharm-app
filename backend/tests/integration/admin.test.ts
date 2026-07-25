@@ -7,6 +7,7 @@ import config from '../../src/config/config.js';
 import { prisma } from '../../src/config/database.js';
 import { tokenTypes } from '../../src/config/tokens.js';
 import * as tokenService from '../../src/services/token.service.js';
+import * as emailService from '../../src/services/email.service.js';
 import setupTestDB from '../utils/setupTestDB.js';
 import { admin, userOne, userTwo, insertUsers } from '../fixtures/user.fixture.js';
 
@@ -85,6 +86,10 @@ describe('Admin routes', () => {
   });
 
   describe('POST /v1/admin/users', () => {
+    beforeEach(() => {
+      vi.spyOn(emailService.transport, 'sendMail').mockResolvedValue({} as never);
+    });
+
     test('should prevent owner from creating users outside owned stores', async () => {
       await insertUsers([userOne]);
       const ownedStore = await prisma.store.create({ data: { name: 'Owned store' } });
@@ -99,7 +104,6 @@ describe('Admin routes', () => {
           storeRole: 'staff',
           name: 'Outside Staff',
           email: faker.internet.email().toLowerCase(),
-          password: 'password1',
         })
         .expect(httpStatus.FORBIDDEN);
     });
@@ -117,7 +121,6 @@ describe('Admin routes', () => {
           storeRole: 'manager',
           name: 'Blocked Manager',
           email: faker.internet.email().toLowerCase(),
-          password: 'password1',
         })
         .expect(httpStatus.FORBIDDEN);
 
@@ -129,11 +132,23 @@ describe('Admin routes', () => {
           storeRole: 'staff',
           name: 'Allowed Staff',
           email: faker.internet.email().toLowerCase(),
-          password: 'password1',
         })
         .expect(httpStatus.CREATED);
 
-      expect(res.body).toMatchObject({ name: 'Allowed Staff', isActive: true });
+      expect(res.body).toMatchObject({
+        user: { name: 'Allowed Staff', isActive: true },
+        invitationEmailSent: true,
+      });
+      expect(emailService.transport.sendMail).toHaveBeenCalledWith(
+        expect.objectContaining({
+          to: res.body.user.email,
+          subject: 'Set up your Pharm App account',
+        }),
+      );
+      const setupToken = await prisma.token.findFirst({
+        where: { userId: res.body.user.id, type: tokenTypes.RESET_PASSWORD, blacklisted: false },
+      });
+      expect(setupToken).toBeDefined();
     });
 
     test('should allow owner to create manager for owned store', async () => {
@@ -149,11 +164,10 @@ describe('Admin routes', () => {
           storeRole: 'manager',
           name: 'Allowed Manager',
           email: faker.internet.email().toLowerCase(),
-          password: 'password1',
         })
         .expect(httpStatus.CREATED);
 
-      const role = await prisma.userStoreRole.findFirst({ where: { userId: res.body.id, storeId: store.id } });
+      const role = await prisma.userStoreRole.findFirst({ where: { userId: res.body.user.id, storeId: store.id } });
       expect(role?.role).toBe('manager');
     });
   });

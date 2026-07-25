@@ -1,3 +1,4 @@
+import crypto from 'node:crypto';
 import jwt, { type JwtPayload } from 'jsonwebtoken';
 import moment, { type Moment } from 'moment';
 import httpStatus from 'http-status';
@@ -10,6 +11,10 @@ import { tokenTypes, type TokenTypeValue } from '../config/tokens.js';
 import type { PublicUser } from '../utils/user.js';
 
 type StoredTokenType = Exclude<TokenTypeValue, typeof tokenTypes.ACCESS>;
+
+const hashToken = (token: string) => {
+  return crypto.createHmac('sha256', config.jwt.secret).update(token).digest('hex');
+};
 
 /**
  * Generate token
@@ -52,7 +57,7 @@ const saveToken = async (
 ): Promise<Token> => {
   return prisma.token.create({
     data: {
-      token,
+      token: hashToken(token),
       userId,
       expires: expires.toDate(),
       type: type as TokenType,
@@ -69,9 +74,10 @@ const saveToken = async (
  */
 const verifyToken = async (token: string, type: StoredTokenType): Promise<Token> => {
   const payload = jwt.verify(token, config.jwt.secret) as JwtPayload;
+  const tokenHash = hashToken(token);
   const tokenDoc = await prisma.token.findFirst({
     where: {
-      token,
+      token: tokenHash,
       type: type as TokenType,
       userId: payload.sub as string,
       blacklisted: false,
@@ -136,4 +142,12 @@ const generateVerifyEmailToken = async (user: PublicUser) => {
   return verifyEmailToken;
 };
 
-export { generateToken, saveToken, verifyToken, generateAuthTokens, generateResetPasswordToken, generateVerifyEmailToken };
+export {
+  generateToken,
+  hashToken,
+  saveToken,
+  verifyToken,
+  generateAuthTokens,
+  generateResetPasswordToken,
+  generateVerifyEmailToken,
+};

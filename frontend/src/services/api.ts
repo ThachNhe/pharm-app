@@ -38,6 +38,8 @@ const authRetryExcludedEndpoints = [
   API_ENDPOINTS.AUTH.REGISTER,
   API_ENDPOINTS.AUTH.LOGOUT,
   API_ENDPOINTS.AUTH.REFRESH,
+  API_ENDPOINTS.AUTH.FORGOT_PASSWORD,
+  API_ENDPOINTS.AUTH.RESET_PASSWORD,
 ]
 
 const shouldSkipAuthRefresh = (url?: string) => {

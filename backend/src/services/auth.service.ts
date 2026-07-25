@@ -33,7 +33,7 @@ const logout = async (refreshToken?: string) => {
 
   const refreshTokenDoc = await prisma.token.findFirst({
     where: {
-      token: refreshToken,
+      token: tokenService.hashToken(refreshToken),
       type: tokenTypes.REFRESH,
       blacklisted: false,
     },
@@ -79,7 +79,7 @@ const resetPassword = async (resetPasswordToken: string, newPassword: string) =>
     if (!user) {
       throw new Error();
     }
-    await userService.updateUserById(user.id, { password: newPassword });
+    await userService.updateUserById(user.id, { password: newPassword, isEmailVerified: true });
     await prisma.token.deleteMany({ where: { userId: user.id, type: tokenTypes.RESET_PASSWORD } });
   } catch (error) {
     throw new ApiError(httpStatus.UNAUTHORIZED, 'Password reset failed');

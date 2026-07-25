@@ -152,7 +152,7 @@ describe('Auth routes', () => {
         .expect(httpStatus.NO_CONTENT);
       expectRefreshCookie(res);
 
-      const dbRefreshTokenDoc = await prisma.token.findFirst({ where: { token: refreshToken } });
+      const dbRefreshTokenDoc = await prisma.token.findFirst({ where: { token: tokenService.hashToken(refreshToken) } });
       expect(dbRefreshTokenDoc).toBe(null);
     });
 
@@ -212,7 +212,9 @@ describe('Auth routes', () => {
 
       const setCookieHeader = getSetCookies(res).find((cookie) => cookie.startsWith('refreshToken='));
       const newRefreshToken = setCookieHeader.split(';')[0].replace('refreshToken=', '');
-      const dbRefreshTokenDoc = await prisma.token.findFirst({ where: { token: newRefreshToken } });
+      const dbRefreshTokenDoc = await prisma.token.findFirst({
+        where: { token: tokenService.hashToken(newRefreshToken) },
+      });
       expect(dbRefreshTokenDoc).toMatchObject({ type: tokenTypes.REFRESH, userId: userOne.id, blacklisted: false });
 
       const dbRefreshTokenCount = await prisma.token.count();
@@ -298,9 +300,10 @@ describe('Auth routes', () => {
       expect(sendResetPasswordEmailSpy).toHaveBeenCalledWith(userOne.email, expect.any(String));
       const resetPasswordToken = sendResetPasswordEmailSpy.mock.calls[0][1];
       const dbResetPasswordTokenDoc = await prisma.token.findFirst({
-        where: { token: resetPasswordToken, userId: userOne.id },
+        where: { token: tokenService.hashToken(resetPasswordToken), userId: userOne.id },
       });
       expect(dbResetPasswordTokenDoc).toBeDefined();
+      expect(dbResetPasswordTokenDoc?.token).not.toBe(resetPasswordToken);
     });
 
     test('should return 400 if email is missing', async () => {
@@ -428,10 +431,11 @@ describe('Auth routes', () => {
       expect(sendVerificationEmailSpy).toHaveBeenCalledWith(userOne.email, expect.any(String));
       const verifyEmailToken = sendVerificationEmailSpy.mock.calls[0][1];
       const dbVerifyEmailToken = await prisma.token.findFirst({
-        where: { token: verifyEmailToken, userId: userOne.id },
+        where: { token: tokenService.hashToken(verifyEmailToken), userId: userOne.id },
       });
 
       expect(dbVerifyEmailToken).toBeDefined();
+      expect(dbVerifyEmailToken?.token).not.toBe(verifyEmailToken);
     });
 
     test('should return 401 error if access token is missing', async () => {

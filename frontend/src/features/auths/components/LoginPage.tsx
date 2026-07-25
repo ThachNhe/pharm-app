@@ -1,40 +1,10 @@
-import {
-  Activity,
-  LockKeyhole,
-  PackageCheck,
-  Pill,
-  ShieldCheck,
-} from 'lucide-react'
+import { Pill } from 'lucide-react'
 import { useEffect } from 'react'
 import { useRouter } from '@tanstack/react-router'
 
 import { APP_NAME, ROUTES } from '@/lib/constants'
 import { useAuthStore } from '@/stores/useAuthStore'
 import { LoginForm } from './LoginForm'
-
-const metrics = [
-  { label: 'Đơn thuốc chờ xử lý', value: '24', tone: 'bg-brand-mint/20' },
-  { label: 'Sản phẩm cần nhập', value: '08', tone: 'bg-brand-amber/25' },
-  { label: 'Ca trực hôm nay', value: '03', tone: 'bg-white/15' },
-]
-
-const highlights = [
-  {
-    icon: PackageCheck,
-    title: 'Tồn kho rõ ràng',
-    description: 'Theo dõi thuốc, lô hàng và hạn dùng trong một luồng.',
-  },
-  {
-    icon: Activity,
-    title: 'Vận hành theo ca',
-    description: 'Ưu tiên những việc cần xử lý trước trong ngày.',
-  },
-  {
-    icon: ShieldCheck,
-    title: 'Dữ liệu bảo mật',
-    description: 'Phân quyền truy cập theo vai trò của từng nhân sự.',
-  },
-]
 
 export function LoginPage() {
   const router = useRouter()

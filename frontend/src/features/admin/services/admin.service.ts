@@ -39,7 +39,10 @@ export const adminService = {
       cleanParams(params),
     ),
   createUser: (payload: unknown) =>
-    apiPost<AdminUser>(API_ENDPOINTS.ADMIN.USERS, payload),
+    apiPost<{ user: AdminUser; invitationEmailSent: boolean }>(
+      API_ENDPOINTS.ADMIN.USERS,
+      payload,
+    ),
   updateUser: (id: string, payload: unknown) =>
     apiPatch<AdminUser>(API_ENDPOINTS.ADMIN.USER(id), payload),
   resetPassword: (id: string, payload: unknown) =>

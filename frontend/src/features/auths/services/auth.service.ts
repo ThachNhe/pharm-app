@@ -84,8 +84,8 @@ export const authService = {
    * Reset password with token from email
    */
   resetPassword: (token: string, password: string) =>
-    apiPost<ApiResponse>(API_ENDPOINTS.AUTH.RESET_PASSWORD, {
-      token,
-      password,
-    }),
+    apiPost<ApiResponse>(
+      `${API_ENDPOINTS.AUTH.RESET_PASSWORD}?token=${encodeURIComponent(token)}`,
+      { password },
+    ),
 }

@@ -1,10 +1,24 @@
+import crypto from 'node:crypto';
 import bcrypt from 'bcryptjs';
 import httpStatus from 'http-status';
 import type { Prisma, StoreRole } from '../generated/prisma/client.js';
 import { prisma } from '../config/database.js';
 import ApiError from '../utils/ApiError.js';
+import * as emailService from './email.service.js';
+import * as tokenService from './token.service.js';
 
 const STORE_ROLES: StoreRole[] = ['owner', 'manager', 'staff'];
+const adminUserSelect = {
+  id: true,
+  name: true,
+  email: true,
+  phone: true,
+  isActive: true,
+  isSystemAdmin: true,
+  storeRoles: {
+    include: { store: { select: { id: true, name: true } } },
+  },
+};
 
 type Actor = Express.User;
 
@@ -350,19 +364,28 @@ const createAdminUser = async (actor: Actor, body) => {
   }
   await assertCanAssignRole(actor, body.storeId, body.storeRole);
 
+  const store = await prisma.store.findUnique({
+    where: { id: body.storeId },
+    select: { id: true, name: true },
+  });
+  if (!store) {
+    throw new ApiError(httpStatus.NOT_FOUND, 'Store not found');
+  }
+
   const existing = await prisma.user.findFirst({ where: { email: body.email } });
   if (existing) {
     throw new ApiError(httpStatus.BAD_REQUEST, 'Email already taken');
   }
 
   const user = await prisma.$transaction(async (tx) => {
+    const placeholderPassword = crypto.randomBytes(32).toString('base64url');
     const created = await tx.user.create({
       data: {
         name: body.name,
         email: body.email,
         phone: body.phone,
-        password: await bcrypt.hash(body.password, 8),
-        isEmailVerified: true,
+        password: await bcrypt.hash(placeholderPassword, 8),
+        isEmailVerified: false,
       },
     });
 
@@ -374,8 +397,28 @@ const createAdminUser = async (actor: Actor, body) => {
       },
     });
 
-    return created;
+    return tx.user.findUniqueOrThrow({
+      where: { id: created.id },
+      select: adminUserSelect,
+    });
   });
+
+  const setupPasswordToken = await tokenService.generateResetPasswordToken(user.email);
+  try {
+    await emailService.sendStaffInvitationEmail({
+      to: user.email,
+      name: user.name,
+      storeName: store.name,
+      role: body.storeRole,
+      token: setupPasswordToken,
+    });
+  } catch (error) {
+    await prisma.user.delete({ where: { id: user.id } }).catch(() => undefined);
+    throw new ApiError(
+      httpStatus.INTERNAL_SERVER_ERROR,
+      'Account was not created because invitation email could not be sent',
+    );
+  }
 
   await audit({
     actor,
@@ -386,7 +429,7 @@ const createAdminUser = async (actor: Actor, body) => {
     metadata: { storeRole: body.storeRole },
   });
 
-  return user;
+  return { user, invitationEmailSent: true };
 };
 
 const updateAdminUser = async (actor: Actor, userId: string, body) => {
