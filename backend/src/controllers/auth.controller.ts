@@ -5,9 +5,10 @@ import { clearRefreshTokenCookie, getRefreshTokenFromRequest, setRefreshTokenCoo
 
 const register = catchAsync(async (req, res) => {
   const user = await userService.createUser(req.body);
-  const tokens = await tokenService.generateAuthTokens(user);
-  setRefreshTokenCookie(res, tokens.refresh.token, tokens.refresh.expires);
-  res.status(httpStatus.CREATED).send({ user, tokens: { access: tokens.access } });
+  res.status(httpStatus.CREATED).send({
+    user,
+    message: 'Đăng ký thành công. Hãy đăng nhập và xác minh OTP để tiếp tục.',
+  });
 });
 
 const login = catchAsync(async (req, res) => {
@@ -36,8 +37,11 @@ const refreshTokens = catchAsync(async (req, res) => {
 });
 
 const forgotPassword = catchAsync(async (req, res) => {
-  const resetPasswordToken = await tokenService.generateResetPasswordToken(req.body.email);
-  await emailService.sendResetPasswordEmail(req.body.email, resetPasswordToken);
+  const user = await userService.getUserByEmail(req.body.email);
+  if (user) {
+    const resetPasswordToken = await tokenService.generateResetPasswordToken(user.email);
+    await emailService.sendResetPasswordEmail(user.email, resetPasswordToken);
+  }
   res.status(httpStatus.NO_CONTENT).send();
 });
 

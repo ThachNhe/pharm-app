@@ -86,6 +86,7 @@ export function ResetPasswordPage() {
             <div className="relative">
               <Input
                 type={showPassword ? 'text' : 'password'}
+                aria-label="Mật khẩu mới"
                 autoComplete="new-password"
                 placeholder="Mật khẩu mới"
                 value={password}
@@ -113,6 +114,7 @@ export function ResetPasswordPage() {
             <div className="relative">
               <Input
                 type={showConfirmPassword ? 'text' : 'password'}
+                aria-label="Xác nhận mật khẩu"
                 autoComplete="new-password"
                 placeholder="Xác nhận mật khẩu"
                 value={confirmPassword}
@@ -127,7 +129,9 @@ export function ResetPasswordPage() {
                 type="button"
                 onClick={() => setShowConfirmPassword((show) => !show)}
                 aria-label={
-                  showConfirmPassword ? 'Ẩn mật khẩu' : 'Hiện mật khẩu'
+                  showConfirmPassword
+                    ? 'Ẩn xác nhận mật khẩu'
+                    : 'Hiện xác nhận mật khẩu'
                 }
                 className="absolute right-2 top-1/2 grid size-8 -translate-y-1/2 place-items-center rounded-md text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground"
                 tabIndex={-1}

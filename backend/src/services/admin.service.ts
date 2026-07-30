@@ -8,6 +8,11 @@ import * as emailService from './email.service.js';
 import * as tokenService from './token.service.js';
 
 const STORE_ROLES: StoreRole[] = ['owner', 'manager', 'staff'];
+const STORE_ROLE_LABELS: Record<StoreRole, string> = {
+  owner: 'Chủ quầy',
+  manager: 'Quản lý',
+  staff: 'Nhân viên',
+};
 const adminUserSelect = {
   id: true,
   name: true,
@@ -72,7 +77,9 @@ const getActorWithRoles = async (actor: Actor) => {
 
 const ensureAdminPanelAccess = async (actor: Actor) => {
   const user = await getActorWithRoles(actor);
-  const hasStoreAdminRole = user.storeRoles.some((role) => role.role === 'owner' || role.role === 'manager');
+  const hasStoreAdminRole = user.storeRoles.some(
+    (role) => role.isActive && role.store.isActive && (role.role === 'owner' || role.role === 'manager'),
+  );
   if (!user.isSystemAdmin && !hasStoreAdminRole) {
     throw new ApiError(httpStatus.FORBIDDEN, 'Staff cannot access admin panel');
   }
@@ -86,7 +93,9 @@ const listScopedStoreIds = async (actor: Actor, roles: StoreRole[] = ['owner', '
     return stores.map((store) => store.id);
   }
 
-  return user.storeRoles.filter((role) => roles.includes(role.role)).map((role) => role.storeId);
+  return user.storeRoles
+    .filter((role) => role.isActive && role.store.isActive && roles.includes(role.role))
+    .map((role) => role.storeId);
 };
 
 const assertSystemAdmin = async (actor: Actor) => {
@@ -101,7 +110,9 @@ const assertCanManageStore = async (actor: Actor, storeId: string, roles: StoreR
   const user = await ensureAdminPanelAccess(actor);
   if (user.isSystemAdmin) return user;
 
-  const allowed = user.storeRoles.some((role) => role.storeId === storeId && roles.includes(role.role));
+  const allowed = user.storeRoles.some(
+    (role) => role.storeId === storeId && role.isActive && role.store.isActive && roles.includes(role.role),
+  );
   if (!allowed) {
     throw new ApiError(httpStatus.FORBIDDEN, 'You do not have permission for this store');
   }
@@ -112,7 +123,10 @@ const assertCanAssignRole = async (actor: Actor, storeId: string, role: StoreRol
   const user = await assertCanManageStore(actor, storeId, ['owner', 'manager']);
   if (user.isSystemAdmin) return user;
 
-  const actorRole = user.storeRoles.find((storeRole) => storeRole.storeId === storeId && storeRole.role !== 'staff')?.role;
+  const actorRole = user.storeRoles.find(
+    (storeRole) =>
+      storeRole.storeId === storeId && storeRole.isActive && storeRole.store.isActive && storeRole.role !== 'staff',
+  )?.role;
   if (actorRole === 'owner' && (role === 'manager' || role === 'staff')) return user;
   if (actorRole === 'manager' && role === 'staff') return user;
 
@@ -150,10 +164,12 @@ const getAdminContext = async (actor: Actor) => {
   const user = await ensureAdminPanelAccess(actor);
   const stores = user.isSystemAdmin
     ? await prisma.store.findMany({ orderBy: { name: 'asc' } })
-    : user.storeRoles.map((role) => ({
-        ...role.store,
-        role: role.role,
-      }));
+    : user.storeRoles
+        .filter((role) => role.isActive && role.store.isActive)
+        .map((role) => ({
+          ...role.store,
+          role: role.role,
+        }));
 
   return {
     user: {
@@ -162,11 +178,13 @@ const getAdminContext = async (actor: Actor) => {
       email: user.email,
       phone: user.phone,
       isSystemAdmin: user.isSystemAdmin,
-      roles: user.storeRoles.map((role) => ({
-        storeId: role.storeId,
-        storeName: role.store.name,
-        role: role.role,
-      })),
+      roles: user.storeRoles
+        .filter((role) => role.isActive && role.store.isActive)
+        .map((role) => ({
+          storeId: role.storeId,
+          storeName: role.store.name,
+          role: role.role,
+        })),
     },
     stores,
   };
@@ -184,7 +202,15 @@ const getDashboard = async (actor: Actor) => {
     prisma.user.count({
       where: actor.isSystemAdmin
         ? { isActive: true }
-        : { isActive: true, storeRoles: { some: { storeId: { in: storeIds } } } },
+        : {
+            isActive: true,
+            storeRoles: {
+              some: {
+                storeId: { in: storeIds },
+                isActive: true,
+              },
+            },
+          },
     }),
     prisma.medicine.count({ where: { isActive: true } }),
     prisma.dailyProfitSummary.aggregate({
@@ -372,9 +398,75 @@ const createAdminUser = async (actor: Actor, body) => {
     throw new ApiError(httpStatus.NOT_FOUND, 'Store not found');
   }
 
-  const existing = await prisma.user.findFirst({ where: { email: body.email } });
+  const email = body.email.trim().toLowerCase();
+  const existing = await prisma.user.findFirst({
+    where: { email: { equals: email, mode: 'insensitive' } },
+  });
+
   if (existing) {
-    throw new ApiError(httpStatus.BAD_REQUEST, 'Email already taken');
+    if (!existing.isActive) {
+      throw new ApiError(httpStatus.BAD_REQUEST, 'Tài khoản này đang bị khóa toàn hệ thống');
+    }
+    if (existing.isSystemAdmin) {
+      throw new ApiError(httpStatus.BAD_REQUEST, 'System Admin không cần được gán vào quầy');
+    }
+    const currentMembership = await prisma.userStoreRole.findUnique({
+      where: {
+        userId_storeId: {
+          userId: existing.id,
+          storeId: body.storeId,
+        },
+      },
+    });
+    if (currentMembership) {
+      throw new ApiError(httpStatus.BAD_REQUEST, 'Tài khoản đã thuộc quầy thuốc này');
+    }
+
+    const user = await prisma.$transaction(async (tx) => {
+      await tx.userStoreRole.create({
+        data: {
+          userId: existing.id,
+          storeId: body.storeId,
+          role: body.storeRole,
+        },
+      });
+      return tx.user.findUniqueOrThrow({
+        where: { id: existing.id },
+        select: adminUserSelect,
+      });
+    });
+
+    try {
+      await emailService.sendStoreAssignmentEmail({
+        to: existing.email,
+        name: existing.name,
+        storeName: store.name,
+        role: STORE_ROLE_LABELS[body.storeRole],
+      });
+    } catch (error) {
+      await prisma.userStoreRole
+        .delete({
+          where: {
+            userId_storeId: {
+              userId: existing.id,
+              storeId: body.storeId,
+            },
+          },
+        })
+        .catch(() => undefined);
+      throw new ApiError(httpStatus.INTERNAL_SERVER_ERROR, 'Tài khoản chưa được thêm vì không thể gửi email thông báo');
+    }
+
+    await audit({
+      actor,
+      storeId: body.storeId,
+      action: 'user.assign_store',
+      targetType: 'user',
+      targetId: user.id,
+      metadata: { storeRole: body.storeRole },
+    });
+
+    return { user, invitationEmailSent: true, existingAccount: true };
   }
 
   const user = await prisma.$transaction(async (tx) => {
@@ -382,7 +474,7 @@ const createAdminUser = async (actor: Actor, body) => {
     const created = await tx.user.create({
       data: {
         name: body.name,
-        email: body.email,
+        email,
         phone: body.phone,
         password: await bcrypt.hash(placeholderPassword, 8),
         isEmailVerified: false,
@@ -409,7 +501,7 @@ const createAdminUser = async (actor: Actor, body) => {
       to: user.email,
       name: user.name,
       storeName: store.name,
-      role: body.storeRole,
+      role: STORE_ROLE_LABELS[body.storeRole],
       token: setupPasswordToken,
     });
   } catch (error) {
@@ -429,12 +521,26 @@ const createAdminUser = async (actor: Actor, body) => {
     metadata: { storeRole: body.storeRole },
   });
 
-  return { user, invitationEmailSent: true };
+  return { user, invitationEmailSent: true, existingAccount: false };
 };
 
 const updateAdminUser = async (actor: Actor, userId: string, body) => {
+  if (actor.id === userId) {
+    throw new ApiError(httpStatus.BAD_REQUEST, 'You cannot manage your own account from this screen');
+  }
   if (body.storeId) {
-    await assertCanManageStore(actor, body.storeId, ['owner', 'manager']);
+    const targetMembership = await prisma.userStoreRole.findUnique({
+      where: {
+        userId_storeId: {
+          userId,
+          storeId: body.storeId,
+        },
+      },
+    });
+    if (!targetMembership) {
+      throw new ApiError(httpStatus.NOT_FOUND, 'User is not assigned to this store');
+    }
+    await assertCanAssignRole(actor, body.storeId, targetMembership.role);
   } else if (!actor.isSystemAdmin) {
     throw new ApiError(httpStatus.BAD_REQUEST, 'storeId is required');
   }
@@ -448,25 +554,38 @@ const updateAdminUser = async (actor: Actor, userId: string, body) => {
       where: { id: userId },
       data: {
         name: body.name,
-        email: body.email,
+        email: body.email?.trim().toLowerCase(),
         phone: body.phone,
-        isActive: body.isActive,
+        isActive: body.storeId ? undefined : body.isActive,
         password: body.password ? await bcrypt.hash(body.password, 8) : undefined,
       },
     });
 
-    if (body.storeId && body.storeRole) {
-      await tx.userStoreRole.deleteMany({ where: { userId, storeId: body.storeId } });
-      await tx.userStoreRole.create({ data: { userId, storeId: body.storeId, role: body.storeRole } });
+    if (body.storeId && (body.storeRole !== undefined || body.isActive !== undefined)) {
+      await tx.userStoreRole.update({
+        where: {
+          userId_storeId: {
+            userId,
+            storeId: body.storeId,
+          },
+        },
+        data: {
+          role: body.storeRole,
+          isActive: body.isActive,
+        },
+      });
     }
 
-    return updated;
+    return tx.user.findUniqueOrThrow({
+      where: { id: updated.id },
+      select: adminUserSelect,
+    });
   });
 
   await audit({
     actor,
     storeId: body.storeId,
-    action: body.isActive === false ? 'user.lock' : 'user.update',
+    action: body.isActive === false ? 'user.disable_store_access' : 'user.update',
     targetType: 'user',
     targetId: userId,
     metadata: { storeRole: body.storeRole ?? null },

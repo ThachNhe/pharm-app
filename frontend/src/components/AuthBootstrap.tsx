@@ -17,10 +17,10 @@ export function AuthBootstrap() {
     }
 
     if (hasBootstrapped.current) {
-      setHydrating(false)
       return
     }
 
+    hasBootstrapped.current = true
     setHydrating(true)
     authService
       .refreshSession()
@@ -31,7 +31,6 @@ export function AuthBootstrap() {
         logout()
       })
       .finally(() => {
-        hasBootstrapped.current = true
         setHydrating(false)
       })
   }, [login, logout, setHydrating, token])

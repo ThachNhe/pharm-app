@@ -127,6 +127,7 @@ model Store {
   updatedAt            DateTime             @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(3)
   roles                UserStoreRole[]
   medicines            StoreMedicine[]
+  suppliers            Supplier[]
   importReceipts       ImportReceipt[]
   inventoryMovements   InventoryMovement[]
   stockBatches         StockBatch[]
@@ -143,13 +144,15 @@ model UserStoreRole {
   userId    String    @map("user_id") @db.Uuid
   storeId   String    @map("store_id") @db.Uuid
   role      StoreRole
+  isActive  Boolean   @default(true) @map("is_active")
   createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
   user      User      @relation(fields: [userId], references: [id], onDelete: Cascade, onUpdate: Cascade)
   store     Store     @relation(fields: [storeId], references: [id], onDelete: Cascade, onUpdate: Cascade)
 
-  @@unique([userId, storeId, role])
+  @@unique([userId, storeId])
   @@index([userId])
   @@index([storeId])
+  @@index([storeId, isActive])
   @@map("user_store_roles")
 }
 
@@ -215,7 +218,8 @@ model StoreMedicine {
 
 model Supplier {
   id             String          @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  code           String?         @unique @db.VarChar(50)
+  storeId        String          @map("store_id") @db.Uuid
+  code           String?         @db.VarChar(50)
   name           String          @db.VarChar(255)
   phone          String?         @db.VarChar(20)
   email          String?         @db.VarChar(255)
@@ -224,9 +228,11 @@ model Supplier {
   isActive       Boolean         @default(true) @map("is_active")
   createdAt      DateTime        @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt      DateTime        @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(3)
+  store          Store           @relation(fields: [storeId], references: [id], onDelete: Restrict, onUpdate: Cascade)
   importReceipts ImportReceipt[]
 
-  @@index([name])
+  @@unique([storeId, code])
+  @@index([storeId, name])
   @@map("suppliers")
 }
 
@@ -236,7 +242,7 @@ model ImportReceipt {
   createdBy            String         @map("created_by") @db.Uuid
   supplierId           String?        @map("supplier_id") @db.Uuid
   supplierNameSnapshot String?        @map("supplier_name_snapshot") @db.VarChar(255)
-  status               ReceiptStatus  @default(completed)
+  status               ReceiptStatus  @default(draft)
   totalAmount          Decimal        @default(0) @map("total_amount") @db.Decimal(14, 2)
   note                 String?
   importedAt           DateTime       @default(now()) @map("imported_at") @db.Timestamptz(3)

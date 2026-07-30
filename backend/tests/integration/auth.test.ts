@@ -64,10 +64,9 @@ describe('Auth routes', () => {
       expect(dbUser.password).not.toBe(newUser.password);
       expect(dbUser).toMatchObject({ name: newUser.name, email: newUser.email, role: 'user', isEmailVerified: false });
 
-      expect(res.body.tokens).toEqual({
-        access: { token: expect.anything(), expires: expect.anything() },
-      });
-      expectRefreshCookie(res);
+      expect(res.body).not.toHaveProperty('tokens');
+      expect(res.body.message).toBe('Đăng ký thành công. Hãy đăng nhập và xác minh OTP để tiếp tục.');
+      expectNoRefreshCookie(res);
     });
 
     test('should return 400 error if email is invalid', async () => {
@@ -349,6 +348,13 @@ describe('Auth routes', () => {
       await request(app).post('/v1/auth/refresh-tokens').send().expect(httpStatus.UNAUTHORIZED);
     });
 
+    test('should reject a refresh token sent in the request body', async () => {
+      await request(app)
+        .post('/v1/auth/refresh-tokens')
+        .send({ refreshToken: 'must-only-be-read-from-cookie' })
+        .expect(httpStatus.BAD_REQUEST);
+    });
+
     test('should return 401 error if refresh token is signed using an invalid secret', async () => {
       await insertUsers([userOne]);
       const expires = moment().add(config.jwt.refreshExpirationDays, 'days');
@@ -436,8 +442,9 @@ describe('Auth routes', () => {
       await request(app).post('/v1/auth/forgot-password').send().expect(httpStatus.BAD_REQUEST);
     });
 
-    test('should return 404 if email does not belong to any user', async () => {
-      await request(app).post('/v1/auth/forgot-password').send({ email: userOne.email }).expect(httpStatus.NOT_FOUND);
+    test('should not reveal whether an email belongs to a user', async () => {
+      await request(app).post('/v1/auth/forgot-password').send({ email: userOne.email }).expect(httpStatus.NO_CONTENT);
+      expect(emailService.transport.sendMail).not.toHaveBeenCalled();
     });
   });
 

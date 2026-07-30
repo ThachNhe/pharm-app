@@ -71,7 +71,7 @@ export function LoginForm() {
           Đăng nhập nhân sự
         </div>
         <CardTitle className="text-2xl font-semibold leading-tight sm:text-3xl">
-          {challenge ? 'Xác minh đăng nhập' : 'Chào mừng trở lại'}
+          <h1>{challenge ? 'Xác minh đăng nhập' : 'Chào mừng trở lại'}</h1>
         </CardTitle>
         <CardDescription className="max-w-sm leading-6">
           {challenge
@@ -190,6 +190,7 @@ export function LoginForm() {
                       <div className="relative">
                         <Input
                           type={showPassword ? 'text' : 'password'}
+                          aria-label="Mật khẩu"
                           placeholder="••••••••"
                           autoComplete="current-password"
                           disabled={isRequestingOtp}

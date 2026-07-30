@@ -1,0 +1,1206 @@
+import httpStatus from 'http-status';
+import type { PaymentMethod, Prisma, StoreRole } from '../generated/prisma/client.js';
+import { Prisma as PrismaRuntime } from '../generated/prisma/client.js';
+import { prisma } from '../config/database.js';
+import ApiError from '../utils/ApiError.js';
+import { getStoreAccess, getStoreContext } from './storeAccess.service.js';
+
+type Actor = Express.User;
+
+type PageQuery = {
+  page?: number | string;
+  limit?: number | string;
+  search?: string;
+};
+
+type DateQuery = PageQuery & {
+  from?: string | Date;
+  to?: string | Date;
+};
+
+type MedicinePayload = {
+  name: string;
+  baseUnitName: string;
+  barcode?: string | null;
+  registrationNumber?: string | null;
+  category?: string | null;
+  activeIngredient?: string | null;
+  strength?: string | null;
+  dosageForm?: string | null;
+  manufacturer?: string | null;
+  requiresPrescription?: boolean;
+  description?: string | null;
+  sellingPrice: number | string;
+  minStock?: number | string;
+};
+
+type ImportItemPayload = {
+  medicineId: string;
+  batchNumber: string;
+  quantity: number | string;
+  importPrice: number | string;
+  expiryDate: string | Date;
+};
+
+type ImportPayload = {
+  supplierId?: string | null;
+  importedAt?: string | Date;
+  note?: string | null;
+  items: ImportItemPayload[];
+};
+
+type SalePayload = {
+  paymentMethod: PaymentMethod;
+  discountAmount?: number | string;
+  note?: string | null;
+  items: Array<{
+    medicineId: string;
+    quantity: number | string;
+  }>;
+};
+
+const asOptionalString = (value?: string | null) => {
+  const normalized = value?.trim();
+  return normalized ? normalized : null;
+};
+
+const toDecimal = (value: number | string | Prisma.Decimal) => new PrismaRuntime.Decimal(value);
+
+const BUSINESS_TIME_ZONE = 'Asia/Ho_Chi_Minh';
+const BUSINESS_UTC_OFFSET = '+07:00';
+const businessDateFormatter = new Intl.DateTimeFormat('en-CA', {
+  timeZone: BUSINESS_TIME_ZONE,
+  year: 'numeric',
+  month: '2-digit',
+  day: '2-digit',
+});
+
+const toDateKey = (value: string | Date) => {
+  if (value instanceof Date) {
+    return [
+      value.getUTCFullYear(),
+      String(value.getUTCMonth() + 1).padStart(2, '0'),
+      String(value.getUTCDate()).padStart(2, '0'),
+    ].join('-');
+  }
+  return value.slice(0, 10);
+};
+
+const toBusinessDateKey = (value: Date) => {
+  const parts = Object.fromEntries(
+    businessDateFormatter
+      .formatToParts(value)
+      .filter((part) => part.type !== 'literal')
+      .map((part) => [part.type, part.value]),
+  );
+  return `${parts.year}-${parts.month}-${parts.day}`;
+};
+
+const toDateOnly = (value: string | Date) => {
+  return new Date(`${toDateKey(value)}T00:00:00.000Z`);
+};
+
+const getPagination = (query: PageQuery) => {
+  const limit = Number(query.limit) > 0 ? Math.min(Number(query.limit), 100) : 20;
+  const page = Number(query.page) > 0 ? Number(query.page) : 1;
+  return { page, limit, skip: (page - 1) * limit };
+};
+
+const paginateRows = <T>(rows: T[], page: number, limit: number) => ({
+  results: rows.slice((page - 1) * limit, page * limit),
+  page,
+  limit,
+  totalPages: Math.ceil(rows.length / limit),
+  totalResults: rows.length,
+});
+
+const getDateRange = (query: DateQuery) => {
+  const getBoundary = (value: string | Date, endOfDay: boolean) => {
+    const dateKey = toDateKey(value);
+    const start = new Date(`${dateKey}T00:00:00.000${BUSINESS_UTC_OFFSET}`);
+    if (!endOfDay) return start;
+
+    const nextDate = toDateOnly(value);
+    nextDate.setUTCDate(nextDate.getUTCDate() + 1);
+    const nextStart = new Date(`${toDateKey(nextDate)}T00:00:00.000${BUSINESS_UTC_OFFSET}`);
+    return new Date(nextStart.getTime() - 1);
+  };
+  const from = query.from ? getBoundary(query.from, false) : undefined;
+  const to = query.to ? getBoundary(query.to, true) : undefined;
+  return {
+    ...(from || to
+      ? {
+          gte: from,
+          lte: to,
+        }
+      : {}),
+  };
+};
+
+const currentBusinessDateOnly = () => new Date(`${toBusinessDateKey(new Date())}T00:00:00.000Z`);
+
+const startOfCurrentBusinessDay = () => new Date(`${toBusinessDateKey(new Date())}T00:00:00.000${BUSINESS_UTC_OFFSET}`);
+
+const addDays = (date: Date, days: number) => {
+  const value = new Date(date);
+  value.setUTCDate(value.getUTCDate() + days);
+  return value;
+};
+
+const writeAudit = async (
+  tx: Prisma.TransactionClient,
+  actor: Actor,
+  data: {
+    storeId: string;
+    action: string;
+    targetType: string;
+    targetId?: string | null;
+    metadata?: Prisma.InputJsonValue;
+  },
+) => {
+  await tx.auditLog.create({
+    data: {
+      actorId: actor.id,
+      storeId: data.storeId,
+      action: data.action,
+      targetType: data.targetType,
+      targetId: data.targetId ?? null,
+      metadata: data.metadata,
+    },
+  });
+};
+
+const serializeSupplier = (supplier) => ({
+  ...supplier,
+});
+
+const serializeMedicine = (storeMedicine, stock?: { total: Prisma.Decimal; available: Prisma.Decimal }) => ({
+  id: storeMedicine.medicine.id,
+  storeMedicineId: storeMedicine.id,
+  name: storeMedicine.medicine.name,
+  baseUnitName: storeMedicine.medicine.baseUnitName,
+  barcode: storeMedicine.medicine.barcode,
+  registrationNumber: storeMedicine.medicine.registrationNumber,
+  category: storeMedicine.medicine.category,
+  activeIngredient: storeMedicine.medicine.activeIngredient,
+  strength: storeMedicine.medicine.strength,
+  dosageForm: storeMedicine.medicine.dosageForm,
+  manufacturer: storeMedicine.medicine.manufacturer,
+  requiresPrescription: storeMedicine.medicine.requiresPrescription,
+  description: storeMedicine.medicine.description,
+  isActive: storeMedicine.isActive && storeMedicine.medicine.isActive,
+  sellingPrice: Number(storeMedicine.sellingPrice),
+  minStock: Number(storeMedicine.minStock),
+  totalStock: Number(stock?.total ?? 0),
+  availableStock: Number(stock?.available ?? 0),
+});
+
+const serializeImportReceipt = (receipt) => ({
+  ...receipt,
+  totalAmount: Number(receipt.totalAmount),
+  details: receipt.details.map((detail) => ({
+    ...detail,
+    quantity: Number(detail.quantity),
+    importPrice: Number(detail.importPrice),
+  })),
+});
+
+const serializeSale = (sale, includeCosts = true) => ({
+  ...sale,
+  discountAmount: Number(sale.discountAmount),
+  totalAmount: Number(sale.totalAmount),
+  details: sale.details.map((detail) => ({
+    ...detail,
+    quantity: Number(detail.quantity),
+    salePrice: Number(detail.salePrice),
+    costPrice: includeCosts ? Number(detail.costPrice) : undefined,
+  })),
+});
+
+const getContext = async (actor: Actor) => getStoreContext(actor);
+
+const buildInventoryRows = async (storeId: string, search?: string) => {
+  const storeMedicines = await prisma.storeMedicine.findMany({
+    where: {
+      storeId,
+      ...(search
+        ? {
+            medicine: {
+              OR: [
+                { name: { contains: search, mode: 'insensitive' } },
+                { barcode: { contains: search, mode: 'insensitive' } },
+                { activeIngredient: { contains: search, mode: 'insensitive' } },
+              ],
+            },
+          }
+        : {}),
+    },
+    orderBy: { medicine: { name: 'asc' } },
+    include: {
+      medicine: true,
+    },
+  });
+
+  const medicineIds = storeMedicines.map((item) => item.medicineId);
+  const batches = medicineIds.length
+    ? await prisma.stockBatch.findMany({
+        where: {
+          storeId,
+          medicineId: { in: medicineIds },
+          quantityRemaining: { gt: 0 },
+        },
+        orderBy: [{ expiryDate: 'asc' }, { createdAt: 'asc' }],
+      })
+    : [];
+
+  const today = currentBusinessDateOnly();
+  const expiringLimit = addDays(today, 60);
+
+  return storeMedicines.map((storeMedicine) => {
+    const medicineBatches = batches.filter((batch) => batch.medicineId === storeMedicine.medicineId);
+    const totalStock = medicineBatches.reduce(
+      (sum, batch) => sum.plus(batch.quantityRemaining),
+      new PrismaRuntime.Decimal(0),
+    );
+    const availableStock = medicineBatches
+      .filter((batch) => batch.expiryDate >= today)
+      .reduce((sum, batch) => sum.plus(batch.quantityRemaining), new PrismaRuntime.Decimal(0));
+    const inventoryValue = medicineBatches.reduce(
+      (sum, batch) => sum.plus(batch.quantityRemaining.mul(batch.importPrice)),
+      new PrismaRuntime.Decimal(0),
+    );
+    const nearestExpiry = medicineBatches.find((batch) => batch.expiryDate >= today)?.expiryDate ?? null;
+    const hasExpiringBatch = medicineBatches.some((batch) => batch.expiryDate >= today && batch.expiryDate <= expiringLimit);
+
+    return {
+      ...serializeMedicine(storeMedicine, { total: totalStock, available: availableStock }),
+      inventoryValue: Number(inventoryValue),
+      nearestExpiry,
+      isLowStock: availableStock.lte(storeMedicine.minStock),
+      hasExpiringBatch,
+      batches: medicineBatches.map((batch) => ({
+        id: batch.id,
+        batchNumber: batch.batchNumber,
+        expiryDate: batch.expiryDate,
+        importPrice: Number(batch.importPrice),
+        quantityRemaining: Number(batch.quantityRemaining),
+        isExpired: batch.expiryDate < today,
+      })),
+    };
+  });
+};
+
+const getDashboard = async (actor: Actor, storeId: string) => {
+  const access = await getStoreAccess(actor, storeId, 'staff');
+  const today = startOfCurrentBusinessDay();
+  const [sales, inventory, supplierCount] = await Promise.all([
+    prisma.sale.findMany({
+      where: {
+        storeId,
+        status: 'completed',
+        soldAt: { gte: today },
+        ...(!access.user.isSystemAdmin && access.role === 'staff' ? { soldBy: actor.id } : {}),
+      },
+      include: { details: true },
+    }),
+    buildInventoryRows(storeId),
+    prisma.supplier.count({ where: { storeId, isActive: true } }),
+  ]);
+
+  const revenue = sales.reduce((sum, sale) => sum.plus(sale.totalAmount), new PrismaRuntime.Decimal(0));
+  const cost = sales.reduce(
+    (sum, sale) =>
+      sum.plus(
+        sale.details.reduce(
+          (detailSum, detail) => detailSum.plus(detail.costPrice.mul(detail.quantity)),
+          new PrismaRuntime.Decimal(0),
+        ),
+      ),
+    new PrismaRuntime.Decimal(0),
+  );
+  const canViewFinancials = access.user.isSystemAdmin || access.role === 'owner' || access.role === 'manager';
+
+  return {
+    store: access.store,
+    role: access.role,
+    today: {
+      revenue: Number(revenue),
+      orders: sales.length,
+      ...(canViewFinancials
+        ? {
+            cost: Number(cost),
+            grossProfit: Number(revenue.minus(cost)),
+          }
+        : {}),
+    },
+    inventory: {
+      medicineCount: inventory.filter((item) => item.isActive).length,
+      lowStockCount: inventory.filter((item) => item.isLowStock).length,
+      expiringCount: inventory.filter((item) => item.hasExpiringBatch).length,
+      ...(canViewFinancials
+        ? {
+            value: inventory.reduce((sum, item) => sum + item.inventoryValue, 0),
+          }
+        : {}),
+    },
+    supplierCount,
+  };
+};
+
+const querySuppliers = async (actor: Actor, storeId: string, query: PageQuery) => {
+  await getStoreAccess(actor, storeId, 'staff');
+  const { page, limit, skip } = getPagination(query);
+  const where: Prisma.SupplierWhereInput = {
+    storeId,
+    ...(query.search
+      ? {
+          OR: [
+            { name: { contains: query.search, mode: 'insensitive' } },
+            { code: { contains: query.search, mode: 'insensitive' } },
+            { phone: { contains: query.search, mode: 'insensitive' } },
+          ],
+        }
+      : {}),
+  };
+  const [totalResults, results] = await prisma.$transaction([
+    prisma.supplier.count({ where }),
+    prisma.supplier.findMany({
+      where,
+      orderBy: [{ isActive: 'desc' }, { name: 'asc' }],
+      skip,
+      take: limit,
+    }),
+  ]);
+
+  return {
+    results: results.map(serializeSupplier),
+    page,
+    limit,
+    totalPages: Math.ceil(totalResults / limit),
+    totalResults,
+  };
+};
+
+const createSupplier = async (actor: Actor, storeId: string, body) => {
+  await getStoreAccess(actor, storeId, 'manager');
+  return prisma.$transaction(async (tx) => {
+    const supplier = await tx.supplier.create({
+      data: {
+        storeId,
+        code: asOptionalString(body.code),
+        name: body.name.trim(),
+        phone: asOptionalString(body.phone),
+        email: asOptionalString(body.email),
+        address: asOptionalString(body.address),
+        taxCode: asOptionalString(body.taxCode),
+      },
+    });
+    await writeAudit(tx, actor, {
+      storeId,
+      action: 'supplier.create',
+      targetType: 'supplier',
+      targetId: supplier.id,
+    });
+    return serializeSupplier(supplier);
+  });
+};
+
+const updateSupplier = async (actor: Actor, storeId: string, supplierId: string, body) => {
+  await getStoreAccess(actor, storeId, 'manager');
+  const existing = await prisma.supplier.findFirst({ where: { id: supplierId, storeId } });
+  if (!existing) {
+    throw new ApiError(httpStatus.NOT_FOUND, 'Không tìm thấy nhà cung cấp');
+  }
+
+  return prisma.$transaction(async (tx) => {
+    const supplier = await tx.supplier.update({
+      where: { id: supplierId },
+      data: {
+        code: body.code === undefined ? undefined : asOptionalString(body.code),
+        name: body.name?.trim(),
+        phone: body.phone === undefined ? undefined : asOptionalString(body.phone),
+        email: body.email === undefined ? undefined : asOptionalString(body.email),
+        address: body.address === undefined ? undefined : asOptionalString(body.address),
+        taxCode: body.taxCode === undefined ? undefined : asOptionalString(body.taxCode),
+        isActive: body.isActive,
+      },
+    });
+    await writeAudit(tx, actor, {
+      storeId,
+      action: 'supplier.update',
+      targetType: 'supplier',
+      targetId: supplier.id,
+      metadata: { isActive: supplier.isActive },
+    });
+    return serializeSupplier(supplier);
+  });
+};
+
+const queryMedicines = async (
+  actor: Actor,
+  storeId: string,
+  query: PageQuery & { alert?: 'low' | 'expiring'; active?: string | boolean },
+) => {
+  await getStoreAccess(actor, storeId, 'staff');
+  const { page, limit } = getPagination(query);
+  let rows = await buildInventoryRows(storeId, query.search);
+  if (query.alert === 'low') rows = rows.filter((item) => item.isLowStock);
+  if (query.alert === 'expiring') rows = rows.filter((item) => item.hasExpiringBatch);
+  if (query.active !== undefined) {
+    const active = query.active === true || query.active === 'true';
+    rows = rows.filter((item) => item.isActive === active);
+  }
+  return paginateRows(rows, page, limit);
+};
+
+const createMedicine = async (actor: Actor, storeId: string, body: MedicinePayload) => {
+  await getStoreAccess(actor, storeId, 'manager');
+
+  return prisma.$transaction(async (tx) => {
+    const medicine = await tx.medicine.create({
+      data: {
+        name: body.name.trim(),
+        baseUnitName: body.baseUnitName.trim(),
+        barcode: asOptionalString(body.barcode),
+        registrationNumber: asOptionalString(body.registrationNumber),
+        category: asOptionalString(body.category),
+        activeIngredient: asOptionalString(body.activeIngredient),
+        strength: asOptionalString(body.strength),
+        dosageForm: asOptionalString(body.dosageForm),
+        manufacturer: asOptionalString(body.manufacturer),
+        requiresPrescription: body.requiresPrescription ?? false,
+        description: asOptionalString(body.description),
+        units: {
+          create: {
+            name: body.baseUnitName.trim(),
+            conversionRate: 1,
+            isBaseUnit: true,
+          },
+        },
+      },
+    });
+    const storeMedicine = await tx.storeMedicine.create({
+      data: {
+        storeId,
+        medicineId: medicine.id,
+        sellingPrice: toDecimal(body.sellingPrice),
+        minStock: toDecimal(body.minStock ?? 0),
+      },
+      include: { medicine: true },
+    });
+    await writeAudit(tx, actor, {
+      storeId,
+      action: 'medicine.create',
+      targetType: 'medicine',
+      targetId: medicine.id,
+    });
+    return serializeMedicine(storeMedicine);
+  });
+};
+
+const updateMedicine = async (
+  actor: Actor,
+  storeId: string,
+  medicineId: string,
+  body: Partial<MedicinePayload> & { isActive?: boolean },
+) => {
+  await getStoreAccess(actor, storeId, 'manager');
+  const assigned = await prisma.storeMedicine.findUnique({
+    where: { storeId_medicineId: { storeId, medicineId } },
+  });
+  if (!assigned) {
+    throw new ApiError(httpStatus.NOT_FOUND, 'Thuốc chưa được cấu hình tại quầy này');
+  }
+
+  return prisma.$transaction(async (tx) => {
+    if (
+      body.name !== undefined ||
+      body.baseUnitName !== undefined ||
+      body.barcode !== undefined ||
+      body.registrationNumber !== undefined ||
+      body.category !== undefined ||
+      body.activeIngredient !== undefined ||
+      body.strength !== undefined ||
+      body.dosageForm !== undefined ||
+      body.manufacturer !== undefined ||
+      body.requiresPrescription !== undefined ||
+      body.description !== undefined
+    ) {
+      await tx.medicine.update({
+        where: { id: medicineId },
+        data: {
+          name: body.name?.trim(),
+          baseUnitName: body.baseUnitName?.trim(),
+          barcode: body.barcode === undefined ? undefined : asOptionalString(body.barcode),
+          registrationNumber: body.registrationNumber === undefined ? undefined : asOptionalString(body.registrationNumber),
+          category: body.category === undefined ? undefined : asOptionalString(body.category),
+          activeIngredient: body.activeIngredient === undefined ? undefined : asOptionalString(body.activeIngredient),
+          strength: body.strength === undefined ? undefined : asOptionalString(body.strength),
+          dosageForm: body.dosageForm === undefined ? undefined : asOptionalString(body.dosageForm),
+          manufacturer: body.manufacturer === undefined ? undefined : asOptionalString(body.manufacturer),
+          requiresPrescription: body.requiresPrescription,
+          description: body.description === undefined ? undefined : asOptionalString(body.description),
+        },
+      });
+
+      if (body.baseUnitName) {
+        await tx.medicineUnit.updateMany({
+          where: { medicineId, isBaseUnit: true },
+          data: { name: body.baseUnitName.trim() },
+        });
+      }
+    }
+
+    const updated = await tx.storeMedicine.update({
+      where: { storeId_medicineId: { storeId, medicineId } },
+      data: {
+        sellingPrice: body.sellingPrice === undefined ? undefined : toDecimal(body.sellingPrice),
+        minStock: body.minStock === undefined ? undefined : toDecimal(body.minStock),
+        isActive: body.isActive,
+      },
+      include: { medicine: true },
+    });
+    await writeAudit(tx, actor, {
+      storeId,
+      action: 'medicine.update',
+      targetType: 'medicine',
+      targetId: medicineId,
+      metadata: {
+        sellingPrice: Number(updated.sellingPrice),
+        minStock: Number(updated.minStock),
+        isActive: updated.isActive,
+      },
+    });
+    return serializeMedicine(updated);
+  });
+};
+
+const validateImportReferences = async (
+  storeId: string,
+  supplierId: string | null | undefined,
+  items: ImportItemPayload[],
+) => {
+  if (supplierId) {
+    const supplier = await prisma.supplier.findFirst({
+      where: { id: supplierId, storeId, isActive: true },
+    });
+    if (!supplier) {
+      throw new ApiError(httpStatus.BAD_REQUEST, 'Nhà cung cấp không hợp lệ');
+    }
+  }
+
+  const medicineIds = [...new Set(items.map((item) => item.medicineId))];
+  const configuredCount = await prisma.storeMedicine.count({
+    where: {
+      storeId,
+      medicineId: { in: medicineIds },
+      isActive: true,
+      medicine: { isActive: true },
+    },
+  });
+  if (configuredCount !== medicineIds.length) {
+    throw new ApiError(httpStatus.BAD_REQUEST, 'Có thuốc chưa được cấu hình hoặc đã ngừng bán tại quầy');
+  }
+
+  const duplicateKeys = items.map((item) => `${item.medicineId}:${item.batchNumber.trim().toLowerCase()}`);
+  if (new Set(duplicateKeys).size !== duplicateKeys.length) {
+    throw new ApiError(httpStatus.BAD_REQUEST, 'Không được nhập trùng thuốc và số lô trong cùng phiếu');
+  }
+
+  const today = currentBusinessDateOnly();
+  if (items.some((item) => toDateOnly(item.expiryDate) <= today)) {
+    throw new ApiError(httpStatus.BAD_REQUEST, 'Hạn sử dụng phải sau ngày hiện tại');
+  }
+};
+
+const getImportTotal = (items: ImportItemPayload[]) =>
+  items.reduce(
+    (sum, item) => sum.plus(toDecimal(item.quantity).mul(toDecimal(item.importPrice))),
+    new PrismaRuntime.Decimal(0),
+  );
+
+const createImportReceipt = async (actor: Actor, storeId: string, body: ImportPayload) => {
+  await getStoreAccess(actor, storeId, 'manager');
+  await validateImportReferences(storeId, body.supplierId, body.items);
+  const supplier = body.supplierId ? await prisma.supplier.findFirst({ where: { id: body.supplierId, storeId } }) : null;
+  const totalAmount = getImportTotal(body.items);
+
+  const receipt = await prisma.$transaction(async (tx) => {
+    const created = await tx.importReceipt.create({
+      data: {
+        storeId,
+        createdBy: actor.id,
+        supplierId: supplier?.id ?? null,
+        supplierNameSnapshot: supplier?.name ?? null,
+        status: 'draft',
+        totalAmount,
+        note: asOptionalString(body.note),
+        importedAt: body.importedAt ? new Date(body.importedAt) : new Date(),
+        details: {
+          create: body.items.map((item) => ({
+            storeId,
+            medicineId: item.medicineId,
+            batchNumber: item.batchNumber.trim(),
+            quantity: toDecimal(item.quantity),
+            importPrice: toDecimal(item.importPrice),
+            expiryDate: toDateOnly(item.expiryDate),
+          })),
+        },
+      },
+      include: {
+        supplier: { select: { id: true, name: true } },
+        createdByUser: { select: { id: true, name: true } },
+        details: {
+          include: { medicine: { select: { id: true, name: true, baseUnitName: true } } },
+        },
+      },
+    });
+    await writeAudit(tx, actor, {
+      storeId,
+      action: 'import.create_draft',
+      targetType: 'import_receipt',
+      targetId: created.id,
+      metadata: { totalAmount: Number(totalAmount), itemCount: body.items.length },
+    });
+    return created;
+  });
+
+  return serializeImportReceipt(receipt);
+};
+
+const queryImportReceipts = async (actor: Actor, storeId: string, query: DateQuery & { status?: string }) => {
+  await getStoreAccess(actor, storeId, 'manager');
+  const { page, limit, skip } = getPagination(query);
+  const where: Prisma.ImportReceiptWhereInput = {
+    storeId,
+    ...(query.status ? { status: query.status as Prisma.EnumReceiptStatusFilter['equals'] } : {}),
+    ...(query.from || query.to ? { importedAt: getDateRange(query) } : {}),
+  };
+  const [totalResults, results] = await prisma.$transaction([
+    prisma.importReceipt.count({ where }),
+    prisma.importReceipt.findMany({
+      where,
+      orderBy: { createdAt: 'desc' },
+      skip,
+      take: limit,
+      include: {
+        supplier: { select: { id: true, name: true } },
+        createdByUser: { select: { id: true, name: true } },
+        details: {
+          include: { medicine: { select: { id: true, name: true, baseUnitName: true } } },
+        },
+      },
+    }),
+  ]);
+  return {
+    results: results.map(serializeImportReceipt),
+    page,
+    limit,
+    totalPages: Math.ceil(totalResults / limit),
+    totalResults,
+  };
+};
+
+const getImportReceipt = async (actor: Actor, storeId: string, receiptId: string) => {
+  await getStoreAccess(actor, storeId, 'manager');
+  const receipt = await prisma.importReceipt.findFirst({
+    where: { id: receiptId, storeId },
+    include: {
+      supplier: { select: { id: true, name: true } },
+      createdByUser: { select: { id: true, name: true } },
+      details: {
+        include: { medicine: { select: { id: true, name: true, baseUnitName: true } } },
+      },
+    },
+  });
+  if (!receipt) throw new ApiError(httpStatus.NOT_FOUND, 'Không tìm thấy phiếu nhập');
+  return serializeImportReceipt(receipt);
+};
+
+const completeImportReceipt = async (actor: Actor, storeId: string, receiptId: string) => {
+  await getStoreAccess(actor, storeId, 'manager');
+
+  try {
+    const receipt = await prisma.$transaction(
+      async (tx) => {
+        const draft = await tx.importReceipt.findFirst({
+          where: { id: receiptId, storeId },
+          include: {
+            supplier: { select: { id: true, name: true } },
+            createdByUser: { select: { id: true, name: true } },
+            details: {
+              include: { medicine: { select: { id: true, name: true, baseUnitName: true } } },
+            },
+          },
+        });
+        if (!draft) throw new ApiError(httpStatus.NOT_FOUND, 'Không tìm thấy phiếu nhập');
+        if (draft.status !== 'draft') {
+          throw new ApiError(httpStatus.CONFLICT, 'Chỉ phiếu nháp mới có thể hoàn tất');
+        }
+
+        const changed = await tx.importReceipt.updateMany({
+          where: { id: receiptId, storeId, status: 'draft' },
+          data: { status: 'completed' },
+        });
+        if (changed.count !== 1) {
+          throw new ApiError(httpStatus.CONFLICT, 'Phiếu nhập đã được xử lý bởi yêu cầu khác');
+        }
+
+        for (const detail of draft.details) {
+          const batch = await tx.stockBatch.create({
+            data: {
+              storeId,
+              medicineId: detail.medicineId,
+              importDetailId: detail.id,
+              batchNumber: detail.batchNumber,
+              importPrice: detail.importPrice,
+              expiryDate: detail.expiryDate,
+              quantityRemaining: detail.quantity,
+            },
+          });
+          await tx.inventoryMovement.create({
+            data: {
+              storeId,
+              medicineId: detail.medicineId,
+              stockBatchId: batch.id,
+              type: 'import',
+              quantityDelta: detail.quantity,
+              referenceType: 'import_receipt',
+              referenceId: draft.id,
+              createdBy: actor.id,
+            },
+          });
+        }
+
+        await writeAudit(tx, actor, {
+          storeId,
+          action: 'import.complete',
+          targetType: 'import_receipt',
+          targetId: draft.id,
+          metadata: { totalAmount: Number(draft.totalAmount), itemCount: draft.details.length },
+        });
+
+        return tx.importReceipt.findUniqueOrThrow({
+          where: { id: receiptId },
+          include: {
+            supplier: { select: { id: true, name: true } },
+            createdByUser: { select: { id: true, name: true } },
+            details: {
+              include: { medicine: { select: { id: true, name: true, baseUnitName: true } } },
+            },
+          },
+        });
+      },
+      { isolationLevel: 'Serializable' },
+    );
+    return serializeImportReceipt(receipt);
+  } catch (error) {
+    if (error instanceof PrismaRuntime.PrismaClientKnownRequestError && error.code === 'P2034') {
+      throw new ApiError(httpStatus.CONFLICT, 'Dữ liệu tồn kho vừa thay đổi, vui lòng thử lại');
+    }
+    throw error;
+  }
+};
+
+const cancelImportReceipt = async (actor: Actor, storeId: string, receiptId: string) => {
+  await getStoreAccess(actor, storeId, 'manager');
+  return prisma.$transaction(async (tx) => {
+    const changed = await tx.importReceipt.updateMany({
+      where: { id: receiptId, storeId, status: 'draft' },
+      data: { status: 'cancelled' },
+    });
+    if (changed.count !== 1) {
+      throw new ApiError(httpStatus.CONFLICT, 'Chỉ phiếu nháp mới có thể hủy');
+    }
+    await writeAudit(tx, actor, {
+      storeId,
+      action: 'import.cancel',
+      targetType: 'import_receipt',
+      targetId: receiptId,
+    });
+    return { message: 'Đã hủy phiếu nhập' };
+  });
+};
+
+const queryInventory = async (actor: Actor, storeId: string, query: PageQuery & { alert?: 'low' | 'expiring' }) => {
+  const access = await getStoreAccess(actor, storeId, 'staff');
+  const { page, limit } = getPagination(query);
+  let rows = await buildInventoryRows(storeId, query.search);
+  if (query.alert === 'low') rows = rows.filter((item) => item.isLowStock);
+  if (query.alert === 'expiring') rows = rows.filter((item) => item.hasExpiringBatch);
+  const canViewCosts = access.user.isSystemAdmin || access.role === 'owner' || access.role === 'manager';
+  const scopedRows = canViewCosts
+    ? rows
+    : rows.map((item) => ({
+        ...item,
+        inventoryValue: undefined,
+        batches: item.batches.map((batch) => ({
+          ...batch,
+          importPrice: undefined,
+        })),
+      }));
+  return paginateRows(scopedRows, page, limit);
+};
+
+const queryInventoryMovements = async (actor: Actor, storeId: string, query: DateQuery) => {
+  await getStoreAccess(actor, storeId, 'manager');
+  const { page, limit, skip } = getPagination(query);
+  const where: Prisma.InventoryMovementWhereInput = {
+    storeId,
+    ...(query.from || query.to ? { createdAt: getDateRange(query) } : {}),
+  };
+  const [totalResults, results] = await prisma.$transaction([
+    prisma.inventoryMovement.count({ where }),
+    prisma.inventoryMovement.findMany({
+      where,
+      orderBy: { createdAt: 'desc' },
+      skip,
+      take: limit,
+      include: {
+        medicine: { select: { id: true, name: true, baseUnitName: true } },
+        stockBatch: { select: { id: true, batchNumber: true, expiryDate: true } },
+        createdByUser: { select: { id: true, name: true } },
+      },
+    }),
+  ]);
+  return {
+    results: results.map((movement) => ({
+      ...movement,
+      quantityDelta: Number(movement.quantityDelta),
+    })),
+    page,
+    limit,
+    totalPages: Math.ceil(totalResults / limit),
+    totalResults,
+  };
+};
+
+const querySales = async (actor: Actor, storeId: string, query: DateQuery) => {
+  const access = await getStoreAccess(actor, storeId, 'staff');
+  const canViewCosts = access.user.isSystemAdmin || access.role === 'owner' || access.role === 'manager';
+  const { page, limit, skip } = getPagination(query);
+  const where: Prisma.SaleWhereInput = {
+    storeId,
+    ...(!access.user.isSystemAdmin && access.role === 'staff' ? { soldBy: actor.id } : {}),
+    ...(query.from || query.to ? { soldAt: getDateRange(query) } : {}),
+  };
+  const [totalResults, results] = await prisma.$transaction([
+    prisma.sale.count({ where }),
+    prisma.sale.findMany({
+      where,
+      orderBy: { soldAt: 'desc' },
+      skip,
+      take: limit,
+      include: {
+        soldByUser: { select: { id: true, name: true } },
+        details: {
+          include: {
+            medicine: { select: { id: true, name: true, baseUnitName: true } },
+            stockBatch: { select: { id: true, batchNumber: true, expiryDate: true } },
+          },
+        },
+      },
+    }),
+  ]);
+  return {
+    results: results.map((sale) => serializeSale(sale, canViewCosts)),
+    page,
+    limit,
+    totalPages: Math.ceil(totalResults / limit),
+    totalResults,
+  };
+};
+
+const getSale = async (actor: Actor, storeId: string, saleId: string) => {
+  const access = await getStoreAccess(actor, storeId, 'staff');
+  const canViewCosts = access.user.isSystemAdmin || access.role === 'owner' || access.role === 'manager';
+  const sale = await prisma.sale.findFirst({
+    where: {
+      id: saleId,
+      storeId,
+      ...(!access.user.isSystemAdmin && access.role === 'staff' ? { soldBy: actor.id } : {}),
+    },
+    include: {
+      store: { select: { id: true, name: true, address: true, phone: true } },
+      soldByUser: { select: { id: true, name: true } },
+      details: {
+        include: {
+          medicine: { select: { id: true, name: true, baseUnitName: true } },
+          stockBatch: { select: { id: true, batchNumber: true, expiryDate: true } },
+        },
+      },
+    },
+  });
+  if (!sale) throw new ApiError(httpStatus.NOT_FOUND, 'Không tìm thấy đơn bán');
+  return serializeSale(sale, canViewCosts);
+};
+
+const createSale = async (actor: Actor, storeId: string, body: SalePayload) => {
+  const access = await getStoreAccess(actor, storeId, 'staff');
+  const canViewCosts = access.user.isSystemAdmin || access.role === 'owner' || access.role === 'manager';
+  const medicineIds = body.items.map((item) => item.medicineId);
+  if (new Set(medicineIds).size !== medicineIds.length) {
+    throw new ApiError(httpStatus.BAD_REQUEST, 'Mỗi thuốc chỉ được xuất hiện một lần trong đơn');
+  }
+
+  try {
+    const sale = await prisma.$transaction(
+      async (tx) => {
+        const storeMedicines = await tx.storeMedicine.findMany({
+          where: {
+            storeId,
+            medicineId: { in: medicineIds },
+            isActive: true,
+            medicine: { isActive: true },
+          },
+          include: { medicine: true },
+        });
+        if (storeMedicines.length !== medicineIds.length) {
+          throw new ApiError(httpStatus.BAD_REQUEST, 'Có thuốc không còn được bán tại quầy');
+        }
+
+        const itemByMedicine = new Map(body.items.map((item) => [item.medicineId, item]));
+        let grossAmount = new PrismaRuntime.Decimal(0);
+        for (const configured of storeMedicines) {
+          const item = itemByMedicine.get(configured.medicineId);
+          if (!item) continue;
+          grossAmount = grossAmount.plus(configured.sellingPrice.mul(toDecimal(item.quantity)));
+        }
+
+        const discountAmount = toDecimal(body.discountAmount ?? 0);
+        if (discountAmount.gt(grossAmount)) {
+          throw new ApiError(httpStatus.BAD_REQUEST, 'Giảm giá không được lớn hơn tiền hàng');
+        }
+
+        const created = await tx.sale.create({
+          data: {
+            storeId,
+            soldBy: actor.id,
+            paymentMethod: body.paymentMethod,
+            discountAmount,
+            totalAmount: grossAmount.minus(discountAmount),
+            note: asOptionalString(body.note),
+          },
+        });
+
+        const today = currentBusinessDateOnly();
+        const detailRows: Prisma.SaleDetailCreateManyInput[] = [];
+        const movementRows: Prisma.InventoryMovementCreateManyInput[] = [];
+
+        for (const configured of storeMedicines) {
+          const item = itemByMedicine.get(configured.medicineId);
+          if (!item) continue;
+          let remaining = toDecimal(item.quantity);
+          const batches = await tx.stockBatch.findMany({
+            where: {
+              storeId,
+              medicineId: configured.medicineId,
+              quantityRemaining: { gt: 0 },
+              expiryDate: { gte: today },
+            },
+            orderBy: [{ expiryDate: 'asc' }, { createdAt: 'asc' }, { id: 'asc' }],
+          });
+
+          for (const batch of batches) {
+            if (remaining.lte(0)) break;
+            const take = batch.quantityRemaining.lt(remaining) ? batch.quantityRemaining : remaining;
+            const changed = await tx.stockBatch.updateMany({
+              where: {
+                id: batch.id,
+                storeId,
+                medicineId: configured.medicineId,
+                quantityRemaining: { gte: take },
+              },
+              data: { quantityRemaining: { decrement: take } },
+            });
+            if (changed.count !== 1) {
+              throw new ApiError(httpStatus.CONFLICT, 'Tồn kho vừa thay đổi, vui lòng thử lại');
+            }
+
+            detailRows.push({
+              saleId: created.id,
+              storeId,
+              medicineId: configured.medicineId,
+              stockBatchId: batch.id,
+              quantity: take,
+              salePrice: configured.sellingPrice,
+              costPrice: batch.importPrice,
+            });
+            movementRows.push({
+              storeId,
+              medicineId: configured.medicineId,
+              stockBatchId: batch.id,
+              type: 'sale',
+              quantityDelta: take.negated(),
+              referenceType: 'sale',
+              referenceId: created.id,
+              createdBy: actor.id,
+            });
+            remaining = remaining.minus(take);
+          }
+
+          if (remaining.gt(0)) {
+            throw new ApiError(httpStatus.CONFLICT, `Không đủ tồn khả dụng cho thuốc ${configured.medicine.name}`);
+          }
+        }
+
+        await tx.saleDetail.createMany({ data: detailRows });
+        await tx.inventoryMovement.createMany({ data: movementRows });
+        await writeAudit(tx, actor, {
+          storeId,
+          action: 'sale.complete',
+          targetType: 'sale',
+          targetId: created.id,
+          metadata: {
+            totalAmount: Number(created.totalAmount),
+            discountAmount: Number(created.discountAmount),
+            medicineCount: body.items.length,
+          },
+        });
+
+        return tx.sale.findUniqueOrThrow({
+          where: { id: created.id },
+          include: {
+            store: { select: { id: true, name: true, address: true, phone: true } },
+            soldByUser: { select: { id: true, name: true } },
+            details: {
+              include: {
+                medicine: { select: { id: true, name: true, baseUnitName: true } },
+                stockBatch: { select: { id: true, batchNumber: true, expiryDate: true } },
+              },
+            },
+          },
+        });
+      },
+      { isolationLevel: 'Serializable' },
+    );
+    return serializeSale(sale, canViewCosts);
+  } catch (error) {
+    if (error instanceof PrismaRuntime.PrismaClientKnownRequestError && error.code === 'P2034') {
+      throw new ApiError(httpStatus.CONFLICT, 'Tồn kho vừa thay đổi, vui lòng thử lại');
+    }
+    throw error;
+  }
+};
+
+const getProfitReport = async (actor: Actor, storeId: string, query: DateQuery) => {
+  await getStoreAccess(actor, storeId, 'manager');
+  const sales = await prisma.sale.findMany({
+    where: {
+      storeId,
+      status: 'completed',
+      ...(query.from || query.to ? { soldAt: getDateRange(query) } : {}),
+    },
+    orderBy: { soldAt: 'asc' },
+    include: {
+      details: {
+        include: {
+          medicine: { select: { id: true, name: true, baseUnitName: true } },
+        },
+      },
+    },
+  });
+
+  let revenue = new PrismaRuntime.Decimal(0);
+  let cost = new PrismaRuntime.Decimal(0);
+  const series = new Map<string, { revenue: Prisma.Decimal; cost: Prisma.Decimal; orders: number }>();
+  const medicineTotals = new Map<
+    string,
+    { id: string; name: string; unit: string; quantity: Prisma.Decimal; revenue: Prisma.Decimal; cost: Prisma.Decimal }
+  >();
+
+  for (const sale of sales) {
+    const saleCost = sale.details.reduce(
+      (sum, detail) => sum.plus(detail.costPrice.mul(detail.quantity)),
+      new PrismaRuntime.Decimal(0),
+    );
+    const saleGrossBeforeDiscount = sale.details.reduce(
+      (sum, detail) => sum.plus(detail.salePrice.mul(detail.quantity)),
+      new PrismaRuntime.Decimal(0),
+    );
+    const revenueRatio = saleGrossBeforeDiscount.gt(0)
+      ? sale.totalAmount.div(saleGrossBeforeDiscount)
+      : new PrismaRuntime.Decimal(0);
+    revenue = revenue.plus(sale.totalAmount);
+    cost = cost.plus(saleCost);
+
+    const date = toBusinessDateKey(sale.soldAt);
+    const day = series.get(date) ?? {
+      revenue: new PrismaRuntime.Decimal(0),
+      cost: new PrismaRuntime.Decimal(0),
+      orders: 0,
+    };
+    day.revenue = day.revenue.plus(sale.totalAmount);
+    day.cost = day.cost.plus(saleCost);
+    day.orders += 1;
+    series.set(date, day);
+
+    for (const detail of sale.details) {
+      const current = medicineTotals.get(detail.medicineId) ?? {
+        id: detail.medicineId,
+        name: detail.medicine.name,
+        unit: detail.medicine.baseUnitName,
+        quantity: new PrismaRuntime.Decimal(0),
+        revenue: new PrismaRuntime.Decimal(0),
+        cost: new PrismaRuntime.Decimal(0),
+      };
+      const detailRevenue = detail.salePrice.mul(detail.quantity).mul(revenueRatio);
+      current.quantity = current.quantity.plus(detail.quantity);
+      current.revenue = current.revenue.plus(detailRevenue);
+      current.cost = current.cost.plus(detail.costPrice.mul(detail.quantity));
+      medicineTotals.set(detail.medicineId, current);
+    }
+  }
+
+  const inventoryRows = await buildInventoryRows(storeId);
+  return {
+    totals: {
+      revenue: Number(revenue),
+      cost: Number(cost),
+      grossProfit: Number(revenue.minus(cost)),
+      orders: sales.length,
+      inventoryValue: inventoryRows.reduce((sum, item) => sum + item.inventoryValue, 0),
+    },
+    series: [...series.entries()].map(([date, item]) => ({
+      date,
+      revenue: Number(item.revenue),
+      cost: Number(item.cost),
+      grossProfit: Number(item.revenue.minus(item.cost)),
+      orders: item.orders,
+    })),
+    topMedicines: [...medicineTotals.values()]
+      .sort((left, right) => Number(right.revenue.minus(right.cost).minus(left.revenue.minus(left.cost))))
+      .slice(0, 10)
+      .map((item) => ({
+        id: item.id,
+        name: item.name,
+        unit: item.unit,
+        quantity: Number(item.quantity),
+        revenue: Number(item.revenue),
+        cost: Number(item.cost),
+        grossProfit: Number(item.revenue.minus(item.cost)),
+      })),
+  };
+};
+
+export {
+  cancelImportReceipt,
+  completeImportReceipt,
+  createImportReceipt,
+  createMedicine,
+  createSale,
+  createSupplier,
+  getContext,
+  getDashboard,
+  getImportReceipt,
+  getProfitReport,
+  getSale,
+  queryImportReceipts,
+  queryInventory,
+  queryInventoryMovements,
+  queryMedicines,
+  querySales,
+  querySuppliers,
+  updateMedicine,
+  updateSupplier,
+};

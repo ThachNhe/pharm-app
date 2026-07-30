@@ -36,7 +36,7 @@ const generateToken = (
     exp: expires.unix(),
     type,
   };
-  return jwt.sign(payload, secret);
+  return jwt.sign(payload, secret, { algorithm: 'HS256' });
 };
 
 /**
@@ -73,7 +73,7 @@ const saveToken = async (
  * @returns {Promise<Token>}
  */
 const verifyToken = async (token: string, type: StoredTokenType): Promise<Token> => {
-  const payload = jwt.verify(token, config.jwt.secret) as JwtPayload;
+  const payload = jwt.verify(token, config.jwt.secret, { algorithms: ['HS256'] }) as JwtPayload;
   const tokenHash = hashToken(token);
   const tokenDoc = await prisma.token.findFirst({
     where: {

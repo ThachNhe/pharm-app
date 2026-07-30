@@ -16,12 +16,14 @@ const queryClient = new QueryClient({
 })
 
 const router = createRouter({ routeTree })
+const showDevtools =
+  import.meta.env.DEV && import.meta.env.VITE_ENABLE_DEVTOOLS === 'true'
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <QueryClientProvider client={queryClient}>
       <RouterProvider router={router} /> 
-      <ReactQueryDevtools initialIsOpen={false} />
+      {showDevtools ? <ReactQueryDevtools initialIsOpen={false} /> : null}
     </QueryClientProvider>
   </StrictMode>
 )

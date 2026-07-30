@@ -51,15 +51,38 @@ const sendStaffInvitationEmail = async ({
   role: string;
   token: string;
 }) => {
-  const subject = 'Set up your Pharm App account';
+  const subject = 'Thiết lập tài khoản Pharm App';
   const setupPasswordUrl = `${config.frontendUrl}/reset-password?token=${encodeURIComponent(token)}`;
-  const text = `Xin chao ${name},
+  const text = `Xin chào ${name},
 
-Tai khoan Pharm App cua ban da duoc tao cho quay "${storeName}" voi vai tro ${role}.
+Tài khoản Pharm App của bạn đã được tạo cho quầy "${storeName}" với vai trò ${role}.
 
-Vui long thiet lap mat khau tai lien ket sau: ${setupPasswordUrl}
+Vui lòng thiết lập mật khẩu tại liên kết sau: ${setupPasswordUrl}
 
-Lien ket nay se het han sau ${config.jwt.resetPasswordExpirationMinutes} phut. Neu ban khong mong doi email nay, vui long bo qua.`;
+Liên kết này sẽ hết hạn sau ${config.jwt.resetPasswordExpirationMinutes} phút. Nếu bạn không mong đợi email này, vui lòng bỏ qua.`;
+  await sendEmail(to, subject, text);
+};
+
+const sendStoreAssignmentEmail = async ({
+  to,
+  name,
+  storeName,
+  role,
+}: {
+  to: string;
+  name: string;
+  storeName: string;
+  role: string;
+}) => {
+  const subject = 'Bạn đã được thêm vào một quầy thuốc';
+  const loginUrl = `${config.frontendUrl}/login`;
+  const text = `Xin chào ${name},
+
+Tài khoản Pharm App hiện tại của bạn đã được thêm vào quầy "${storeName}" với vai trò ${role}.
+
+Bạn có thể đăng nhập bằng mật khẩu hiện tại tại: ${loginUrl}
+
+Nếu bạn không mong đợi email này, vui lòng liên hệ quản trị hệ thống.`;
   await sendEmail(to, subject, text);
 };
 
@@ -80,10 +103,18 @@ If you did not create an account, then ignore this email.`;
 };
 
 const sendLoginOtpEmail = async (to: string, code: string, expiresMinutes: number) => {
-  const subject = 'Ma xac minh dang nhap';
-  const text = `Ma xac minh dang nhap cua ban la: ${code}. Ma co hieu luc trong ${expiresMinutes} phut.`;
+  const subject = 'Mã xác minh đăng nhập';
+  const text = `Mã xác minh đăng nhập của bạn là: ${code}. Mã có hiệu lực trong ${expiresMinutes} phút.`;
 
   await transport.sendMail({ from: config.email.from, to, subject, text });
 };
 
-export { transport, sendEmail, sendResetPasswordEmail, sendStaffInvitationEmail, sendVerificationEmail, sendLoginOtpEmail };
+export {
+  transport,
+  sendEmail,
+  sendResetPasswordEmail,
+  sendStaffInvitationEmail,
+  sendStoreAssignmentEmail,
+  sendVerificationEmail,
+  sendLoginOtpEmail,
+};

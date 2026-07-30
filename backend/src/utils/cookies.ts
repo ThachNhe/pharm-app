@@ -38,7 +38,7 @@ const clearRefreshTokenCookie = (res: Response) => {
 };
 
 const getRefreshTokenFromRequest = (req: Request) => {
-  return (req.body?.refreshToken as string | undefined) ?? getCookie(req, refreshTokenCookieName);
+  return getCookie(req, refreshTokenCookieName);
 };
 
 export { clearRefreshTokenCookie, getRefreshTokenFromRequest, setRefreshTokenCookie };

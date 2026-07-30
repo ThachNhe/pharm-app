@@ -1,0 +1,4 @@
+interface:
+  display_name: "Pharm Backend"
+  short_description: "Triển khai backend Pharm App an toàn"
+  default_prompt: "Use $pharm-backend to implement a secure, store-scoped Pharm App backend workflow."

@@ -1,0 +1,240 @@
+import {
+    expect,
+    test,
+    type APIRequestContext,
+    type Page,
+} from '@playwright/test';
+
+const apiUrl = process.env.PLAYWRIGHT_API_URL ?? 'http://localhost:3000/v1';
+const mailhogUrl =
+    process.env.PLAYWRIGHT_MAILHOG_URL ?? 'http://localhost:8025';
+
+async function loginWithOtp(
+    page: Page,
+    request: APIRequestContext,
+    email: string
+) {
+    await request.delete(`${mailhogUrl}/api/v1/messages`);
+    await page.goto('/login');
+    await page.getByLabel('Email').fill(email);
+    await page.getByLabel('Mật khẩu', { exact: true }).fill('12345abcd');
+    await page.getByRole('button', { name: 'Đăng nhập' }).click();
+
+    await expect(
+        page.getByRole('heading', { name: 'Xác minh đăng nhập' })
+    ).toBeVisible();
+
+    let otpCode = '';
+    await expect
+        .poll(
+            async () => {
+                const response = await request.get(
+                    `${mailhogUrl}/api/v2/messages?limit=10`
+                );
+                const body = (await response.json()) as {
+                    items: Array<{
+                        To: Array<{ Mailbox: string; Domain: string }>;
+                        Content: { Body: string };
+                    }>;
+                };
+                const message = body.items.find((item) =>
+                    item.To.some(
+                        (recipient) =>
+                            `${recipient.Mailbox}@${recipient.Domain}` === email
+                    )
+                );
+                otpCode = message?.Content.Body.match(/\b\d{6}\b/)?.[0] ?? '';
+                return otpCode.length;
+            },
+            { timeout: 10_000 }
+        )
+        .toBe(6);
+
+    await page.getByLabel('Mã xác minh').fill(otpCode);
+    await page.getByRole('button', { name: 'Xác minh' }).click();
+    await expect(page).toHaveURL(/\/admin\/?$/);
+    await expect(
+        page.getByRole('heading', { name: /Tổng quan/ })
+    ).toBeVisible();
+}
+
+test('system admin can use the workspace across desktop and mobile', async ({
+    page,
+    request,
+}) => {
+    const browserErrors: string[] = [];
+    const serverErrors: string[] = [];
+    page.on('console', (message) => {
+        if (
+            message.type() === 'error' &&
+            !message.text().includes('401 (Unauthorized)')
+        ) {
+            browserErrors.push(message.text());
+        }
+    });
+    page.on('pageerror', (error) => browserErrors.push(error.message));
+    page.on('response', (response) => {
+        if (response.status() >= 500) {
+            serverErrors.push(`${response.status()} ${response.url()}`);
+        }
+    });
+
+    await page.setViewportSize({ width: 1440, height: 1000 });
+    await loginWithOtp(page, request, 'admin@gmail.com');
+
+    const routes = [
+        ['Bán hàng', 'Bán hàng'],
+        ['Tồn kho', 'Tồn kho'],
+        ['Danh mục thuốc', 'Danh mục thuốc'],
+        ['Nhập hàng', 'Nhập hàng'],
+        ['Nhà cung cấp', 'Nhà cung cấp'],
+        ['Tài khoản', 'Tài khoản nhân sự'],
+        ['Báo cáo', 'Báo cáo kinh doanh'],
+        ['Quầy thuốc', 'Quầy thuốc'],
+    ] as const;
+
+    for (const [linkName, heading] of routes) {
+        await page.getByRole('link', { name: linkName, exact: true }).click();
+        await expect(
+            page.getByRole('heading', { name: heading, exact: true })
+        ).toBeVisible();
+    }
+
+    await page.goto('/admin/inventory?alert=low');
+    await expect(
+        page.getByRole('heading', { name: 'Tồn kho', exact: true })
+    ).toBeVisible();
+    await page.reload();
+    await expect(page).toHaveURL(/\/admin\/inventory\?alert=low$/);
+    await expect(
+        page.getByRole('heading', { name: 'Tồn kho', exact: true })
+    ).toBeVisible();
+
+    await page.goto('/admin');
+    await expect(
+        page.getByRole('heading', { name: /Tổng quan/ })
+    ).toBeVisible();
+    await page.screenshot({
+        path: '/tmp/pharm-dashboard-desktop.png',
+        fullPage: true,
+    });
+
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.getByRole('button', { name: 'Mở menu' }).click();
+    await expect(
+        page.getByRole('navigation', { name: 'Điều hướng chính' }).last()
+    ).toBeVisible();
+    await page
+        .getByRole('link', { name: 'Bán hàng', exact: true })
+        .last()
+        .click();
+    await expect(
+        page.getByRole('heading', { name: 'Bán hàng', exact: true })
+    ).toBeVisible();
+    await expect
+        .poll(() =>
+            page.evaluate(
+                () => document.documentElement.scrollWidth <= window.innerWidth
+            )
+        )
+        .toBe(true);
+    await page.screenshot({
+        path: '/tmp/pharm-sales-mobile.png',
+        fullPage: true,
+    });
+
+    expect(browserErrors).toEqual([]);
+    expect(serverErrors).toEqual([]);
+    const unauthenticatedContext = await request.get(
+        `${apiUrl}/stores/context`
+    );
+    expect(unauthenticatedContext.status()).toBe(401);
+});
+
+test('owner sees store management features but not system store administration', async ({
+    page,
+    request,
+}) => {
+    await loginWithOtp(page, request, 'owner@gmail.com');
+
+    for (const linkName of [
+        'Bán hàng',
+        'Tồn kho',
+        'Danh mục thuốc',
+        'Nhập hàng',
+        'Nhà cung cấp',
+        'Tài khoản',
+        'Báo cáo',
+    ]) {
+        await expect(
+            page.getByRole('link', { name: linkName, exact: true })
+        ).toBeVisible();
+    }
+    await expect(
+        page.getByRole('link', { name: 'Quầy thuốc', exact: true })
+    ).toHaveCount(0);
+
+    await page.goto('/admin/stores');
+    await expect(
+        page.getByRole('heading', { name: 'Bạn không có quyền truy cập' })
+    ).toBeVisible();
+
+    await page.goto('/admin/users');
+    await page.getByRole('button', { name: 'Thêm tài khoản' }).click();
+    const roleSelect = page.getByLabel('Vai trò tại quầy');
+    await expect(roleSelect.locator('option')).toHaveCount(2);
+    expect(await roleSelect.locator('option').allTextContents()).toEqual([
+        'Quản lý',
+        'Nhân viên',
+    ]);
+});
+
+test('manager can manage staff only', async ({ page, request }) => {
+    await loginWithOtp(page, request, 'manager@gmail.com');
+    await expect(
+        page.getByRole('link', { name: 'Tài khoản', exact: true })
+    ).toBeVisible();
+    await expect(
+        page.getByRole('link', { name: 'Quầy thuốc', exact: true })
+    ).toHaveCount(0);
+
+    await page.goto('/admin/users');
+    await page.getByRole('button', { name: 'Thêm tài khoản' }).click();
+    const roleSelect = page.getByLabel('Vai trò tại quầy');
+    await expect(roleSelect.locator('option')).toHaveCount(1);
+    await expect(roleSelect).toHaveValue('staff');
+});
+
+test('staff navigation and direct routes remain permission scoped', async ({
+    page,
+    request,
+}) => {
+    await loginWithOtp(page, request, 'staff@gmail.com');
+
+    for (const linkName of [
+        'Tổng quan',
+        'Bán hàng',
+        'Tồn kho',
+        'Danh mục thuốc',
+    ]) {
+        await expect(
+            page.getByRole('link', { name: linkName, exact: true })
+        ).toBeVisible();
+    }
+    for (const linkName of [
+        'Nhập hàng',
+        'Nhà cung cấp',
+        'Tài khoản',
+        'Báo cáo',
+        'Quầy thuốc',
+    ]) {
+        await expect(
+            page.getByRole('link', { name: linkName, exact: true })
+        ).toHaveCount(0);
+    }
+
+    await page.goto('/admin/reports');
+    await expect(
+        page.getByRole('heading', { name: 'Bạn không có quyền truy cập' })
+    ).toBeVisible();
+});

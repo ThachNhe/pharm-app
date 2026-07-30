@@ -26,15 +26,11 @@ const verifyLoginOtp = {
 };
 
 const logout = {
-  body: Joi.object().keys({
-    refreshToken: Joi.string(),
-  }),
+  body: Joi.object().max(0),
 };
 
 const refreshTokens = {
-  body: Joi.object().keys({
-    refreshToken: Joi.string(),
-  }),
+  body: Joi.object().max(0),
 };
 
 const forgotPassword = {

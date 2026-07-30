@@ -142,7 +142,7 @@ describe('Admin routes', () => {
       expect(emailService.transport.sendMail).toHaveBeenCalledWith(
         expect.objectContaining({
           to: res.body.user.email,
-          subject: 'Set up your Pharm App account',
+          subject: 'Thiết lập tài khoản Pharm App',
         }),
       );
       const setupToken = await prisma.token.findFirst({
@@ -169,6 +169,111 @@ describe('Admin routes', () => {
 
       const role = await prisma.userStoreRole.findFirst({ where: { userId: res.body.user.id, storeId: store.id } });
       expect(role?.role).toBe('manager');
+    });
+
+    test('should assign an existing account to another store without resetting its password', async () => {
+      await insertUsers([userOne, userTwo]);
+      const [ownedStore, currentStore] = await Promise.all([
+        prisma.store.create({ data: { name: 'New assigned store' } }),
+        prisma.store.create({ data: { name: 'Current store' } }),
+      ]);
+      await prisma.userStoreRole.createMany({
+        data: [
+          { userId: userOne.id, storeId: ownedStore.id, role: 'owner' },
+          { userId: userTwo.id, storeId: currentStore.id, role: 'staff' },
+        ],
+      });
+
+      const res = await request(app)
+        .post('/v1/admin/users')
+        .set('Authorization', `Bearer ${createAccessToken(userOne.id)}`)
+        .send({
+          storeId: ownedStore.id,
+          storeRole: 'staff',
+          name: userTwo.name,
+          email: userTwo.email,
+        })
+        .expect(httpStatus.CREATED);
+
+      expect(res.body).toMatchObject({
+        user: { id: userTwo.id },
+        invitationEmailSent: true,
+        existingAccount: true,
+      });
+      expect(await prisma.userStoreRole.count({ where: { userId: userTwo.id } })).toBe(2);
+      expect(await prisma.token.count({ where: { userId: userTwo.id, type: tokenTypes.RESET_PASSWORD } })).toBe(0);
+      expect(emailService.transport.sendMail).toHaveBeenCalledWith(
+        expect.objectContaining({
+          to: userTwo.email,
+          subject: 'Bạn đã được thêm vào một quầy thuốc',
+        }),
+      );
+    });
+
+    test('should disable access only in the selected store', async () => {
+      await insertUsers([userOne, userTwo]);
+      const [managedStore, otherStore] = await Promise.all([
+        prisma.store.create({ data: { name: 'Managed store' } }),
+        prisma.store.create({ data: { name: 'Unaffected store' } }),
+      ]);
+      await prisma.userStoreRole.createMany({
+        data: [
+          { userId: userOne.id, storeId: managedStore.id, role: 'owner' },
+          { userId: userTwo.id, storeId: managedStore.id, role: 'staff' },
+          { userId: userTwo.id, storeId: otherStore.id, role: 'staff' },
+        ],
+      });
+
+      await request(app)
+        .patch(`/v1/admin/users/${userTwo.id}`)
+        .set('Authorization', `Bearer ${createAccessToken(userOne.id)}`)
+        .send({
+          storeId: managedStore.id,
+          isActive: false,
+        })
+        .expect(httpStatus.OK);
+
+      const user = await prisma.user.findUniqueOrThrow({
+        where: { id: userTwo.id },
+        include: { storeRoles: true },
+      });
+      expect(user.isActive).toBe(true);
+      expect(user.storeRoles.find((role) => role.storeId === managedStore.id)?.isActive).toBe(false);
+      expect(user.storeRoles.find((role) => role.storeId === otherStore.id)?.isActive).toBe(true);
+
+      const contextRes = await request(app)
+        .get('/v1/stores/context')
+        .set('Authorization', `Bearer ${createAccessToken(userTwo.id)}`)
+        .expect(httpStatus.OK);
+      expect(contextRes.body.stores).toEqual([
+        expect.objectContaining({
+          id: otherStore.id,
+          role: 'staff',
+        }),
+      ]);
+    });
+
+    test('should prevent manager from locking the store owner', async () => {
+      await insertUsers([userOne, userTwo]);
+      const store = await prisma.store.create({ data: { name: 'Protected owner store' } });
+      await prisma.userStoreRole.createMany({
+        data: [
+          { userId: userOne.id, storeId: store.id, role: 'manager' },
+          { userId: userTwo.id, storeId: store.id, role: 'owner' },
+        ],
+      });
+
+      await request(app)
+        .patch(`/v1/admin/users/${userTwo.id}`)
+        .set('Authorization', `Bearer ${createAccessToken(userOne.id)}`)
+        .send({
+          storeId: store.id,
+          isActive: false,
+        })
+        .expect(httpStatus.FORBIDDEN);
+
+      const owner = await prisma.user.findUniqueOrThrow({ where: { id: userTwo.id } });
+      expect(owner.isActive).toBe(true);
     });
   });
 });

@@ -109,6 +109,7 @@ export function RegisterForm() {
                     <div className="relative">
                       <Input
                         type={showPassword ? 'text' : 'password'}
+                        aria-label="Mật khẩu"
                         placeholder="Ít nhất 8 ký tự, 1 chữ hoa, 1 số"
                         autoComplete="new-password"
                         disabled={isPending}
@@ -118,6 +119,7 @@ export function RegisterForm() {
                       <button
                         type="button"
                         onClick={() => setShowPassword((p) => !p)}
+                        aria-label={showPassword ? 'Ẩn mật khẩu' : 'Hiện mật khẩu'}
                         className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
                         tabIndex={-1}
                       >
@@ -145,6 +147,7 @@ export function RegisterForm() {
                     <div className="relative">
                       <Input
                         type={showConfirm ? 'text' : 'password'}
+                        aria-label="Xác nhận mật khẩu"
                         placeholder="Nhập lại mật khẩu"
                         autoComplete="new-password"
                         disabled={isPending}
@@ -154,6 +157,11 @@ export function RegisterForm() {
                       <button
                         type="button"
                         onClick={() => setShowConfirm((p) => !p)}
+                        aria-label={
+                          showConfirm
+                            ? 'Ẩn xác nhận mật khẩu'
+                            : 'Hiện xác nhận mật khẩu'
+                        }
                         className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
                         tabIndex={-1}
                       >

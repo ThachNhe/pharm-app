@@ -9,40 +9,65 @@
  */
 
 export const API_ENDPOINTS = {
-  // ─── Auth ────────────────────────────────────────────────────────────────
-  AUTH: {
-    LOGIN: '/auth/login',
-    VERIFY_LOGIN_OTP: '/auth/verify-login-otp',
-    REGISTER: '/auth/register',
-    LOGOUT: '/auth/logout',
-    REFRESH: '/auth/refresh-tokens',
-    ME: '/auth/me',
-    FORGOT_PASSWORD: '/auth/forgot-password',
-    RESET_PASSWORD: '/auth/reset-password',
-  },
+    // ─── Auth ────────────────────────────────────────────────────────────────
+    AUTH: {
+        LOGIN: '/auth/login',
+        VERIFY_LOGIN_OTP: '/auth/verify-login-otp',
+        REGISTER: '/auth/register',
+        LOGOUT: '/auth/logout',
+        REFRESH: '/auth/refresh-tokens',
+        ME: '/auth/me',
+        FORGOT_PASSWORD: '/auth/forgot-password',
+        RESET_PASSWORD: '/auth/reset-password',
+    },
 
-  // ─── Users ───────────────────────────────────────────────────────────────
-  USERS: {
-    LIST: '/users',
-    BY_ID: (id: string) => `/users/${id}`,
-    CREATE: '/users',
-    UPDATE: (id: string) => `/users/${id}`,
-    DELETE: (id: string) => `/users/${id}`,
-    AVATAR: (id: string) => `/users/${id}/avatar`,
-  },
+    // ─── Users ───────────────────────────────────────────────────────────────
+    USERS: {
+        LIST: '/users',
+        BY_ID: (id: string) => `/users/${id}`,
+        CREATE: '/users',
+        UPDATE: (id: string) => `/users/${id}`,
+        DELETE: (id: string) => `/users/${id}`,
+        AVATAR: (id: string) => `/users/${id}/avatar`,
+    },
 
-  ADMIN: {
-    ME: '/admin/me',
-    DASHBOARD: '/admin/dashboard',
-    STORES: '/admin/stores',
-    STORE: (id: string) => `/admin/stores/${id}`,
-    USERS: '/admin/users',
-    USER: (id: string) => `/admin/users/${id}`,
-    RESET_PASSWORD: (id: string) => `/admin/users/${id}/reset-password`,
-    MEDICINES: '/admin/medicines',
-    MEDICINE: (id: string) => `/admin/medicines/${id}`,
-    IMPORT_RECEIPTS: '/admin/import-receipts',
-    SALES: '/admin/sales',
-    PROFIT_REPORT: '/admin/reports/profit',
-  },
-} as const
+    ADMIN: {
+        ME: '/admin/me',
+        DASHBOARD: '/admin/dashboard',
+        STORES: '/admin/stores',
+        STORE: (id: string) => `/admin/stores/${id}`,
+        USERS: '/admin/users',
+        USER: (id: string) => `/admin/users/${id}`,
+        RESET_PASSWORD: (id: string) => `/admin/users/${id}/reset-password`,
+        MEDICINES: '/admin/medicines',
+        MEDICINE: (id: string) => `/admin/medicines/${id}`,
+        IMPORT_RECEIPTS: '/admin/import-receipts',
+        SALES: '/admin/sales',
+        PROFIT_REPORT: '/admin/reports/profit',
+    },
+
+    OPERATIONS: {
+        CONTEXT: '/stores/context',
+        DASHBOARD: (storeId: string) => `/stores/${storeId}/dashboard`,
+        SUPPLIERS: (storeId: string) => `/stores/${storeId}/suppliers`,
+        SUPPLIER: (storeId: string, supplierId: string) =>
+            `/stores/${storeId}/suppliers/${supplierId}`,
+        MEDICINES: (storeId: string) => `/stores/${storeId}/medicines`,
+        MEDICINE: (storeId: string, medicineId: string) =>
+            `/stores/${storeId}/medicines/${medicineId}`,
+        IMPORTS: (storeId: string) => `/stores/${storeId}/imports`,
+        IMPORT: (storeId: string, receiptId: string) =>
+            `/stores/${storeId}/imports/${receiptId}`,
+        COMPLETE_IMPORT: (storeId: string, receiptId: string) =>
+            `/stores/${storeId}/imports/${receiptId}/complete`,
+        CANCEL_IMPORT: (storeId: string, receiptId: string) =>
+            `/stores/${storeId}/imports/${receiptId}/cancel`,
+        INVENTORY: (storeId: string) => `/stores/${storeId}/inventory`,
+        INVENTORY_MOVEMENTS: (storeId: string) =>
+            `/stores/${storeId}/inventory/movements`,
+        SALES: (storeId: string) => `/stores/${storeId}/sales`,
+        SALE: (storeId: string, saleId: string) =>
+            `/stores/${storeId}/sales/${saleId}`,
+        PROFIT_REPORT: (storeId: string) => `/stores/${storeId}/reports/profit`,
+    },
+} as const;

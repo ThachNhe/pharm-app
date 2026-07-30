@@ -1,12 +1,16 @@
 import { Strategy as JwtStrategy, ExtractJwt, type VerifiedCallback } from 'passport-jwt';
+import type { Algorithm } from 'jsonwebtoken';
 import config from './config.js';
 import { tokenTypes } from './tokens.js';
 import { prisma } from './database.js';
 import { authenticatedUserSelect } from '../utils/user.js';
 
+const jwtAlgorithms: Algorithm[] = ['HS256'];
+
 const jwtOptions = {
   secretOrKey: config.jwt.secret,
   jwtFromRequest: ExtractJwt.fromAuthHeaderAsBearerToken(),
+  algorithms: jwtAlgorithms,
 };
 
 const jwtVerify = async (payload, done: VerifiedCallback) => {

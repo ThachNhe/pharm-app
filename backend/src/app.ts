@@ -1,8 +1,7 @@
 import express from 'express';
 import helmet from 'helmet';
-import xss from 'xss-clean';
 import compression from 'compression';
-import cors from 'cors';
+import cors, { type CorsOptions } from 'cors';
 import passport from 'passport';
 import httpStatus from 'http-status';
 import config from './config/config.js';
@@ -29,16 +28,19 @@ app.use(express.json());
 // parse urlencoded request body
 app.use(express.urlencoded({ extended: true }));
 
-// sanitize request data
-app.use(xss());
-// Removed mongoSanitize since we're using PostgreSQL
-
 // gzip compression
 app.use(compression());
 
 // enable cors
-const corsOptions = {
-  origin: true,
+const allowedOrigins = new Set([config.frontendUrl, ...(config.env === 'development' ? ['http://127.0.0.1:5173'] : [])]);
+const corsOptions: CorsOptions = {
+  origin: (origin, callback) => {
+    if (!origin || allowedOrigins.has(origin)) {
+      callback(null, true);
+      return;
+    }
+    callback(new ApiError(httpStatus.FORBIDDEN, 'Origin is not allowed'));
+  },
   credentials: true,
 };
 app.use(cors(corsOptions));

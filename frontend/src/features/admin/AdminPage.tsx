@@ -796,6 +796,7 @@ export function AdminPage() {
                             <Input
                               name="ownerPassword"
                               type={showOwnerPassword ? 'text' : 'password'}
+                              aria-label="Mật khẩu Owner"
                               placeholder="Mật khẩu tạm"
                               className="pr-11"
                             />

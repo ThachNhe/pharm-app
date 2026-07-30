@@ -3,6 +3,9 @@ import { TanStackRouterDevtools } from '@tanstack/router-devtools'
 import { Toaster } from 'sonner'
 import { AuthBootstrap } from '@/components/AuthBootstrap'
 
+const showDevtools =
+  import.meta.env.DEV && import.meta.env.VITE_ENABLE_DEVTOOLS === 'true'
+
 export const Route = createRootRoute({
   component: () => (
     <>
@@ -14,7 +17,7 @@ export const Route = createRootRoute({
         closeButton
         toastOptions={{ duration: 4500 }}
       />
-      <TanStackRouterDevtools />
+      {showDevtools ? <TanStackRouterDevtools /> : null}
     </>
   ),
 })
