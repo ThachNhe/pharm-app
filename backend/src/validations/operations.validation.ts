@@ -36,6 +36,7 @@ const supplierBody = {
   email: Joi.string().allow('', null).email().max(255),
   address: Joi.string().allow('', null).max(1000),
   taxCode: Joi.string().allow('', null).max(50),
+  isActive: Joi.boolean(),
 };
 
 const createSupplier = {
@@ -52,7 +53,6 @@ const updateSupplier = {
     .keys({
       ...supplierBody,
       name: Joi.string().trim().max(255),
-      isActive: Joi.boolean(),
     })
     .min(1),
 };
@@ -81,6 +81,7 @@ const medicineBody = {
   description: Joi.string().allow('', null).max(2000),
   sellingPrice: Joi.number().min(0).required(),
   minStock: Joi.number().min(0),
+  isActive: Joi.boolean(),
 };
 
 const createMedicine = {
@@ -99,7 +100,6 @@ const updateMedicine = {
       name: Joi.string().trim().max(255),
       baseUnitName: Joi.string().trim().max(50),
       sellingPrice: Joi.number().min(0),
-      isActive: Joi.boolean(),
     })
     .min(1),
 };

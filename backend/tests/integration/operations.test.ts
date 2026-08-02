@@ -39,8 +39,11 @@ describe('Store operations flow', () => {
         code: 'NCC-01',
         name: 'Nhà cung cấp kiểm thử',
         phone: '0900000000',
+        isActive: true,
       })
       .expect(httpStatus.CREATED);
+
+    expect(supplierRes.body.isActive).toBe(true);
 
     const medicineRes = await request(app)
       .post(`/v1/stores/${store.id}/medicines`)
@@ -52,8 +55,11 @@ describe('Store operations flow', () => {
         activeIngredient: 'Paracetamol',
         sellingPrice: 2000,
         minStock: 20,
+        isActive: true,
       })
       .expect(httpStatus.CREATED);
+
+    expect(medicineRes.body.isActive).toBe(true);
 
     const importRes = await request(app)
       .post(`/v1/stores/${store.id}/imports`)

@@ -22,8 +22,9 @@ import {
 } from '@tanstack/react-router';
 import { useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
+import { BrandLogo } from '@/components/BrandLogo';
 import { Button } from '@/components/ui/button';
-import { APP_NAME, ROUTES } from '@/lib/constants';
+import { ROUTES } from '@/lib/constants';
 import { cn, getInitials } from '@/lib/utils';
 import { authService } from '@/features/auths/services/auth.service';
 import { useAuthStore } from '@/stores/useAuthStore';
@@ -214,17 +215,11 @@ function WorkspaceShellContent() {
     return (
         <div className="bg-background text-foreground min-h-screen lg:grid lg:grid-cols-[248px_minmax(0,1fr)]">
             <aside className="border-sidebar-border bg-sidebar hidden min-h-screen border-r px-4 py-5 lg:block">
-                <div className="mb-7 flex h-11 items-center gap-3 px-2">
-                    <div className="bg-primary text-primary-foreground grid size-9 place-items-center rounded-md">
-                        <Pill className="size-5" />
-                    </div>
-                    <div className="min-w-0">
-                        <p className="truncate font-semibold">{APP_NAME}</p>
-                        <p className="text-muted-foreground text-xs">
-                            Quản lý nhà thuốc
-                        </p>
-                    </div>
-                </div>
+                <BrandLogo
+                    className="mb-7 h-11 px-2"
+                    markClassName="size-9"
+                    subtitle="Quản lý nhà thuốc"
+                />
                 {navigation}
             </aside>
 
@@ -238,14 +233,7 @@ function WorkspaceShellContent() {
                     />
                     <aside className="border-sidebar-border bg-sidebar relative h-full w-[min(82vw,300px)] border-r p-4 shadow-xl">
                         <div className="mb-6 flex h-11 items-center justify-between">
-                            <div className="flex items-center gap-3">
-                                <div className="bg-primary text-primary-foreground grid size-9 place-items-center rounded-md">
-                                    <Pill className="size-5" />
-                                </div>
-                                <span className="font-semibold">
-                                    {APP_NAME}
-                                </span>
-                            </div>
+                            <BrandLogo markClassName="size-9" />
                             <Button
                                 size="icon"
                                 variant="ghost"

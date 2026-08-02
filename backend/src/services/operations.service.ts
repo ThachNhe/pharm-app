@@ -32,6 +32,7 @@ type MedicinePayload = {
   description?: string | null;
   sellingPrice: number | string;
   minStock?: number | string;
+  isActive?: boolean;
 };
 
 type ImportItemPayload = {
@@ -393,6 +394,7 @@ const createSupplier = async (actor: Actor, storeId: string, body) => {
         email: asOptionalString(body.email),
         address: asOptionalString(body.address),
         taxCode: asOptionalString(body.taxCode),
+        isActive: body.isActive ?? true,
       },
     });
     await writeAudit(tx, actor, {
@@ -485,6 +487,7 @@ const createMedicine = async (actor: Actor, storeId: string, body: MedicinePaylo
         medicineId: medicine.id,
         sellingPrice: toDecimal(body.sellingPrice),
         minStock: toDecimal(body.minStock ?? 0),
+        isActive: body.isActive ?? true,
       },
       include: { medicine: true },
     });

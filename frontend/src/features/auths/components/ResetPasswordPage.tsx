@@ -1,10 +1,11 @@
 import { useMemo, useState, type FormEvent } from 'react'
 import { useRouter } from '@tanstack/react-router'
 import axios from 'axios'
-import { Eye, EyeOff, KeyRound, Loader2, Pill } from 'lucide-react'
+import { Eye, EyeOff, KeyRound, Loader2 } from 'lucide-react'
 import { toast } from 'sonner'
 
 import { Button } from '@/components/ui/button'
+import { BrandMark } from '@/components/BrandLogo'
 import {
   Card,
   CardContent,
@@ -73,9 +74,7 @@ export function ResetPasswordPage() {
     <main className="grid min-h-screen place-items-center bg-background px-4 py-8 text-foreground">
       <Card className="w-full max-w-md rounded-lg border-border/70 bg-card/95 shadow-2xl shadow-brand-navy/10">
         <CardHeader className="space-y-3">
-          <div className="grid size-11 place-items-center rounded-lg bg-primary text-primary-foreground">
-            <Pill className="size-5" />
-          </div>
+          <BrandMark className="size-11" />
           <CardTitle className="text-2xl">Thiết lập mật khẩu</CardTitle>
           <CardDescription>
             Tạo mật khẩu mới cho tài khoản {APP_NAME}.

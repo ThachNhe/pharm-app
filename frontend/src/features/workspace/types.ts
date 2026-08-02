@@ -207,6 +207,7 @@ export interface MedicinePayload {
     description?: string;
     sellingPrice: number;
     minStock?: number;
+    isActive?: boolean;
 }
 
 export interface SupplierPayload {

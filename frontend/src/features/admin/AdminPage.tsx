@@ -23,9 +23,10 @@ import axios from 'axios'
 import { toast } from 'sonner'
 import { z } from 'zod'
 
+import { BrandLogo } from '@/components/BrandLogo'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { APP_NAME, ROUTES } from '@/lib/constants'
+import { ROUTES } from '@/lib/constants'
 import { cn } from '@/lib/utils'
 import { useAuthStore } from '@/stores/useAuthStore'
 import { authService } from '@/features/auths/services/auth.service'
@@ -589,15 +590,11 @@ export function AdminPage() {
     <main className="min-h-screen bg-background text-foreground">
       <div className="grid min-h-screen lg:grid-cols-[260px_minmax(0,1fr)]">
         <aside className="border-r border-border bg-sidebar px-4 py-5">
-          <div className="mb-6 flex items-center gap-3">
-            <div className="grid size-10 place-items-center rounded-lg bg-primary text-primary-foreground">
-              <Pill className="size-5" />
-            </div>
-            <div>
-              <p className="font-semibold tracking-normal">{APP_NAME}</p>
-              <p className="text-xs text-muted-foreground">Admin Panel</p>
-            </div>
-          </div>
+          <BrandLogo
+            className="mb-6"
+            markClassName="size-10"
+            subtitle="Admin Panel"
+          />
 
           <nav className="space-y-1">
             {tabs.map(({ key, label, icon: Icon }) => (
