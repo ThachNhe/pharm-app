@@ -4,6 +4,7 @@ import {
     Boxes,
     Building2,
     LayoutDashboard,
+    Library,
     LogOut,
     Menu,
     PackagePlus,
@@ -40,6 +41,7 @@ type NavItem = {
         | '/admin/stores'
         | '/admin/users'
         | '/admin/medicines'
+        | '/admin/medicine-library'
         | '/admin/suppliers'
         | '/admin/imports'
         | '/admin/inventory'
@@ -73,6 +75,12 @@ const navItems: NavItem[] = [
         label: 'Danh mục thuốc',
         to: '/admin/medicines',
         icon: Pill,
+        minimumRole: 'staff',
+    },
+    {
+        label: 'Thư viện thuốc',
+        to: '/admin/medicine-library',
+        icon: Library,
         minimumRole: 'staff',
     },
     {

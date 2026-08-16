@@ -248,6 +248,176 @@ describe('Store operations flow', () => {
       .expect(httpStatus.FORBIDDEN);
   });
 
+  test('should paginate the library and reuse a reference medicine across stores', async () => {
+    await insertUsers([userOne, userTwo]);
+    const [firstStore, secondStore, unrelatedStore] = await Promise.all([
+      prisma.store.create({ data: { name: 'First library store' } }),
+      prisma.store.create({ data: { name: 'Second library store' } }),
+      prisma.store.create({ data: { name: 'Unrelated store' } }),
+    ]);
+    await prisma.userStoreRole.createMany({
+      data: [
+        { userId: userOne.id, storeId: firstStore.id, role: 'owner' },
+        { userId: userOne.id, storeId: secondStore.id, role: 'owner' },
+        { userId: userTwo.id, storeId: firstStore.id, role: 'staff' },
+      ],
+    });
+
+    const search = `Library-${faker.random.alphaNumeric(8)}`;
+    const sharedBarcode = faker.random.alphaNumeric(12);
+    const fallbackBarcode = faker.random.alphaNumeric(12);
+    const referenceProducts = [
+      {
+        id: faker.datatype.uuid(),
+        code: `${search}-01`,
+        name: `${search} A`,
+        barcode: faker.random.alphaNumeric(12),
+        manufacturer: 'Nhà sản xuất A',
+        specification: 'Hộp 10 vỉ x 10 viên',
+        referencePrice: 1500,
+      },
+      {
+        id: faker.datatype.uuid(),
+        code: `${search}-02`,
+        name: `${search} B`,
+        barcode: sharedBarcode,
+        secondaryBarcode: faker.random.alphaNumeric(12),
+        manufacturer: 'Nhà sản xuất B',
+        referencePrice: 2000,
+      },
+      {
+        id: faker.datatype.uuid(),
+        code: `${search}-03`,
+        name: `${search} C`,
+        barcode: sharedBarcode,
+        secondaryBarcode: fallbackBarcode,
+        manufacturer: 'Nhà sản xuất C',
+        referencePrice: 2500,
+      },
+    ];
+    await prisma.referenceProduct.createMany({ data: referenceProducts });
+
+    const ownerToken = accessToken(userOne.id);
+    const staffToken = accessToken(userTwo.id);
+    const libraryRes = await request(app)
+      .get(`/v1/stores/${firstStore.id}/reference-products`)
+      .query({ search, page: 2, limit: 1 })
+      .set('Authorization', `Bearer ${staffToken}`)
+      .expect(httpStatus.OK);
+
+    expect(libraryRes.body).toMatchObject({
+      page: 2,
+      limit: 1,
+      totalPages: 3,
+      totalResults: 3,
+    });
+    expect(libraryRes.body.results).toEqual([
+      expect.objectContaining({
+        id: referenceProducts[1].id,
+        code: referenceProducts[1].code,
+        referencePrice: 2000,
+        isAddedToStore: false,
+      }),
+    ]);
+
+    await request(app)
+      .get(`/v1/stores/${unrelatedStore.id}/reference-products`)
+      .set('Authorization', `Bearer ${staffToken}`)
+      .expect(httpStatus.FORBIDDEN);
+
+    const createPayload = {
+      referenceProductId: referenceProducts[1].id,
+      name: 'Tên giả từ client',
+      baseUnitName: 'Viên',
+      barcode: faker.random.alphaNumeric(12),
+      manufacturer: 'Nhà sản xuất giả từ client',
+      sellingPrice: 3000,
+      minStock: 10,
+      isActive: true,
+    };
+    const firstMedicineRes = await request(app)
+      .post(`/v1/stores/${firstStore.id}/medicines`)
+      .set('Authorization', `Bearer ${ownerToken}`)
+      .send(createPayload)
+      .expect(httpStatus.CREATED);
+    expect(firstMedicineRes.body).toMatchObject({
+      name: referenceProducts[1].name,
+      barcode: referenceProducts[1].barcode,
+      manufacturer: referenceProducts[1].manufacturer,
+    });
+
+    const secondMedicineRes = await request(app)
+      .post(`/v1/stores/${secondStore.id}/medicines`)
+      .set('Authorization', `Bearer ${ownerToken}`)
+      .send({ ...createPayload, sellingPrice: 3500, minStock: 20 })
+      .expect(httpStatus.CREATED);
+
+    expect(secondMedicineRes.body).toMatchObject({
+      id: firstMedicineRes.body.id,
+      referenceProductId: referenceProducts[1].id,
+      sellingPrice: 3500,
+      minStock: 20,
+    });
+    expect(secondMedicineRes.body.storeMedicineId).not.toBe(firstMedicineRes.body.storeMedicineId);
+    expect(await prisma.medicine.count({ where: { referenceProductId: referenceProducts[1].id } })).toBe(1);
+    expect(await prisma.storeMedicine.count({ where: { medicineId: firstMedicineRes.body.id } })).toBe(2);
+
+    const duplicateBarcodeRes = await request(app)
+      .post(`/v1/stores/${firstStore.id}/medicines`)
+      .set('Authorization', `Bearer ${ownerToken}`)
+      .send({ ...createPayload, referenceProductId: referenceProducts[2].id })
+      .expect(httpStatus.CREATED);
+    expect(duplicateBarcodeRes.body).toMatchObject({
+      referenceProductId: referenceProducts[2].id,
+      name: referenceProducts[2].name,
+      barcode: fallbackBarcode,
+    });
+
+    await request(app)
+      .post(`/v1/stores/${firstStore.id}/medicines`)
+      .set('Authorization', `Bearer ${ownerToken}`)
+      .send(createPayload)
+      .expect(httpStatus.CONFLICT);
+
+    await request(app)
+      .post(`/v1/stores/${firstStore.id}/medicines`)
+      .set('Authorization', `Bearer ${staffToken}`)
+      .send({ ...createPayload, referenceProductId: referenceProducts[0].id })
+      .expect(httpStatus.FORBIDDEN);
+
+    await request(app)
+      .patch(`/v1/stores/${firstStore.id}/medicines/${firstMedicineRes.body.id}`)
+      .set('Authorization', `Bearer ${ownerToken}`)
+      .send({ name: 'Không được sửa tên dùng chung' })
+      .expect(httpStatus.BAD_REQUEST);
+
+    const updatedRes = await request(app)
+      .patch(`/v1/stores/${firstStore.id}/medicines/${firstMedicineRes.body.id}`)
+      .set('Authorization', `Bearer ${ownerToken}`)
+      .send({ sellingPrice: 4200, minStock: 15, isActive: false })
+      .expect(httpStatus.OK);
+
+    expect(updatedRes.body).toMatchObject({ sellingPrice: 4200, minStock: 15, isActive: false });
+    const secondAssignment = await prisma.storeMedicine.findUniqueOrThrow({
+      where: {
+        storeId_medicineId: {
+          storeId: secondStore.id,
+          medicineId: firstMedicineRes.body.id,
+        },
+      },
+    });
+    expect(Number(secondAssignment.sellingPrice)).toBe(3500);
+    expect(Number(secondAssignment.minStock)).toBe(20);
+    expect(secondAssignment.isActive).toBe(true);
+
+    const updatedLibraryRes = await request(app)
+      .get(`/v1/stores/${firstStore.id}/reference-products`)
+      .query({ search: referenceProducts[1].code })
+      .set('Authorization', `Bearer ${staffToken}`)
+      .expect(httpStatus.OK);
+    expect(updatedLibraryRes.body.results[0]).toMatchObject({ isAddedToStore: true });
+  });
+
   test('should expose only one membership per user and store', async () => {
     await insertUsers([userOne]);
     const store = await prisma.store.create({ data: { name: 'Unique role store' } });

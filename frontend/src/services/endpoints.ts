@@ -55,6 +55,8 @@ export const API_ENDPOINTS = {
         MEDICINES: (storeId: string) => `/stores/${storeId}/medicines`,
         MEDICINE: (storeId: string, medicineId: string) =>
             `/stores/${storeId}/medicines/${medicineId}`,
+        REFERENCE_PRODUCTS: (storeId: string) =>
+            `/stores/${storeId}/reference-products`,
         IMPORTS: (storeId: string) => `/stores/${storeId}/imports`,
         IMPORT: (storeId: string, receiptId: string) =>
             `/stores/${storeId}/imports/${receiptId}`,

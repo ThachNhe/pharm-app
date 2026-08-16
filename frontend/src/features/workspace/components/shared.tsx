@@ -222,6 +222,31 @@ export function Pager({
     onPageChange: (page: number) => void;
 }) {
     if (totalResults === 0) return null;
+    const pageItems: Array<number | 'ellipsis-start' | 'ellipsis-end'> =
+        totalPages <= 7
+            ? Array.from({ length: totalPages }, (_, index) => index + 1)
+            : page <= 4
+              ? [1, 2, 3, 4, 5, 'ellipsis-end', totalPages]
+              : page >= totalPages - 3
+                ? [
+                      1,
+                      'ellipsis-start',
+                      totalPages - 4,
+                      totalPages - 3,
+                      totalPages - 2,
+                      totalPages - 1,
+                      totalPages,
+                  ]
+                : [
+                      1,
+                      'ellipsis-start',
+                      page - 1,
+                      page,
+                      page + 1,
+                      'ellipsis-end',
+                      totalPages,
+                  ];
+
     return (
         <div className="border-border flex flex-col gap-3 border-t px-4 py-3 text-sm sm:flex-row sm:items-center sm:justify-between">
             <span className="text-muted-foreground">
@@ -238,9 +263,35 @@ export function Pager({
                 >
                     <ChevronLeft />
                 </Button>
-                <span className="min-w-20 text-center">
+                <span className="min-w-20 text-center sm:hidden">
                     {page} / {Math.max(totalPages, 1)}
                 </span>
+                <div className="hidden items-center gap-1 sm:flex">
+                    {pageItems.map((item) =>
+                        typeof item === 'number' ? (
+                            <Button
+                                key={item}
+                                size="icon-sm"
+                                variant={item === page ? 'default' : 'outline'}
+                                onClick={() => onPageChange(item)}
+                                aria-label={`Trang ${item}`}
+                                aria-current={
+                                    item === page ? 'page' : undefined
+                                }
+                            >
+                                {item}
+                            </Button>
+                        ) : (
+                            <span
+                                key={item}
+                                className="text-muted-foreground grid size-8 place-items-center"
+                                aria-hidden="true"
+                            >
+                                …
+                            </span>
+                        )
+                    )}
+                </div>
                 <Button
                     size="icon-sm"
                     variant="outline"

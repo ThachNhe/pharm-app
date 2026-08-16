@@ -9,6 +9,7 @@ import type {
     MedicinePayload,
     Paginated,
     ProfitReport,
+    ReferenceProduct,
     Sale,
     SalePayload,
     StoreDashboard,
@@ -62,6 +63,11 @@ export const workspaceService = {
         apiPatch<Medicine>(
             API_ENDPOINTS.OPERATIONS.MEDICINE(storeId, medicineId),
             payload
+        ),
+    getReferenceProducts: (storeId: string, params?: Record<string, unknown>) =>
+        apiGet<Paginated<ReferenceProduct>>(
+            API_ENDPOINTS.OPERATIONS.REFERENCE_PRODUCTS(storeId),
+            cleanParams(params)
         ),
 
     getImports: (storeId: string, params?: Record<string, unknown>) =>

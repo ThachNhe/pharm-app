@@ -67,6 +67,14 @@ const getMedicines = {
   }),
 };
 
+const getReferenceProducts = {
+  params: Joi.object().keys(storeParams),
+  query: Joi.object().keys({
+    search: Joi.string().trim().allow('').max(255),
+    ...pagination,
+  }),
+};
+
 const medicineBody = {
   name: Joi.string().trim().required().max(255),
   baseUnitName: Joi.string().trim().required().max(50),
@@ -86,7 +94,10 @@ const medicineBody = {
 
 const createMedicine = {
   params: Joi.object().keys(storeParams),
-  body: Joi.object().keys(medicineBody),
+  body: Joi.object().keys({
+    ...medicineBody,
+    referenceProductId: Joi.string().allow(null).custom(objectId),
+  }),
 };
 
 const updateMedicine = {
@@ -202,6 +213,7 @@ export {
   getInventoryMovements,
   getMedicines,
   getProfitReport,
+  getReferenceProducts,
   getSales,
   getSuppliers,
   receiptParams,

@@ -39,6 +39,17 @@ describe('Admin routes', () => {
         .set('Authorization', `Bearer ${createAccessToken(userOne.id)}`)
         .expect(httpStatus.FORBIDDEN);
     });
+
+    test('should reserve the global medicine catalog for system admins', async () => {
+      await insertUsers([userOne]);
+      const store = await prisma.store.create({ data: { name: faker.company.companyName() } });
+      await prisma.userStoreRole.create({ data: { userId: userOne.id, storeId: store.id, role: 'owner' } });
+
+      await request(app)
+        .get('/v1/admin/medicines')
+        .set('Authorization', `Bearer ${createAccessToken(userOne.id)}`)
+        .expect(httpStatus.FORBIDDEN);
+    });
   });
 
   describe('POST /v1/admin/stores', () => {

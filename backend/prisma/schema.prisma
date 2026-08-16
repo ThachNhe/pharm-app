@@ -157,18 +157,19 @@ model UserStoreRole {
 }
 
 model ReferenceProduct {
-  id               String   @id @db.Uuid
-  code             String?  @db.VarChar(50)
-  name             String   @db.VarChar(255)
-  barcode          String?  @db.VarChar(100)
-  secondaryBarcode String?  @map("secondary_barcode") @db.VarChar(100)
-  manufacturer     String?  @db.VarChar(255)
+  id               String    @id @db.Uuid
+  code             String?   @db.VarChar(50)
+  name             String    @db.VarChar(255)
+  barcode          String?   @db.VarChar(100)
+  secondaryBarcode String?   @map("secondary_barcode") @db.VarChar(100)
+  manufacturer     String?   @db.VarChar(255)
   specification    String?
-  referencePrice   Decimal? @map("reference_price") @db.Decimal(20, 2)
-  isInternal       Boolean  @default(false) @map("is_internal")
-  isNational       Boolean  @default(false) @map("is_national")
-  isActive         Boolean  @default(true) @map("is_active")
-  syncedAt         DateTime @default(now()) @map("synced_at") @db.Timestamptz(3)
+  referencePrice   Decimal?  @map("reference_price") @db.Decimal(20, 2)
+  isInternal       Boolean   @default(false) @map("is_internal")
+  isNational       Boolean   @default(false) @map("is_national")
+  isActive         Boolean   @default(true) @map("is_active")
+  syncedAt         DateTime  @default(now()) @map("synced_at") @db.Timestamptz(3)
+  medicine         Medicine?
 
   @@index([code])
   @@index([name])
@@ -179,6 +180,7 @@ model ReferenceProduct {
 
 model Medicine {
   id                   String              @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  referenceProductId   String?             @unique @map("reference_product_id") @db.Uuid
   name                 String              @db.VarChar(255)
   baseUnitName         String              @map("base_unit_name") @db.VarChar(50)
   barcode              String?             @unique @db.VarChar(100)
@@ -193,6 +195,7 @@ model Medicine {
   isActive             Boolean             @default(true) @map("is_active")
   createdAt            DateTime            @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt            DateTime            @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(3)
+  referenceProduct     ReferenceProduct?   @relation(fields: [referenceProductId], references: [id], onDelete: SetNull, onUpdate: Cascade)
   importDetails        ImportDetail[]
   inventoryMovements   InventoryMovement[]
   saleDetails          SaleDetail[]

@@ -48,7 +48,7 @@ const resetPassword = catchAsync(async (req, res) => {
 });
 
 const getMedicines = catchAsync(async (req, res) => {
-  const result = await adminService.queryMedicines(req.query);
+  const result = await adminService.queryMedicines(req.user, req.query);
   res.send(result);
 });
 

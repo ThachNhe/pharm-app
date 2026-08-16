@@ -1,9 +1,9 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { z } from 'zod';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useForm, useWatch } from 'react-hook-form';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Edit3, LoaderCircle, Plus } from 'lucide-react';
+import { CheckCircle2, Edit3, Library, LoaderCircle, Plus } from 'lucide-react';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -20,7 +20,7 @@ import { useDebounce } from '@/hooks/useDebounce';
 import { formatCurrency, formatNumber } from '@/lib/utils';
 import { getApiErrorMessage } from '../api-error';
 import { workspaceService } from '../services/workspace.service';
-import type { Medicine } from '../types';
+import type { Medicine, ReferenceProduct } from '../types';
 import { useWorkspace } from '../useWorkspace';
 import {
     EmptyState,
@@ -74,6 +74,23 @@ const emptyValues: MedicineFormValues = {
     isActive: true,
 };
 
+const getMedicineValues = (medicine: Medicine): MedicineFormValues => ({
+    name: medicine.name,
+    baseUnitName: medicine.baseUnitName,
+    barcode: medicine.barcode ?? '',
+    registrationNumber: medicine.registrationNumber ?? '',
+    category: medicine.category ?? '',
+    activeIngredient: medicine.activeIngredient ?? '',
+    strength: medicine.strength ?? '',
+    dosageForm: medicine.dosageForm ?? '',
+    manufacturer: medicine.manufacturer ?? '',
+    sellingPrice: medicine.sellingPrice,
+    minStock: medicine.minStock,
+    requiresPrescription: medicine.requiresPrescription,
+    description: medicine.description ?? '',
+    isActive: medicine.isActive,
+});
+
 function MedicineDialog({
     open,
     onOpenChange,
@@ -85,44 +102,77 @@ function MedicineDialog({
 }) {
     const queryClient = useQueryClient();
     const { selectedStoreId } = useWorkspace();
+    const [sourceMode, setSourceMode] = useState<'manual' | 'library'>(
+        'manual'
+    );
+    const [librarySearch, setLibrarySearch] = useState('');
+    const [selectedReferenceProduct, setSelectedReferenceProduct] =
+        useState<ReferenceProduct | null>(null);
+    const debouncedLibrarySearch = useDebounce(librarySearch, 350);
     const form = useForm<MedicineFormValues>({
         resolver: zodResolver(medicineSchema),
-        defaultValues: emptyValues,
+        defaultValues: medicine ? getMedicineValues(medicine) : emptyValues,
     });
     const requiresPrescription = useWatch({
         control: form.control,
         name: 'requiresPrescription',
     });
     const isActive = useWatch({ control: form.control, name: 'isActive' });
+    const libraryQuery = useQuery({
+        queryKey: [
+            'workspace',
+            selectedStoreId,
+            'reference-products',
+            'picker',
+            debouncedLibrarySearch,
+        ],
+        queryFn: () =>
+            workspaceService.getReferenceProducts(selectedStoreId, {
+                search: debouncedLibrarySearch,
+                page: 1,
+                limit: 8,
+            }),
+        enabled:
+            open &&
+            !medicine &&
+            sourceMode === 'library' &&
+            debouncedLibrarySearch.trim().length >= 2,
+    });
 
-    useEffect(() => {
-        if (!open) return;
-        form.reset(
-            medicine
-                ? {
-                      name: medicine.name,
-                      baseUnitName: medicine.baseUnitName,
-                      barcode: medicine.barcode ?? '',
-                      registrationNumber: medicine.registrationNumber ?? '',
-                      category: medicine.category ?? '',
-                      activeIngredient: medicine.activeIngredient ?? '',
-                      strength: medicine.strength ?? '',
-                      dosageForm: medicine.dosageForm ?? '',
-                      manufacturer: medicine.manufacturer ?? '',
-                      sellingPrice: medicine.sellingPrice,
-                      minStock: medicine.minStock,
-                      requiresPrescription: medicine.requiresPrescription,
-                      description: medicine.description ?? '',
-                      isActive: medicine.isActive,
-                  }
-                : emptyValues
-        );
-    }, [form, medicine, open]);
+    const chooseSourceMode = (mode: 'manual' | 'library') => {
+        setSourceMode(mode);
+        setLibrarySearch('');
+        setSelectedReferenceProduct(null);
+        form.reset(emptyValues);
+    };
+
+    const chooseReferenceProduct = (product: ReferenceProduct) => {
+        if (product.isAddedToStore) return;
+        setSelectedReferenceProduct(product);
+        form.reset({
+            ...emptyValues,
+            name: product.name,
+            barcode: product.barcode ?? product.secondaryBarcode ?? '',
+            manufacturer: product.manufacturer ?? '',
+        });
+    };
 
     const mutation = useMutation({
         mutationFn: (values: MedicineFormValues) => {
+            if (medicine?.referenceProductId) {
+                return workspaceService.updateMedicine(
+                    selectedStoreId,
+                    medicine.id,
+                    {
+                        sellingPrice: values.sellingPrice,
+                        minStock: values.minStock,
+                        isActive: values.isActive,
+                    }
+                );
+            }
             const payload = {
                 ...values,
+                referenceProductId: selectedReferenceProduct?.id,
                 barcode: values.barcode || undefined,
                 registrationNumber: values.registrationNumber || undefined,
                 category: values.category || undefined,
@@ -150,7 +200,11 @@ function MedicineDialog({
             void queryClient.invalidateQueries({
                 queryKey: ['workspace', selectedStoreId, 'inventory'],
             });
+            void queryClient.invalidateQueries({
+                queryKey: ['workspace', selectedStoreId, 'reference-products'],
+            });
             form.reset(emptyValues);
+            setSelectedReferenceProduct(null);
             onOpenChange(false);
         },
         onError: (error) =>
@@ -163,6 +217,13 @@ function MedicineDialog({
     });
 
     const errors = form.formState.errors;
+    const sharedDetailsLocked = Boolean(medicine?.referenceProductId);
+    const referenceDetailsLocked =
+        sharedDetailsLocked || Boolean(selectedReferenceProduct);
+    const showForm =
+        Boolean(medicine) ||
+        sourceMode === 'manual' ||
+        Boolean(selectedReferenceProduct);
 
     return (
         <Dialog open={open} onOpenChange={onOpenChange}>
@@ -172,157 +233,315 @@ function MedicineDialog({
                         {medicine ? 'Cập nhật thuốc' : 'Thêm thuốc mới'}
                     </DialogTitle>
                     <DialogDescription>
-                        Thông tin giá và định mức tồn được áp dụng riêng cho
-                        quầy đang chọn.
+                        {sharedDetailsLocked
+                            ? 'Thuốc từ thư viện dùng thông tin chung; bạn có thể cập nhật giá, tồn tối thiểu và trạng thái của quầy.'
+                            : 'Thông tin giá và định mức tồn được áp dụng riêng cho quầy đang chọn.'}
                     </DialogDescription>
                 </DialogHeader>
-                <form
-                    id="medicine-form"
-                    className="grid gap-4 sm:grid-cols-2"
-                    onSubmit={form.handleSubmit((values) =>
-                        mutation.mutate(values)
-                    )}
-                >
-                    <Field
-                        label="Tên thuốc"
-                        required
-                        error={errors.name?.message}
+                {!medicine ? (
+                    <div
+                        className="bg-muted/50 grid grid-cols-2 gap-1 rounded-lg p-1"
+                        role="group"
+                        aria-label="Cách thêm thuốc"
                     >
-                        <Input
-                            autoFocus
-                            placeholder="Paracetamol 500mg"
-                            {...form.register('name')}
+                        <Button
+                            type="button"
+                            variant={
+                                sourceMode === 'library' ? 'default' : 'ghost'
+                            }
+                            onClick={() => chooseSourceMode('library')}
+                            aria-pressed={sourceMode === 'library'}
+                        >
+                            <Library />
+                            Từ thư viện
+                        </Button>
+                        <Button
+                            type="button"
+                            variant={
+                                sourceMode === 'manual' ? 'default' : 'ghost'
+                            }
+                            onClick={() => chooseSourceMode('manual')}
+                            aria-pressed={sourceMode === 'manual'}
+                        >
+                            <Plus />
+                            Nhập thủ công
+                        </Button>
+                    </div>
+                ) : null}
+
+                {!medicine &&
+                sourceMode === 'library' &&
+                !selectedReferenceProduct ? (
+                    <div className="border-border space-y-3 rounded-lg border p-4">
+                        <div>
+                            <p className="text-sm font-medium">
+                                Tìm trong thư viện thuốc
+                            </p>
+                            <p className="text-muted-foreground mt-1 text-xs">
+                                Nhập ít nhất 2 ký tự của tên, mã nguồn hoặc
+                                barcode.
+                            </p>
+                        </div>
+                        <SearchInput
+                            value={librarySearch}
+                            onChange={setLibrarySearch}
+                            placeholder="Tìm tên thuốc hoặc quét barcode"
+                            className="sm:w-full"
                         />
-                    </Field>
-                    <Field
-                        label="Đơn vị cơ bản"
-                        required
-                        error={errors.baseUnitName?.message}
-                    >
-                        <Input
-                            placeholder="Viên, chai, tuýp..."
-                            {...form.register('baseUnitName')}
-                        />
-                    </Field>
-                    <Field
-                        label="Hoạt chất"
-                        error={errors.activeIngredient?.message}
-                    >
-                        <Input
-                            placeholder="Paracetamol"
-                            {...form.register('activeIngredient')}
-                        />
-                    </Field>
-                    <Field label="Hàm lượng" error={errors.strength?.message}>
-                        <Input
-                            placeholder="500 mg"
-                            {...form.register('strength')}
-                        />
-                    </Field>
-                    <Field label="Mã vạch" error={errors.barcode?.message}>
-                        <Input
-                            placeholder="Quét hoặc nhập mã vạch"
-                            {...form.register('barcode')}
-                        />
-                    </Field>
-                    <Field
-                        label="Số đăng ký"
-                        error={errors.registrationNumber?.message}
-                    >
-                        <Input
-                            placeholder="VD-12345-24"
-                            {...form.register('registrationNumber')}
-                        />
-                    </Field>
-                    <Field label="Nhóm thuốc" error={errors.category?.message}>
-                        <Input
-                            placeholder="Giảm đau - hạ sốt"
-                            {...form.register('category')}
-                        />
-                    </Field>
-                    <Field
-                        label="Dạng bào chế"
-                        error={errors.dosageForm?.message}
-                    >
-                        <Input
-                            placeholder="Viên nén"
-                            {...form.register('dosageForm')}
-                        />
-                    </Field>
-                    <Field
-                        label="Nhà sản xuất"
-                        error={errors.manufacturer?.message}
-                    >
-                        <Input
-                            placeholder="Tên nhà sản xuất"
-                            {...form.register('manufacturer')}
-                        />
-                    </Field>
-                    <div className="hidden sm:block" />
-                    <Field
-                        label="Giá bán"
-                        required
-                        error={errors.sellingPrice?.message}
-                    >
-                        <Input
-                            type="number"
-                            min="0"
-                            step="100"
-                            inputMode="decimal"
-                            {...form.register('sellingPrice', {
-                                valueAsNumber: true,
-                            })}
-                        />
-                    </Field>
-                    <Field
-                        label="Tồn tối thiểu"
-                        error={errors.minStock?.message}
-                    >
-                        <Input
-                            type="number"
-                            min="0"
-                            step="1"
-                            inputMode="decimal"
-                            {...form.register('minStock', {
-                                valueAsNumber: true,
-                            })}
-                        />
-                    </Field>
-                    <Field
-                        label="Ghi chú"
-                        error={errors.description?.message}
-                        className="sm:col-span-2"
-                    >
-                        <textarea
-                            rows={3}
-                            className="border-input focus:border-ring focus:ring-ring/20 w-full resize-y rounded-md border bg-transparent px-3 py-2 text-sm outline-none focus:ring-3"
-                            placeholder="Thông tin sử dụng nội bộ"
-                            {...form.register('description')}
-                        />
-                    </Field>
-                    <div className="flex flex-wrap gap-5 sm:col-span-2">
-                        <label className="flex cursor-pointer items-center gap-2 text-sm">
-                            <Checkbox
-                                checked={requiresPrescription}
-                                onCheckedChange={(checked) =>
-                                    form.setValue(
-                                        'requiresPrescription',
-                                        checked === true,
-                                        {
-                                            shouldDirty: true,
+                        {debouncedLibrarySearch.trim().length < 2 ? (
+                            <p className="text-muted-foreground py-5 text-center text-sm">
+                                Kết quả phù hợp sẽ xuất hiện tại đây.
+                            </p>
+                        ) : libraryQuery.isPending ? (
+                            <div className="flex items-center justify-center gap-2 py-5 text-sm">
+                                <LoaderCircle className="text-primary size-4 animate-spin" />
+                                Đang tìm trong thư viện
+                            </div>
+                        ) : libraryQuery.isError ? (
+                            <div className="py-4 text-center">
+                                <p className="text-destructive text-sm">
+                                    Không tải được thư viện thuốc.
+                                </p>
+                                <Button
+                                    type="button"
+                                    size="sm"
+                                    variant="outline"
+                                    className="mt-2"
+                                    onClick={() => void libraryQuery.refetch()}
+                                >
+                                    Thử lại
+                                </Button>
+                            </div>
+                        ) : !libraryQuery.data?.results.length ? (
+                            <p className="text-muted-foreground py-5 text-center text-sm">
+                                Không tìm thấy sản phẩm phù hợp. Bạn có thể
+                                chuyển sang nhập thủ công.
+                            </p>
+                        ) : (
+                            <div className="border-border max-h-72 divide-y overflow-y-auto rounded-md border">
+                                {libraryQuery.data.results.map((product) => (
+                                    <button
+                                        key={product.id}
+                                        type="button"
+                                        disabled={product.isAddedToStore}
+                                        onClick={() =>
+                                            chooseReferenceProduct(product)
                                         }
-                                    )
-                                }
+                                        className="hover:bg-muted/60 focus-visible:ring-ring flex w-full items-start justify-between gap-3 px-3 py-3 text-left outline-none focus-visible:ring-2 disabled:cursor-not-allowed disabled:opacity-60"
+                                    >
+                                        <span className="min-w-0">
+                                            <span className="block truncate text-sm font-medium">
+                                                {product.name}
+                                            </span>
+                                            <span className="text-muted-foreground mt-1 block text-xs">
+                                                {[
+                                                    product.code,
+                                                    product.barcode,
+                                                    product.manufacturer,
+                                                ]
+                                                    .filter(Boolean)
+                                                    .join(' · ') ||
+                                                    'Chưa có thông tin bổ sung'}
+                                            </span>
+                                        </span>
+                                        {product.isAddedToStore ? (
+                                            <span className="text-success flex shrink-0 items-center gap-1 text-xs font-medium">
+                                                <CheckCircle2 className="size-3.5" />
+                                                Đã có
+                                            </span>
+                                        ) : (
+                                            <span className="text-primary shrink-0 text-xs font-medium">
+                                                Chọn
+                                            </span>
+                                        )}
+                                    </button>
+                                ))}
+                            </div>
+                        )}
+                    </div>
+                ) : null}
+
+                {showForm ? (
+                    <form
+                        id="medicine-form"
+                        className="grid gap-4 sm:grid-cols-2"
+                        onSubmit={form.handleSubmit((values) =>
+                            mutation.mutate(values)
+                        )}
+                    >
+                        {selectedReferenceProduct ? (
+                            <div className="border-primary/25 bg-secondary/45 flex items-start justify-between gap-3 rounded-lg border p-3 sm:col-span-2">
+                                <div className="min-w-0">
+                                    <p className="truncate text-sm font-medium">
+                                        {selectedReferenceProduct.name}
+                                    </p>
+                                    <p className="text-muted-foreground mt-1 text-xs">
+                                        {[
+                                            selectedReferenceProduct.code,
+                                            selectedReferenceProduct.specification,
+                                        ]
+                                            .filter(Boolean)
+                                            .join(' · ') ||
+                                            'Sản phẩm từ thư viện'}
+                                        {selectedReferenceProduct.referencePrice
+                                            ? ` · Giá tham khảo ${formatCurrency(selectedReferenceProduct.referencePrice)}`
+                                            : ''}
+                                    </p>
+                                </div>
+                                <Button
+                                    type="button"
+                                    size="sm"
+                                    variant="outline"
+                                    onClick={() => {
+                                        setSelectedReferenceProduct(null);
+                                        form.reset(emptyValues);
+                                    }}
+                                >
+                                    Đổi sản phẩm
+                                </Button>
+                            </div>
+                        ) : null}
+                        <Field
+                            label="Tên thuốc"
+                            required
+                            error={errors.name?.message}
+                        >
+                            <Input
+                                autoFocus
+                                readOnly={referenceDetailsLocked}
+                                placeholder="Paracetamol 500mg"
+                                {...form.register('name')}
                             />
-                            Thuốc kê đơn
-                        </label>
-                        {medicine ? (
+                        </Field>
+                        <Field
+                            label="Đơn vị cơ bản"
+                            required
+                            error={errors.baseUnitName?.message}
+                        >
+                            <Input
+                                readOnly={sharedDetailsLocked}
+                                placeholder="Viên, chai, tuýp..."
+                                {...form.register('baseUnitName')}
+                            />
+                        </Field>
+                        <Field
+                            label="Hoạt chất"
+                            error={errors.activeIngredient?.message}
+                        >
+                            <Input
+                                readOnly={sharedDetailsLocked}
+                                placeholder="Paracetamol"
+                                {...form.register('activeIngredient')}
+                            />
+                        </Field>
+                        <Field
+                            label="Hàm lượng"
+                            error={errors.strength?.message}
+                        >
+                            <Input
+                                readOnly={sharedDetailsLocked}
+                                placeholder="500 mg"
+                                {...form.register('strength')}
+                            />
+                        </Field>
+                        <Field label="Mã vạch" error={errors.barcode?.message}>
+                            <Input
+                                readOnly={referenceDetailsLocked}
+                                placeholder="Quét hoặc nhập mã vạch"
+                                {...form.register('barcode')}
+                            />
+                        </Field>
+                        <Field
+                            label="Số đăng ký"
+                            error={errors.registrationNumber?.message}
+                        >
+                            <Input
+                                readOnly={sharedDetailsLocked}
+                                placeholder="VD-12345-24"
+                                {...form.register('registrationNumber')}
+                            />
+                        </Field>
+                        <Field
+                            label="Nhóm thuốc"
+                            error={errors.category?.message}
+                        >
+                            <Input
+                                readOnly={sharedDetailsLocked}
+                                placeholder="Giảm đau - hạ sốt"
+                                {...form.register('category')}
+                            />
+                        </Field>
+                        <Field
+                            label="Dạng bào chế"
+                            error={errors.dosageForm?.message}
+                        >
+                            <Input
+                                readOnly={sharedDetailsLocked}
+                                placeholder="Viên nén"
+                                {...form.register('dosageForm')}
+                            />
+                        </Field>
+                        <Field
+                            label="Nhà sản xuất"
+                            error={errors.manufacturer?.message}
+                        >
+                            <Input
+                                readOnly={referenceDetailsLocked}
+                                placeholder="Tên nhà sản xuất"
+                                {...form.register('manufacturer')}
+                            />
+                        </Field>
+                        <div className="hidden sm:block" />
+                        <Field
+                            label="Giá bán"
+                            required
+                            error={errors.sellingPrice?.message}
+                        >
+                            <Input
+                                type="number"
+                                min="0"
+                                step="100"
+                                inputMode="decimal"
+                                {...form.register('sellingPrice', {
+                                    valueAsNumber: true,
+                                })}
+                            />
+                        </Field>
+                        <Field
+                            label="Tồn tối thiểu"
+                            error={errors.minStock?.message}
+                        >
+                            <Input
+                                type="number"
+                                min="0"
+                                step="1"
+                                inputMode="decimal"
+                                {...form.register('minStock', {
+                                    valueAsNumber: true,
+                                })}
+                            />
+                        </Field>
+                        <Field
+                            label="Ghi chú"
+                            error={errors.description?.message}
+                            className="sm:col-span-2"
+                        >
+                            <textarea
+                                readOnly={sharedDetailsLocked}
+                                rows={3}
+                                className="border-input focus:border-ring focus:ring-ring/20 w-full resize-y rounded-md border bg-transparent px-3 py-2 text-sm outline-none focus:ring-3"
+                                placeholder="Thông tin sử dụng nội bộ"
+                                {...form.register('description')}
+                            />
+                        </Field>
+                        <div className="flex flex-wrap gap-5 sm:col-span-2">
                             <label className="flex cursor-pointer items-center gap-2 text-sm">
                                 <Checkbox
-                                    checked={isActive}
+                                    disabled={sharedDetailsLocked}
+                                    checked={requiresPrescription}
                                     onCheckedChange={(checked) =>
                                         form.setValue(
-                                            'isActive',
+                                            'requiresPrescription',
                                             checked === true,
                                             {
                                                 shouldDirty: true,
@@ -330,11 +549,28 @@ function MedicineDialog({
                                         )
                                     }
                                 />
-                                Đang kinh doanh
+                                Thuốc kê đơn
                             </label>
-                        ) : null}
-                    </div>
-                </form>
+                            {medicine ? (
+                                <label className="flex cursor-pointer items-center gap-2 text-sm">
+                                    <Checkbox
+                                        checked={isActive}
+                                        onCheckedChange={(checked) =>
+                                            form.setValue(
+                                                'isActive',
+                                                checked === true,
+                                                {
+                                                    shouldDirty: true,
+                                                }
+                                            )
+                                        }
+                                    />
+                                    Đang kinh doanh
+                                </label>
+                            ) : null}
+                        </div>
+                    </form>
+                ) : null}
                 <DialogFooter>
                     <Button
                         type="button"
@@ -344,16 +580,18 @@ function MedicineDialog({
                     >
                         Hủy
                     </Button>
-                    <Button
-                        form="medicine-form"
-                        type="submit"
-                        disabled={mutation.isPending}
-                    >
-                        {mutation.isPending ? (
-                            <LoaderCircle className="animate-spin" />
-                        ) : null}
-                        {medicine ? 'Lưu thay đổi' : 'Thêm thuốc'}
-                    </Button>
+                    {showForm ? (
+                        <Button
+                            form="medicine-form"
+                            type="submit"
+                            disabled={mutation.isPending}
+                        >
+                            {mutation.isPending ? (
+                                <LoaderCircle className="animate-spin" />
+                            ) : null}
+                            {medicine ? 'Lưu thay đổi' : 'Thêm thuốc'}
+                        </Button>
+                    ) : null}
                 </DialogFooter>
             </DialogContent>
         </Dialog>
@@ -582,9 +820,9 @@ export function MedicinesPage() {
                 )}
             </Panel>
 
-            {canManage ? (
+            {canManage && dialogOpen ? (
                 <MedicineDialog
-                    open={dialogOpen}
+                    open
                     onOpenChange={setDialogOpen}
                     medicine={editingMedicine}
                 />

@@ -86,6 +86,7 @@ test('system admin can use the workspace across desktop and mobile', async ({
         ['Bán hàng', 'Bán hàng'],
         ['Tồn kho', 'Tồn kho'],
         ['Danh mục thuốc', 'Danh mục thuốc'],
+        ['Thư viện thuốc', 'Thư viện thuốc'],
         ['Nhập hàng', 'Nhập hàng'],
         ['Nhà cung cấp', 'Nhà cung cấp'],
         ['Tài khoản', 'Tài khoản nhân sự'],
@@ -99,6 +100,70 @@ test('system admin can use the workspace across desktop and mobile', async ({
             page.getByRole('heading', { name: heading, exact: true })
         ).toBeVisible();
     }
+
+    await page.goto('/admin/medicine-library');
+    await expect(page.getByText(/\d[\d.]* sản phẩm/)).toBeVisible();
+    await page.getByRole('button', { name: 'Trang 2', exact: true }).click();
+    await expect(
+        page.getByRole('button', { name: 'Trang 2', exact: true })
+    ).toHaveAttribute('aria-current', 'page');
+
+    await page.goto('/admin/medicines');
+    await page.getByRole('button', { name: 'Thêm thuốc', exact: true }).click();
+    const medicineDialog = page.getByRole('dialog');
+    await expect(
+        medicineDialog.getByRole('button', {
+            name: 'Từ thư viện',
+            exact: true,
+        })
+    ).toBeVisible();
+    await medicineDialog
+        .getByRole('button', { name: 'Từ thư viện', exact: true })
+        .click();
+    await medicineDialog
+        .getByPlaceholder('Tìm tên thuốc hoặc quét barcode')
+        .fill('HH02726');
+    await medicineDialog
+        .getByRole('button', { name: /Acyclovir 800Mg\/ Stada/ })
+        .click();
+    await expect(medicineDialog.getByLabel('Tên thuốc')).toHaveValue(
+        'Acyclovir 800Mg/ Stada'
+    );
+
+    let createPayload: Record<string, unknown> | null = null;
+    await page.route(/\/v1\/stores\/[^/]+\/medicines$/, async (route) => {
+        if (route.request().method() !== 'POST') {
+            await route.continue();
+            return;
+        }
+        createPayload = route.request().postDataJSON() as Record<
+            string,
+            unknown
+        >;
+        await route.fulfill({
+            status: 201,
+            contentType: 'application/json',
+            body: JSON.stringify({ id: 'ui-test-medicine' }),
+        });
+    });
+    await medicineDialog.getByLabel('Giá bán').fill('25000');
+    await medicineDialog
+        .getByRole('button', { name: 'Thêm thuốc', exact: true })
+        .click();
+    await expect.poll(() => createPayload).not.toBeNull();
+    expect(createPayload).toMatchObject({
+        referenceProductId: 'fffe7ae2-015e-4861-b4ce-501ef47ad5b7',
+        name: 'Acyclovir 800Mg/ Stada',
+        sellingPrice: 25000,
+    });
+    await expect(medicineDialog).toBeHidden();
+
+    await page.getByRole('button', { name: 'Thêm thuốc', exact: true }).click();
+    await page
+        .getByRole('button', { name: 'Nhập thủ công', exact: true })
+        .click();
+    await expect(page.getByLabel('Tên thuốc')).toBeVisible();
+    await page.getByRole('button', { name: 'Hủy', exact: true }).click();
 
     await page.goto('/admin/inventory?alert=low');
     await expect(
@@ -161,6 +226,7 @@ test('owner sees store management features but not system store administration',
         'Bán hàng',
         'Tồn kho',
         'Danh mục thuốc',
+        'Thư viện thuốc',
         'Nhập hàng',
         'Nhà cung cấp',
         'Tài khoản',
@@ -216,6 +282,7 @@ test('staff navigation and direct routes remain permission scoped', async ({
         'Bán hàng',
         'Tồn kho',
         'Danh mục thuốc',
+        'Thư viện thuốc',
     ]) {
         await expect(
             page.getByRole('link', { name: linkName, exact: true })

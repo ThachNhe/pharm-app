@@ -69,6 +69,7 @@ export interface Supplier {
 export interface Medicine {
     id: string;
     storeMedicineId: string;
+    referenceProductId?: string | null;
     name: string;
     baseUnitName: string;
     barcode?: string | null;
@@ -85,6 +86,21 @@ export interface Medicine {
     minStock: number;
     totalStock: number;
     availableStock: number;
+}
+
+export interface ReferenceProduct {
+    id: string;
+    code?: string | null;
+    name: string;
+    barcode?: string | null;
+    secondaryBarcode?: string | null;
+    manufacturer?: string | null;
+    specification?: string | null;
+    referencePrice?: number | null;
+    isInternal: boolean;
+    isNational: boolean;
+    syncedAt: string;
+    isAddedToStore: boolean;
 }
 
 export interface InventoryMedicine extends Medicine {
@@ -194,6 +210,7 @@ export interface ProfitReport {
 }
 
 export interface MedicinePayload {
+    referenceProductId?: string;
     name: string;
     baseUnitName: string;
     barcode?: string;

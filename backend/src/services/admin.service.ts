@@ -629,7 +629,8 @@ const validateMedicineUnits = (baseUnitName: string, units = []) => {
   return normalizedUnits;
 };
 
-const queryMedicines = async (query) => {
+const queryMedicines = async (actor: Actor, query) => {
+  await assertSystemAdmin(actor);
   const { page, limit, skip } = getPagination(query);
   const where: Prisma.MedicineWhereInput = {
     ...(query.search
@@ -658,7 +659,7 @@ const queryMedicines = async (query) => {
 };
 
 const createMedicine = async (actor: Actor, body) => {
-  await ensureAdminPanelAccess(actor);
+  await assertSystemAdmin(actor);
   const units = validateMedicineUnits(body.baseUnitName, body.units);
 
   const medicine = await prisma.medicine.create({
@@ -690,7 +691,7 @@ const createMedicine = async (actor: Actor, body) => {
 };
 
 const updateMedicine = async (actor: Actor, medicineId: string, body) => {
-  await ensureAdminPanelAccess(actor);
+  await assertSystemAdmin(actor);
   const units = body.units ? validateMedicineUnits(body.baseUnitName, body.units) : null;
 
   const medicine = await prisma.$transaction(async (tx) => {

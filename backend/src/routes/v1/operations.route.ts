@@ -34,6 +34,12 @@ router.patch(
   operationsController.updateMedicine,
 );
 
+router.get(
+  '/:storeId/reference-products',
+  validate(operationsValidation.getReferenceProducts),
+  operationsController.getReferenceProducts,
+);
+
 router
   .route('/:storeId/imports')
   .get(validate(operationsValidation.getImportReceipts), operationsController.getImportReceipts)
