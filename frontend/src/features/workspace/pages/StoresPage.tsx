@@ -16,11 +16,11 @@ import {
     DialogTitle,
 } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
-import { useDebounce } from '@/hooks/useDebounce';
 import { adminService } from '@/features/admin/services/admin.service';
 import type { Store } from '@/features/admin/types';
-import { getApiErrorMessage } from '../api-error';
-import { useWorkspace } from '../useWorkspace';
+import { usePaginatedSearch } from '../hooks/usePaginatedSearch';
+import { useWorkspace } from '../hooks/useWorkspace';
+import { getApiErrorMessage } from '../utils/api-error';
 import {
     EmptyState,
     ErrorState,
@@ -208,11 +208,10 @@ function StoreDialog({
 }
 
 export function StoresPage() {
-    const [search, setSearch] = useState('');
-    const [page, setPage] = useState(1);
+    const { search, setSearch, debouncedSearch, page, setPage } =
+        usePaginatedSearch();
     const [dialogOpen, setDialogOpen] = useState(false);
     const [editingStore, setEditingStore] = useState<Store | null>(null);
-    const debouncedSearch = useDebounce(search, 350);
     const { isSystemAdmin } = useWorkspace();
 
     const storesQuery = useQuery({
@@ -255,10 +254,7 @@ export function StoresPage() {
                 <div className="border-border border-b p-4">
                     <SearchInput
                         value={search}
-                        onChange={(value) => {
-                            setSearch(value);
-                            setPage(1);
-                        }}
+                        onChange={setSearch}
                         placeholder="Tìm tên quầy thuốc"
                     />
                 </div>

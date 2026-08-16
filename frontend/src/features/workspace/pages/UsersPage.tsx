@@ -16,11 +16,12 @@ import {
     DialogTitle,
 } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
-import { useDebounce } from '@/hooks/useDebounce';
 import { adminService } from '@/features/admin/services/admin.service';
 import type { AdminUser, StoreRole } from '@/features/admin/types';
-import { getApiErrorMessage } from '../api-error';
-import { useWorkspace } from '../useWorkspace';
+import { STORE_ROLE_LABELS } from '../constants/workspace.constants';
+import { usePaginatedSearch } from '../hooks/usePaginatedSearch';
+import { useWorkspace } from '../hooks/useWorkspace';
+import { getApiErrorMessage } from '../utils/api-error';
 import {
     EmptyState,
     ErrorState,
@@ -43,12 +44,6 @@ const userSchema = z.object({
 });
 
 type UserFormValues = z.infer<typeof userSchema>;
-
-const roleLabels: Record<StoreRole, string> = {
-    owner: 'Chủ quầy',
-    manager: 'Quản lý',
-    staff: 'Nhân viên',
-};
 
 function UserDialog({
     open,
@@ -220,7 +215,7 @@ function UserDialog({
                         >
                             {roleOptions.map((role) => (
                                 <option key={role} value={role}>
-                                    {roleLabels[role]}
+                                    {STORE_ROLE_LABELS[role]}
                                 </option>
                             ))}
                         </select>
@@ -277,11 +272,10 @@ function UserDialog({
 }
 
 export function UsersPage() {
-    const [search, setSearch] = useState('');
-    const [page, setPage] = useState(1);
+    const { search, setSearch, debouncedSearch, page, setPage } =
+        usePaginatedSearch();
     const [dialogOpen, setDialogOpen] = useState(false);
     const [editingUser, setEditingUser] = useState<AdminUser | null>(null);
-    const debouncedSearch = useDebounce(search, 350);
     const {
         selectedStoreId,
         selectedStore,
@@ -354,10 +348,7 @@ export function UsersPage() {
                 <div className="border-border border-b p-4">
                     <SearchInput
                         value={search}
-                        onChange={(value) => {
-                            setSearch(value);
-                            setPage(1);
-                        }}
+                        onChange={setSearch}
                         placeholder="Tìm tên, email, số điện thoại"
                     />
                 </div>
@@ -436,7 +427,9 @@ export function UsersPage() {
                                                         {user.isSystemAdmin
                                                             ? 'System Admin'
                                                             : role
-                                                              ? roleLabels[role]
+                                                              ? STORE_ROLE_LABELS[
+                                                                    role
+                                                                ]
                                                               : 'Chưa phân quyền'}
                                                     </StatusBadge>
                                                 </td>

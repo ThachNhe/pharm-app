@@ -2,7 +2,6 @@ import { Fragment, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { ChevronDown, ChevronUp, History, PackageSearch } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { useDebounce } from '@/hooks/useDebounce';
 import {
     formatCurrency,
     formatDate,
@@ -11,7 +10,8 @@ import {
 } from '@/lib/utils';
 import { workspaceService } from '../services/workspace.service';
 import type { InventoryMedicine } from '../types';
-import { useWorkspace } from '../useWorkspace';
+import { usePaginatedSearch } from '../hooks/usePaginatedSearch';
+import { useWorkspace } from '../hooks/useWorkspace';
 import {
     EmptyState,
     ErrorState,
@@ -39,11 +39,10 @@ export function InventoryPage({
     initialAlert?: AlertFilter;
 }) {
     const [view, setView] = useState<'stock' | 'movements'>('stock');
-    const [search, setSearch] = useState('');
     const [alert, setAlert] = useState<AlertFilter>(initialAlert);
-    const [page, setPage] = useState(1);
+    const { search, setSearch, debouncedSearch, page, setPage } =
+        usePaginatedSearch();
     const [expandedId, setExpandedId] = useState<string | null>(null);
-    const debouncedSearch = useDebounce(search, 350);
     const { selectedStoreId, hasRole } = useWorkspace();
     const canViewCosts = hasRole('manager');
 
@@ -177,10 +176,7 @@ export function InventoryPage({
                     <div className="border-border flex flex-col gap-3 border-b p-4 lg:flex-row lg:items-center lg:justify-between">
                         <SearchInput
                             value={search}
-                            onChange={(value) => {
-                                setSearch(value);
-                                setPage(1);
-                            }}
+                            onChange={setSearch}
                             placeholder="Tìm tên, mã vạch, hoạt chất"
                         />
                         <div className="flex flex-wrap gap-2">

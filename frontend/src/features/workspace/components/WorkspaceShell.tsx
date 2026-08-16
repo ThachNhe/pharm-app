@@ -29,8 +29,9 @@ import { ROUTES } from '@/lib/constants';
 import { cn, getInitials } from '@/lib/utils';
 import { authService } from '@/features/auths/services/auth.service';
 import { useAuthStore } from '@/stores/useAuthStore';
-import { WorkspaceProvider } from '../WorkspaceContext';
-import { useWorkspace } from '../useWorkspace';
+import { STORE_ROLE_LABELS } from '../constants/workspace.constants';
+import { WorkspaceProvider } from '../context/WorkspaceProvider';
+import { useWorkspace } from '../hooks/useWorkspace';
 import type { StoreRole } from '../types';
 import { ErrorState, LoadingState, Panel, StatusBadge } from './shared';
 
@@ -114,12 +115,6 @@ const navItems: NavItem[] = [
         systemOnly: true,
     },
 ];
-
-const roleLabels: Record<StoreRole, string> = {
-    owner: 'Chủ quầy',
-    manager: 'Quản lý',
-    staff: 'Nhân viên',
-};
 
 function WorkspaceShellContent() {
     const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
@@ -305,7 +300,7 @@ function WorkspaceShellContent() {
                                 {isSystemAdmin
                                     ? 'System Admin'
                                     : selectedStore?.role
-                                      ? roleLabels[selectedStore.role]
+                                      ? STORE_ROLE_LABELS[selectedStore.role]
                                       : 'Chưa có vai trò'}
                             </StatusBadge>
                             <Button

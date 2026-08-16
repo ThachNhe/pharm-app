@@ -16,11 +16,11 @@ import {
     DialogTitle,
 } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
-import { useDebounce } from '@/hooks/useDebounce';
-import { getApiErrorMessage } from '../api-error';
+import { getApiErrorMessage } from '../utils/api-error';
+import { usePaginatedSearch } from '../hooks/usePaginatedSearch';
 import { workspaceService } from '../services/workspace.service';
 import type { Supplier } from '../types';
-import { useWorkspace } from '../useWorkspace';
+import { useWorkspace } from '../hooks/useWorkspace';
 import {
     EmptyState,
     ErrorState,
@@ -248,13 +248,12 @@ function SupplierDialog({
 }
 
 export function SuppliersPage() {
-    const [search, setSearch] = useState('');
-    const [page, setPage] = useState(1);
+    const { search, setSearch, debouncedSearch, page, setPage } =
+        usePaginatedSearch();
     const [dialogOpen, setDialogOpen] = useState(false);
     const [editingSupplier, setEditingSupplier] = useState<Supplier | null>(
         null
     );
-    const debouncedSearch = useDebounce(search, 350);
     const { selectedStoreId, hasRole } = useWorkspace();
 
     const suppliersQuery = useQuery({
@@ -303,10 +302,7 @@ export function SuppliersPage() {
                 <div className="border-border border-b p-4">
                     <SearchInput
                         value={search}
-                        onChange={(value) => {
-                            setSearch(value);
-                            setPage(1);
-                        }}
+                        onChange={setSearch}
                         placeholder="Tìm tên, mã, số điện thoại"
                     />
                 </div>

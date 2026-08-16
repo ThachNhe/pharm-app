@@ -29,10 +29,10 @@ import {
     formatNumber,
     toDateInputValue,
 } from '@/lib/utils';
-import { getApiErrorMessage } from '../api-error';
+import { getApiErrorMessage } from '../utils/api-error';
 import { workspaceService } from '../services/workspace.service';
 import type { ImportReceipt, ReceiptStatus } from '../types';
-import { useWorkspace } from '../useWorkspace';
+import { useWorkspace } from '../hooks/useWorkspace';
 import {
     EmptyState,
     ErrorState,

@@ -24,10 +24,10 @@ import {
 import { Input } from '@/components/ui/input';
 import { useDebounce } from '@/hooks/useDebounce';
 import { formatCurrency, formatDateTime, formatNumber } from '@/lib/utils';
-import { getApiErrorMessage } from '../api-error';
+import { getApiErrorMessage } from '../utils/api-error';
 import { workspaceService } from '../services/workspace.service';
 import type { Medicine, PaymentMethod, Sale } from '../types';
-import { useWorkspace } from '../useWorkspace';
+import { useWorkspace } from '../hooks/useWorkspace';
 import {
     EmptyState,
     ErrorState,

@@ -1,6 +1,6 @@
 import { createContext } from 'react';
 import type { UseQueryResult } from '@tanstack/react-query';
-import type { StoreRole, WorkspaceContext, WorkspaceStore } from './types';
+import type { StoreRole, WorkspaceContext, WorkspaceStore } from '../types';
 
 export interface WorkspaceValue {
     contextQuery: UseQueryResult<WorkspaceContext, Error>;

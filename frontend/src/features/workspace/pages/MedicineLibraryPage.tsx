@@ -1,9 +1,7 @@
-import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Link } from '@tanstack/react-router';
 import { LoaderCircle, Plus } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { useDebounce } from '@/hooks/useDebounce';
 import { formatCurrency, formatNumber } from '@/lib/utils';
 import {
     EmptyState,
@@ -16,7 +14,8 @@ import {
     StatusBadge,
 } from '../components/shared';
 import { workspaceService } from '../services/workspace.service';
-import { useWorkspace } from '../useWorkspace';
+import { usePaginatedSearch } from '../hooks/usePaginatedSearch';
+import { useWorkspace } from '../hooks/useWorkspace';
 
 const showText = (value?: string | null) => value?.trim() || '—';
 const showMoney = (value?: number | null) =>
@@ -27,9 +26,8 @@ const showQuantity = (value?: number | null) =>
     value == null ? '—' : formatNumber(value);
 
 export function MedicineLibraryPage() {
-    const [search, setSearch] = useState('');
-    const [page, setPage] = useState(1);
-    const debouncedSearch = useDebounce(search, 350);
+    const { search, setSearch, debouncedSearch, page, setPage } =
+        usePaginatedSearch();
     const { selectedStoreId, hasRole } = useWorkspace();
     const canManage = hasRole('manager');
 
@@ -72,10 +70,7 @@ export function MedicineLibraryPage() {
                 <div className="border-border flex flex-col gap-3 border-b p-4 sm:flex-row sm:items-center sm:justify-between">
                     <SearchInput
                         value={search}
-                        onChange={(value) => {
-                            setSearch(value);
-                            setPage(1);
-                        }}
+                        onChange={setSearch}
                         placeholder="Tìm tên, mã, barcode, SĐK, hoạt chất..."
                         className="sm:w-96"
                     />

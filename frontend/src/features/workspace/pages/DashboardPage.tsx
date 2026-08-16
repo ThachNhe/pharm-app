@@ -11,7 +11,7 @@ import {
 import { Link } from '@tanstack/react-router';
 import { useQuery } from '@tanstack/react-query';
 import { formatCurrency, formatNumber } from '@/lib/utils';
-import { useWorkspace } from '../useWorkspace';
+import { useWorkspace } from '../hooks/useWorkspace';
 import { workspaceService } from '../services/workspace.service';
 import {
     ErrorState,

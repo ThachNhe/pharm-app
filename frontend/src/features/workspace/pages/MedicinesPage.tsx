@@ -18,10 +18,11 @@ import {
 import { Input } from '@/components/ui/input';
 import { useDebounce } from '@/hooks/useDebounce';
 import { formatCurrency, formatNumber } from '@/lib/utils';
-import { getApiErrorMessage } from '../api-error';
+import { getApiErrorMessage } from '../utils/api-error';
+import { usePaginatedSearch } from '../hooks/usePaginatedSearch';
 import { workspaceService } from '../services/workspace.service';
 import type { Medicine, ReferenceProduct } from '../types';
-import { useWorkspace } from '../useWorkspace';
+import { useWorkspace } from '../hooks/useWorkspace';
 import {
     EmptyState,
     ErrorState,
@@ -605,13 +606,12 @@ function MedicineDialog({
 }
 
 export function MedicinesPage() {
-    const [search, setSearch] = useState('');
-    const [page, setPage] = useState(1);
+    const { search, setSearch, debouncedSearch, page, setPage } =
+        usePaginatedSearch();
     const [dialogOpen, setDialogOpen] = useState(false);
     const [editingMedicine, setEditingMedicine] = useState<Medicine | null>(
         null
     );
-    const debouncedSearch = useDebounce(search, 350);
     const { selectedStoreId, hasRole } = useWorkspace();
     const canManage = hasRole('manager');
 
@@ -661,10 +661,7 @@ export function MedicinesPage() {
                 <div className="border-border flex flex-col gap-3 border-b p-4 sm:flex-row sm:items-center sm:justify-between">
                     <SearchInput
                         value={search}
-                        onChange={(value) => {
-                            setSearch(value);
-                            setPage(1);
-                        }}
+                        onChange={setSearch}
                         placeholder="Tìm tên, mã vạch, hoạt chất"
                     />
                     <p className="text-muted-foreground text-sm">

@@ -8,7 +8,7 @@ import {
     formatNumber,
     toDateInputValue,
 } from '@/lib/utils';
-import { useWorkspace } from '../useWorkspace';
+import { useWorkspace } from '../hooks/useWorkspace';
 import { workspaceService } from '../services/workspace.service';
 import {
     EmptyState,

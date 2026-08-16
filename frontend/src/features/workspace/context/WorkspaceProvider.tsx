@@ -1,26 +1,11 @@
 import { useMemo, useState, type ReactNode } from 'react';
-import { useQuery } from '@tanstack/react-query';
 import { STORAGE_KEYS } from '@/lib/constants';
-import { useAuthStore } from '@/stores/useAuthStore';
-import { workspaceService } from './services/workspace.service';
-import type { StoreRole } from './types';
-import { WorkspaceStateContext, type WorkspaceValue } from './workspace-state';
-
-const ROLE_RANK: Record<StoreRole, number> = {
-    staff: 1,
-    manager: 2,
-    owner: 3,
-};
-
-const useWorkspaceContextQuery = () => {
-    const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
-    return useQuery({
-        queryKey: ['workspace', 'context'],
-        queryFn: workspaceService.getContext,
-        enabled: isAuthenticated,
-        retry: false,
-    });
-};
+import { STORE_ROLE_RANK } from '../constants/workspace.constants';
+import { useWorkspaceContextQuery } from '../hooks/useWorkspace';
+import {
+    WorkspaceStateContext,
+    type WorkspaceValue,
+} from './workspace-context';
 
 export function WorkspaceProvider({ children }: { children: ReactNode }) {
     const contextQuery = useWorkspaceContextQuery();
@@ -48,7 +33,6 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
     };
 
     const isSystemAdmin = contextQuery.data?.user.isSystemAdmin ?? false;
-
     const value = useMemo<WorkspaceValue>(
         () => ({
             contextQuery,
@@ -60,7 +44,8 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
                 isSystemAdmin ||
                 Boolean(
                     selectedStore?.role &&
-                    ROLE_RANK[selectedStore.role] >= ROLE_RANK[minimumRole]
+                    STORE_ROLE_RANK[selectedStore.role] >=
+                        STORE_ROLE_RANK[minimumRole]
                 ),
         }),
         [contextQuery, effectiveStoreId, isSystemAdmin, selectedStore]
