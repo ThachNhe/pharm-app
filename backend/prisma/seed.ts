@@ -165,6 +165,8 @@ const seedDemoStore = async (seededUsers: Awaited<ReturnType<typeof seedUsers>>)
     },
     update: {
       categoryId: pharmaceuticalCategory.id,
+      code: 'SP-DEMO-001',
+      positionName: 'Kệ A',
       sellingPrice: 2000,
       minStock: 20,
       isActive: true,
@@ -173,6 +175,8 @@ const seedDemoStore = async (seededUsers: Awaited<ReturnType<typeof seedUsers>>)
       storeId: store.id,
       medicineId: medicine.id,
       categoryId: pharmaceuticalCategory.id,
+      code: 'SP-DEMO-001',
+      positionName: 'Kệ A',
       sellingPrice: 2000,
       minStock: 20,
     },

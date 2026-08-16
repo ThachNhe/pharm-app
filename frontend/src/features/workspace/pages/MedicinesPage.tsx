@@ -37,39 +37,64 @@ import {
     StatusBadge,
 } from '../components/shared';
 
-const medicineSchema = z.object({
-    categoryId: z.string().min(1, 'Chọn nhóm hàng hóa'),
-    name: z.string().trim().min(1, 'Nhập tên thuốc').max(255),
-    baseUnitName: z.string().trim().min(1, 'Nhập đơn vị cơ bản').max(50),
-    barcode: z.string().trim().max(100),
-    registrationNumber: z.string().trim().max(100),
-    activeIngredient: z.string().trim().max(255),
-    strength: z.string().trim().max(100),
-    dosageForm: z.string().trim().max(100),
-    manufacturer: z.string().trim().max(255),
-    sellingPrice: z
-        .number({ error: 'Nhập giá bán hợp lệ' })
-        .min(0, 'Giá bán không được âm'),
-    minStock: z
-        .number({ error: 'Nhập tồn tối thiểu hợp lệ' })
-        .min(0, 'Tồn tối thiểu không được âm'),
-    requiresPrescription: z.boolean(),
-    description: z.string().trim().max(2000),
-    isActive: z.boolean(),
-});
+const medicineSchema = z
+    .object({
+        categoryId: z.string().min(1, 'Chọn nhóm hàng hóa'),
+        code: z.string().trim().min(1, 'Nhập mã hàng hóa').max(50),
+        positionName: z.string().trim().max(255),
+        name: z.string().trim().min(1, 'Nhập tên thuốc').max(255),
+        baseUnitName: z.string().trim().min(1, 'Nhập đơn vị cơ bản').max(50),
+        barcode: z.string().trim().max(100),
+        secondaryBarcode: z.string().trim().max(100),
+        registrationNumber: z.string().trim().max(100),
+        activeIngredient: z.string().trim().max(255),
+        strength: z.string().trim().max(100),
+        dosageForm: z.string().trim().max(100),
+        manufacturer: z.string().trim().max(255),
+        countryOfOrigin: z.string().trim().max(100),
+        importerName: z.string().trim().max(255),
+        specification: z.string().trim().max(2000),
+        usageInstructions: z.string().trim().max(2000),
+        sellingPrice: z
+            .number({ error: 'Nhập giá bán hợp lệ' })
+            .min(0, 'Giá bán không được âm'),
+        minStock: z
+            .number({ error: 'Nhập tồn tối thiểu hợp lệ' })
+            .min(0, 'Tồn tối thiểu không được âm'),
+        requiresPrescription: z.boolean(),
+        description: z.string().trim().max(2000),
+        isActive: z.boolean(),
+    })
+    .refine(
+        (values) =>
+            !values.barcode ||
+            !values.secondaryBarcode ||
+            values.barcode !== values.secondaryBarcode,
+        {
+            path: ['secondaryBarcode'],
+            message: 'Mã vạch 2 phải khác mã vạch chính',
+        }
+    );
 
 type MedicineFormValues = z.infer<typeof medicineSchema>;
 
 const emptyValues: MedicineFormValues = {
     categoryId: '',
+    code: '',
+    positionName: '',
     name: '',
     baseUnitName: 'Viên',
     barcode: '',
+    secondaryBarcode: '',
     registrationNumber: '',
     activeIngredient: '',
     strength: '',
     dosageForm: '',
     manufacturer: '',
+    countryOfOrigin: '',
+    importerName: '',
+    specification: '',
+    usageInstructions: '',
     sellingPrice: 0,
     minStock: 0,
     requiresPrescription: false,
@@ -78,15 +103,22 @@ const emptyValues: MedicineFormValues = {
 };
 
 const getMedicineValues = (medicine: Medicine): MedicineFormValues => ({
-    categoryId: medicine.categoryId ?? '',
+    categoryId: medicine.categoryId,
+    code: medicine.code,
+    positionName: medicine.positionName ?? '',
     name: medicine.name,
     baseUnitName: medicine.baseUnitName,
     barcode: medicine.barcode ?? '',
+    secondaryBarcode: medicine.secondaryBarcode ?? '',
     registrationNumber: medicine.registrationNumber ?? '',
     activeIngredient: medicine.activeIngredient ?? '',
     strength: medicine.strength ?? '',
     dosageForm: medicine.dosageForm ?? '',
     manufacturer: medicine.manufacturer ?? '',
+    countryOfOrigin: medicine.countryOfOrigin ?? '',
+    importerName: medicine.importerName ?? '',
+    specification: medicine.specification ?? '',
+    usageInstructions: medicine.usageInstructions ?? '',
     sellingPrice: medicine.sellingPrice,
     minStock: medicine.minStock,
     requiresPrescription: medicine.requiresPrescription,
@@ -178,14 +210,24 @@ function MedicineDialog({
         form.reset({
             ...emptyValues,
             categoryId: matchingCategory?.id ?? '',
+            code: product.code ?? '',
+            positionName: product.positionName ?? '',
             name: product.name,
             baseUnitName: product.unitName ?? emptyValues.baseUnitName,
             barcode: product.barcode ?? product.secondaryBarcode ?? '',
+            secondaryBarcode:
+                product.secondaryBarcode &&
+                product.secondaryBarcode !== product.barcode
+                    ? product.secondaryBarcode
+                    : '',
             registrationNumber: product.registrationNumber ?? '',
             activeIngredient: product.activeIngredient ?? '',
             manufacturer: product.manufacturer ?? '',
+            countryOfOrigin: product.countryOfOrigin ?? '',
+            importerName: product.importerName ?? '',
+            specification: product.specification ?? '',
+            usageInstructions: product.usageInstructions ?? '',
             minStock: product.minInventory ?? 0,
-            description: product.usageInstructions ?? '',
         });
     };
 
@@ -197,6 +239,8 @@ function MedicineDialog({
                     medicine.id,
                     {
                         categoryId: values.categoryId,
+                        code: values.code,
+                        positionName: values.positionName || undefined,
                         sellingPrice: values.sellingPrice,
                         minStock: values.minStock,
                         isActive: values.isActive,
@@ -207,11 +251,16 @@ function MedicineDialog({
                 ...values,
                 referenceProductId: selectedReferenceProduct?.id,
                 barcode: values.barcode || undefined,
+                secondaryBarcode: values.secondaryBarcode || undefined,
                 registrationNumber: values.registrationNumber || undefined,
                 activeIngredient: values.activeIngredient || undefined,
                 strength: values.strength || undefined,
                 dosageForm: values.dosageForm || undefined,
                 manufacturer: values.manufacturer || undefined,
+                countryOfOrigin: values.countryOfOrigin || undefined,
+                importerName: values.importerName || undefined,
+                specification: values.specification || undefined,
+                usageInstructions: values.usageInstructions || undefined,
                 description: values.description || undefined,
             };
             return medicine
@@ -271,8 +320,8 @@ function MedicineDialog({
                     </DialogTitle>
                     <DialogDescription>
                         {sharedDetailsLocked
-                            ? 'Thuốc từ thư viện dùng thông tin chung; bạn có thể cập nhật giá, tồn tối thiểu và trạng thái của quầy.'
-                            : 'Thông tin giá và định mức tồn được áp dụng riêng cho quầy đang chọn.'}
+                            ? 'Thông tin thuốc từ thư viện được dùng chung; mã hàng hóa, nhóm, vị trí, giá và tồn tối thiểu được cấu hình riêng cho quầy.'
+                            : 'Mã hàng hóa, vị trí, giá và định mức tồn được áp dụng riêng cho quầy đang chọn.'}
                     </DialogDescription>
                 </DialogHeader>
                 {!medicine ? (
@@ -439,12 +488,22 @@ function MedicineDialog({
                             </div>
                         ) : null}
                         <Field
+                            label="Mã hàng hóa"
+                            required
+                            error={errors.code?.message}
+                        >
+                            <Input
+                                autoFocus
+                                placeholder="SP000042"
+                                {...form.register('code')}
+                            />
+                        </Field>
+                        <Field
                             label="Tên thuốc"
                             required
                             error={errors.name?.message}
                         >
                             <Input
-                                autoFocus
                                 readOnly={referenceDetailsLocked}
                                 placeholder="Paracetamol 500mg"
                                 {...form.register('name')}
@@ -476,7 +535,7 @@ function MedicineDialog({
                             error={errors.strength?.message}
                         >
                             <Input
-                                readOnly={referenceDetailsLocked}
+                                readOnly={sharedDetailsLocked}
                                 placeholder="500 mg"
                                 {...form.register('strength')}
                             />
@@ -486,6 +545,16 @@ function MedicineDialog({
                                 readOnly={referenceDetailsLocked}
                                 placeholder="Quét hoặc nhập mã vạch"
                                 {...form.register('barcode')}
+                            />
+                        </Field>
+                        <Field
+                            label="Mã vạch 2"
+                            error={errors.secondaryBarcode?.message}
+                        >
+                            <Input
+                                readOnly={referenceDetailsLocked}
+                                placeholder="Mã vạch phụ (nếu có)"
+                                {...form.register('secondaryBarcode')}
                             />
                         </Field>
                         <Field
@@ -554,7 +623,7 @@ function MedicineDialog({
                             error={errors.dosageForm?.message}
                         >
                             <Input
-                                readOnly={referenceDetailsLocked}
+                                readOnly={sharedDetailsLocked}
                                 placeholder="Viên nén"
                                 {...form.register('dosageForm')}
                             />
@@ -569,7 +638,59 @@ function MedicineDialog({
                                 {...form.register('manufacturer')}
                             />
                         </Field>
-                        <div className="hidden sm:block" />
+                        <Field
+                            label="Nước sản xuất"
+                            error={errors.countryOfOrigin?.message}
+                        >
+                            <Input
+                                readOnly={referenceDetailsLocked}
+                                placeholder="Việt Nam"
+                                {...form.register('countryOfOrigin')}
+                            />
+                        </Field>
+                        <Field
+                            label="Nhà nhập khẩu"
+                            error={errors.importerName?.message}
+                        >
+                            <Input
+                                readOnly={referenceDetailsLocked}
+                                placeholder="Tên đơn vị nhập khẩu"
+                                {...form.register('importerName')}
+                            />
+                        </Field>
+                        <Field
+                            label="Vị trí tại quầy"
+                            error={errors.positionName?.message}
+                        >
+                            <Input
+                                placeholder="Kệ A1"
+                                {...form.register('positionName')}
+                            />
+                        </Field>
+                        <Field
+                            label="Quy cách"
+                            error={errors.specification?.message}
+                            className="sm:col-span-2"
+                        >
+                            <Input
+                                readOnly={referenceDetailsLocked}
+                                placeholder="Hộp 10 vỉ x 10 viên"
+                                {...form.register('specification')}
+                            />
+                        </Field>
+                        <Field
+                            label="Hướng dẫn sử dụng"
+                            error={errors.usageInstructions?.message}
+                            className="sm:col-span-2"
+                        >
+                            <textarea
+                                readOnly={referenceDetailsLocked}
+                                rows={3}
+                                className="border-input focus:border-ring focus:ring-ring/20 read-only:bg-muted/40 w-full resize-y rounded-md border bg-transparent px-3 py-2 text-sm outline-none read-only:cursor-default focus:ring-3"
+                                placeholder="Cách dùng và liều dùng"
+                                {...form.register('usageInstructions')}
+                            />
+                        </Field>
                         <Field
                             label="Giá bán"
                             required
@@ -605,7 +726,7 @@ function MedicineDialog({
                             className="sm:col-span-2"
                         >
                             <textarea
-                                readOnly={referenceDetailsLocked}
+                                readOnly={sharedDetailsLocked}
                                 rows={3}
                                 className="border-input focus:border-ring focus:ring-ring/20 w-full resize-y rounded-md border bg-transparent px-3 py-2 text-sm outline-none focus:ring-3"
                                 placeholder="Thông tin sử dụng nội bộ"
@@ -615,7 +736,7 @@ function MedicineDialog({
                         <div className="flex flex-wrap gap-5 sm:col-span-2">
                             <label className="flex cursor-pointer items-center gap-2 text-sm">
                                 <Checkbox
-                                    disabled={referenceDetailsLocked}
+                                    disabled={sharedDetailsLocked}
                                     checked={requiresPrescription}
                                     onCheckedChange={(checked) =>
                                         form.setValue(
@@ -745,7 +866,7 @@ export function MedicinesPage() {
                     <SearchInput
                         value={search}
                         onChange={setSearch}
-                        placeholder="Tìm tên, mã vạch, hoạt chất"
+                        placeholder="Tìm mã, tên, mã vạch, hoạt chất, vị trí"
                     />
                     <p className="text-muted-foreground text-sm">
                         {formatNumber(medicinesQuery.data?.totalResults ?? 0)}{' '}
@@ -781,17 +902,23 @@ export function MedicinesPage() {
                 ) : (
                     <>
                         <div className="overflow-x-auto">
-                            <table className="w-full min-w-[1040px] text-left text-sm">
+                            <table className="w-full min-w-[1240px] text-left text-sm">
                                 <thead className="bg-muted/55 text-muted-foreground text-xs uppercase">
                                     <tr>
                                         <th className="px-4 py-3 font-medium">
                                             Thuốc
                                         </th>
                                         <th className="px-4 py-3 font-medium">
+                                            Mã hàng hóa
+                                        </th>
+                                        <th className="px-4 py-3 font-medium">
                                             Mã vạch
                                         </th>
                                         <th className="px-4 py-3 font-medium">
                                             Nhóm hàng hóa
+                                        </th>
+                                        <th className="px-4 py-3 font-medium">
+                                            Vị trí
                                         </th>
                                         <th className="px-4 py-3 text-right font-medium">
                                             Giá bán
@@ -831,11 +958,23 @@ export function MedicinesPage() {
                                                             'Chưa bổ sung mô tả'}
                                                     </p>
                                                 </td>
+                                                <td className="px-4 py-3 font-mono text-xs whitespace-nowrap">
+                                                    {medicine.code}
+                                                </td>
                                                 <td className="text-muted-foreground px-4 py-3 font-mono text-xs">
-                                                    {medicine.barcode || '—'}
+                                                    {[
+                                                        medicine.barcode,
+                                                        medicine.secondaryBarcode,
+                                                    ]
+                                                        .filter(Boolean)
+                                                        .join(' / ') || '—'}
                                                 </td>
                                                 <td className="px-4 py-3">
                                                     {medicine.category || '—'}
+                                                </td>
+                                                <td className="px-4 py-3">
+                                                    {medicine.positionName ||
+                                                        '—'}
                                                 </td>
                                                 <td className="px-4 py-3 text-right font-medium">
                                                     {formatCurrency(

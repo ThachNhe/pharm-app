@@ -13,6 +13,8 @@ type ReferenceProductRow = {
   barcode: string | null;
   secondaryBarcode: string | null;
   manufacturer: string | null;
+  countryOfOrigin: string | null;
+  importerName: string | null;
   activeIngredient: string | null;
   specification: string | null;
   usageInstructions: string | null;
@@ -59,12 +61,14 @@ const toReferenceProduct = (value: unknown, syncedAt: Date): ReferenceProductRow
     barcode: optionalString(product.BAR_CODE),
     secondaryBarcode: optionalString(product.BAR_CODE2),
     manufacturer: optionalString(product.PLACE_MANUFACTURE),
+    countryOfOrigin: optionalString(product.COUNTRY_MANUFACTURE),
+    importerName: optionalString(product.IMPORT_COMPANY_NAME),
     activeIngredient: optionalString(product.ACTIVE_INGREDIENT),
     specification: optionalString(product.SPECIFICATION),
     usageInstructions: optionalString(product.CONTENT_PHARMA),
     categoryName: optionalString(product.CATEGORY_NAME),
     positionName: optionalString(product.POSITION_NAME),
-    supplierName: optionalString(product.PROVIDER_NAME) ?? optionalString(product.IMPORT_COMPANY_NAME),
+    supplierName: optionalString(product.PROVIDER_NAME),
     inputPrice: optionalPrice(product.PRICE_INPUT),
     referencePrice: optionalPrice(product.PRICE_RETAIL),
     wholesalePrice: optionalPrice(product.PRICE_OUTPUT),

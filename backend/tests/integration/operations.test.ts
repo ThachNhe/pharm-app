@@ -56,17 +56,32 @@ describe('Store operations flow', () => {
       .set('Authorization', `Bearer ${ownerToken}`)
       .send({
         categoryId: categoryRes.body.id,
+        code: 'SP-PARA-001',
+        positionName: 'Kệ A1',
         name: 'Paracetamol 500mg',
         baseUnitName: 'Viên',
         barcode: faker.random.alphaNumeric(12),
+        secondaryBarcode: faker.random.alphaNumeric(12),
         activeIngredient: 'Paracetamol',
+        countryOfOrigin: 'Việt Nam',
+        importerName: 'Công ty nhập khẩu kiểm thử',
+        specification: 'Hộp 10 vỉ x 10 viên',
+        usageInstructions: 'Uống sau ăn',
         sellingPrice: 2000,
         minStock: 20,
         isActive: true,
       })
       .expect(httpStatus.CREATED);
 
-    expect(medicineRes.body.isActive).toBe(true);
+    expect(medicineRes.body).toMatchObject({
+      code: 'SP-PARA-001',
+      positionName: 'Kệ A1',
+      countryOfOrigin: 'Việt Nam',
+      importerName: 'Công ty nhập khẩu kiểm thử',
+      specification: 'Hộp 10 vỉ x 10 viên',
+      usageInstructions: 'Uống sau ăn',
+      isActive: true,
+    });
 
     const importRes = await request(app)
       .post(`/v1/stores/${store.id}/imports`)
@@ -351,7 +366,10 @@ describe('Store operations flow', () => {
         barcode: sharedBarcode,
         secondaryBarcode: faker.random.alphaNumeric(12),
         manufacturer: 'Nhà sản xuất B',
+        countryOfOrigin: 'Đức',
+        importerName: 'Công ty nhập khẩu B',
         activeIngredient: 'Hoạt chất B',
+        specification: 'Hộp 10 vỉ x 10 viên',
         usageInstructions: 'Dùng theo chỉ dẫn',
         categoryName: 'Dược phẩm',
         positionName: 'Kệ B',
@@ -402,6 +420,8 @@ describe('Store operations flow', () => {
         unitName: 'Hộp',
         registrationNumber: `${search}-GPNK`,
         activeIngredient: 'Hoạt chất B',
+        countryOfOrigin: 'Đức',
+        importerName: 'Công ty nhập khẩu B',
         usageInstructions: 'Dùng theo chỉ dẫn',
         categoryName: 'Dược phẩm',
         positionName: 'Kệ B',
@@ -423,6 +443,8 @@ describe('Store operations flow', () => {
 
     const createPayload = {
       categoryId: firstCategory.id,
+      code: referenceProducts[1].code.toUpperCase(),
+      positionName: 'Kệ B2',
       referenceProductId: referenceProducts[1].id,
       name: 'Tên giả từ client',
       baseUnitName: 'Viên',
@@ -441,11 +463,17 @@ describe('Store operations flow', () => {
       name: referenceProducts[1].name,
       baseUnitName: 'Hộp',
       barcode: referenceProducts[1].barcode,
+      secondaryBarcode: referenceProducts[1].secondaryBarcode,
       registrationNumber: `${search}-GPNK`,
       manufacturer: referenceProducts[1].manufacturer,
+      countryOfOrigin: 'Đức',
+      importerName: 'Công ty nhập khẩu B',
       activeIngredient: 'Hoạt chất B',
       category: 'Dược phẩm',
-      description: 'Dùng theo chỉ dẫn',
+      specification: 'Hộp 10 vỉ x 10 viên',
+      usageInstructions: 'Dùng theo chỉ dẫn',
+      code: referenceProducts[1].code.toUpperCase(),
+      positionName: 'Kệ B2',
     });
 
     const secondMedicineRes = await request(app)
@@ -468,7 +496,11 @@ describe('Store operations flow', () => {
     const duplicateBarcodeRes = await request(app)
       .post(`/v1/stores/${firstStore.id}/medicines`)
       .set('Authorization', `Bearer ${ownerToken}`)
-      .send({ ...createPayload, referenceProductId: referenceProducts[2].id })
+      .send({
+        ...createPayload,
+        code: referenceProducts[2].code,
+        referenceProductId: referenceProducts[2].id,
+      })
       .expect(httpStatus.CREATED);
     expect(duplicateBarcodeRes.body).toMatchObject({
       referenceProductId: referenceProducts[2].id,
@@ -477,9 +509,15 @@ describe('Store operations flow', () => {
     });
 
     await request(app)
+      .patch(`/v1/stores/${firstStore.id}/medicines/${duplicateBarcodeRes.body.id}`)
+      .set('Authorization', `Bearer ${ownerToken}`)
+      .send({ code: referenceProducts[1].code })
+      .expect(httpStatus.CONFLICT);
+
+    await request(app)
       .post(`/v1/stores/${firstStore.id}/medicines`)
       .set('Authorization', `Bearer ${ownerToken}`)
-      .send(createPayload)
+      .send({ ...createPayload, code: `${search}-DUPLICATE-ASSIGNMENT` })
       .expect(httpStatus.CONFLICT);
 
     await request(app)
@@ -497,12 +535,21 @@ describe('Store operations flow', () => {
     const updatedRes = await request(app)
       .patch(`/v1/stores/${firstStore.id}/medicines/${firstMedicineRes.body.id}`)
       .set('Authorization', `Bearer ${ownerToken}`)
-      .send({ categoryId: updatedCategory.id, sellingPrice: 4200, minStock: 15, isActive: false })
+      .send({
+        categoryId: updatedCategory.id,
+        code: `${search}-STORE-CODE`,
+        positionName: 'Kệ C3',
+        sellingPrice: 4200,
+        minStock: 15,
+        isActive: false,
+      })
       .expect(httpStatus.OK);
 
     expect(updatedRes.body).toMatchObject({
       categoryId: updatedCategory.id,
       category: 'Thuốc kê đơn',
+      code: `${search}-STORE-CODE`.toUpperCase(),
+      positionName: 'Kệ C3',
       sellingPrice: 4200,
       minStock: 15,
       isActive: false,
@@ -518,6 +565,8 @@ describe('Store operations flow', () => {
     expect(Number(secondAssignment.sellingPrice)).toBe(3500);
     expect(Number(secondAssignment.minStock)).toBe(20);
     expect(secondAssignment.categoryId).toBe(secondCategory.id);
+    expect(secondAssignment.code).toBe(referenceProducts[1].code.toUpperCase());
+    expect(secondAssignment.positionName).toBe('Kệ B2');
     expect(secondAssignment.isActive).toBe(true);
 
     const updatedLibraryRes = await request(app)

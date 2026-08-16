@@ -21,15 +21,22 @@ type DateQuery = PageQuery & {
 type MedicinePayload = {
   referenceProductId?: string | null;
   categoryId: string;
+  code: string;
+  positionName?: string | null;
   name: string;
   baseUnitName: string;
   barcode?: string | null;
+  secondaryBarcode?: string | null;
   registrationNumber?: string | null;
   category?: string | null;
   activeIngredient?: string | null;
   strength?: string | null;
   dosageForm?: string | null;
   manufacturer?: string | null;
+  countryOfOrigin?: string | null;
+  importerName?: string | null;
+  specification?: string | null;
+  usageInstructions?: string | null;
   requiresPrescription?: boolean;
   description?: string | null;
   sellingPrice: number | string;
@@ -72,6 +79,8 @@ const asOptionalString = (value?: string | null) => {
   const normalized = value?.trim();
   return normalized ? normalized : null;
 };
+
+const normalizeProductCode = (value: string) => value.trim().toUpperCase();
 
 const toDecimal = (value: number | string | Prisma.Decimal) => new PrismaRuntime.Decimal(value);
 
@@ -197,9 +206,12 @@ const serializeMedicine = (storeMedicine, stock?: { total: Prisma.Decimal; avail
   id: storeMedicine.medicine.id,
   storeMedicineId: storeMedicine.id,
   referenceProductId: storeMedicine.medicine.referenceProductId,
+  code: storeMedicine.code,
+  positionName: storeMedicine.positionName,
   name: storeMedicine.medicine.name,
   baseUnitName: storeMedicine.medicine.baseUnitName,
   barcode: storeMedicine.medicine.barcode,
+  secondaryBarcode: storeMedicine.medicine.secondaryBarcode,
   registrationNumber: storeMedicine.medicine.registrationNumber,
   categoryId: storeMedicine.categoryId,
   category: storeMedicine.category.name,
@@ -207,6 +219,10 @@ const serializeMedicine = (storeMedicine, stock?: { total: Prisma.Decimal; avail
   strength: storeMedicine.medicine.strength,
   dosageForm: storeMedicine.medicine.dosageForm,
   manufacturer: storeMedicine.medicine.manufacturer,
+  countryOfOrigin: storeMedicine.medicine.countryOfOrigin,
+  importerName: storeMedicine.medicine.importerName,
+  specification: storeMedicine.medicine.specification,
+  usageInstructions: storeMedicine.medicine.usageInstructions,
   requiresPrescription: storeMedicine.medicine.requiresPrescription,
   description: storeMedicine.medicine.description,
   isActive: storeMedicine.isActive && storeMedicine.medicine.isActive,
@@ -225,6 +241,8 @@ const serializeReferenceProduct = (referenceProduct) => ({
   barcode: referenceProduct.barcode,
   secondaryBarcode: referenceProduct.secondaryBarcode,
   manufacturer: referenceProduct.manufacturer,
+  countryOfOrigin: referenceProduct.countryOfOrigin,
+  importerName: referenceProduct.importerName,
   activeIngredient: referenceProduct.activeIngredient,
   specification: referenceProduct.specification,
   usageInstructions: referenceProduct.usageInstructions,
@@ -275,13 +293,20 @@ const buildInventoryRows = async (storeId: string, search?: string) => {
       storeId,
       ...(search
         ? {
-            medicine: {
-              OR: [
-                { name: { contains: search, mode: 'insensitive' } },
-                { barcode: { contains: search, mode: 'insensitive' } },
-                { activeIngredient: { contains: search, mode: 'insensitive' } },
-              ],
-            },
+            OR: [
+              { code: { contains: search, mode: 'insensitive' } },
+              { positionName: { contains: search, mode: 'insensitive' } },
+              {
+                medicine: {
+                  OR: [
+                    { name: { contains: search, mode: 'insensitive' } },
+                    { barcode: { contains: search, mode: 'insensitive' } },
+                    { secondaryBarcode: { contains: search, mode: 'insensitive' } },
+                    { activeIngredient: { contains: search, mode: 'insensitive' } },
+                  ],
+                },
+              },
+            ],
           }
         : {}),
     },
@@ -628,6 +653,9 @@ const queryReferenceProducts = async (actor: Actor, storeId: string, query: Page
             { registrationNumber: { contains: search, mode: 'insensitive' } },
             { activeIngredient: { contains: search, mode: 'insensitive' } },
             { categoryName: { contains: search, mode: 'insensitive' } },
+            { countryOfOrigin: { contains: search, mode: 'insensitive' } },
+            { importerName: { contains: search, mode: 'insensitive' } },
+            { positionName: { contains: search, mode: 'insensitive' } },
             { supplierName: { contains: search, mode: 'insensitive' } },
           ],
         }
@@ -674,6 +702,13 @@ const createMedicine = async (actor: Actor, storeId: string, body: MedicinePaylo
       throw new ApiError(httpStatus.BAD_REQUEST, 'Nhóm sản phẩm không hợp lệ hoặc đã ngừng hoạt động');
     }
 
+    const code = normalizeProductCode(body.code);
+    const duplicateCode = await tx.storeMedicine.findFirst({
+      where: { storeId, code: { equals: code, mode: 'insensitive' } },
+      select: { id: true },
+    });
+    if (duplicateCode) throw new ApiError(httpStatus.CONFLICT, 'Mã hàng hóa đã tồn tại trong quầy');
+
     let referenceProduct: {
       id: string;
       name: string;
@@ -682,10 +717,13 @@ const createMedicine = async (actor: Actor, storeId: string, body: MedicinePaylo
       barcode: string | null;
       secondaryBarcode: string | null;
       manufacturer: string | null;
+      countryOfOrigin: string | null;
+      importerName: string | null;
       activeIngredient: string | null;
       specification: string | null;
       usageInstructions: string | null;
       categoryName: string | null;
+      positionName: string | null;
     } | null = null;
     if (body.referenceProductId) {
       referenceProduct = await tx.referenceProduct.findFirst({
@@ -698,10 +736,13 @@ const createMedicine = async (actor: Actor, storeId: string, body: MedicinePaylo
           barcode: true,
           secondaryBarcode: true,
           manufacturer: true,
+          countryOfOrigin: true,
+          importerName: true,
           activeIngredient: true,
           specification: true,
           usageInstructions: true,
           categoryName: true,
+          positionName: true,
         },
       });
       if (!referenceProduct) {
@@ -716,29 +757,52 @@ const createMedicine = async (actor: Actor, storeId: string, body: MedicinePaylo
       : [];
     const usedBarcodes = referenceBarcodes.length
       ? await tx.medicine.findMany({
-          where: { barcode: { in: referenceBarcodes } },
-          select: { barcode: true },
+          where: {
+            OR: [{ barcode: { in: referenceBarcodes } }, { secondaryBarcode: { in: referenceBarcodes } }],
+          },
+          select: { barcode: true, secondaryBarcode: true },
         })
       : [];
-    const usedBarcodeSet = new Set(usedBarcodes.map(({ barcode }) => barcode));
-    const availableReferenceBarcode = referenceBarcodes.find((barcode) => !usedBarcodeSet.has(barcode)) ?? null;
+    const usedBarcodeSet = new Set(usedBarcodes.flatMap(({ barcode, secondaryBarcode }) => [barcode, secondaryBarcode]));
+    const availableReferenceBarcodes = referenceBarcodes.filter((barcode) => !usedBarcodeSet.has(barcode));
+    const manualBarcodes = [asOptionalString(body.barcode), asOptionalString(body.secondaryBarcode)].filter(
+      (barcode): barcode is string => Boolean(barcode),
+    );
+    if (!referenceProduct && new Set(manualBarcodes).size !== manualBarcodes.length) {
+      throw new ApiError(httpStatus.BAD_REQUEST, 'Mã vạch 1 và mã vạch 2 không được trùng nhau');
+    }
+    if (!referenceProduct && manualBarcodes.length) {
+      const barcodeConflict = await tx.medicine.findFirst({
+        where: { OR: [{ barcode: { in: manualBarcodes } }, { secondaryBarcode: { in: manualBarcodes } }] },
+        select: { id: true },
+      });
+      if (barcodeConflict) throw new ApiError(httpStatus.CONFLICT, 'Mã vạch đã được sử dụng cho thuốc khác');
+    }
 
     const medicineData: Prisma.MedicineCreateInput = {
       referenceProduct: body.referenceProductId ? { connect: { id: body.referenceProductId } } : undefined,
       name: referenceProduct?.name ?? body.name.trim(),
       baseUnitName: referenceProduct?.unitName ?? body.baseUnitName.trim(),
-      barcode: referenceProduct ? availableReferenceBarcode : asOptionalString(body.barcode),
+      barcode: referenceProduct ? (availableReferenceBarcodes[0] ?? null) : asOptionalString(body.barcode),
+      secondaryBarcode: referenceProduct ? (availableReferenceBarcodes[1] ?? null) : asOptionalString(body.secondaryBarcode),
       registrationNumber: referenceProduct?.registrationNumber ?? asOptionalString(body.registrationNumber),
       category: referenceProduct?.categoryName ?? productCategory.name,
       activeIngredient: referenceProduct?.activeIngredient ?? asOptionalString(body.activeIngredient),
       strength: asOptionalString(body.strength),
       dosageForm: asOptionalString(body.dosageForm),
       manufacturer: referenceProduct ? asOptionalString(referenceProduct.manufacturer) : asOptionalString(body.manufacturer),
+      countryOfOrigin: referenceProduct
+        ? asOptionalString(referenceProduct.countryOfOrigin)
+        : asOptionalString(body.countryOfOrigin),
+      importerName: referenceProduct ? asOptionalString(referenceProduct.importerName) : asOptionalString(body.importerName),
+      specification: referenceProduct
+        ? asOptionalString(referenceProduct.specification)
+        : asOptionalString(body.specification),
+      usageInstructions: referenceProduct
+        ? asOptionalString(referenceProduct.usageInstructions)
+        : asOptionalString(body.usageInstructions),
       requiresPrescription: body.requiresPrescription ?? false,
-      description:
-        referenceProduct?.usageInstructions ??
-        asOptionalString(body.description) ??
-        asOptionalString(referenceProduct?.specification),
+      description: asOptionalString(body.description),
       units: {
         create: {
           name: referenceProduct?.unitName ?? body.baseUnitName.trim(),
@@ -768,6 +832,8 @@ const createMedicine = async (actor: Actor, storeId: string, body: MedicinePaylo
         storeId,
         medicineId: medicine.id,
         categoryId: productCategory.id,
+        code,
+        positionName: asOptionalString(body.positionName ?? referenceProduct?.positionName),
         sellingPrice: toDecimal(body.sellingPrice),
         minStock: toDecimal(body.minStock ?? 0),
         isActive: body.isActive ?? true,
@@ -794,7 +860,7 @@ const updateMedicine = async (
   await getStoreAccess(actor, storeId, 'manager');
   const assigned = await prisma.storeMedicine.findUnique({
     where: { storeId_medicineId: { storeId, medicineId } },
-    include: { medicine: { select: { referenceProductId: true } } },
+    include: { medicine: { select: { referenceProductId: true, barcode: true, secondaryBarcode: true } } },
   });
   if (!assigned) {
     throw new ApiError(httpStatus.NOT_FOUND, 'Thuốc chưa được cấu hình tại quầy này');
@@ -804,12 +870,17 @@ const updateMedicine = async (
     body.name !== undefined ||
     body.baseUnitName !== undefined ||
     body.barcode !== undefined ||
+    body.secondaryBarcode !== undefined ||
     body.registrationNumber !== undefined ||
     body.category !== undefined ||
     body.activeIngredient !== undefined ||
     body.strength !== undefined ||
     body.dosageForm !== undefined ||
     body.manufacturer !== undefined ||
+    body.countryOfOrigin !== undefined ||
+    body.importerName !== undefined ||
+    body.specification !== undefined ||
+    body.usageInstructions !== undefined ||
     body.requiresPrescription !== undefined ||
     body.description !== undefined;
   if (assigned.medicine.referenceProductId && changesSharedDetails) {
@@ -817,6 +888,15 @@ const updateMedicine = async (
   }
 
   return prisma.$transaction(async (tx) => {
+    if (body.code !== undefined) {
+      const code = normalizeProductCode(body.code);
+      const duplicateCode = await tx.storeMedicine.findFirst({
+        where: { id: { not: assigned.id }, storeId, code: { equals: code, mode: 'insensitive' } },
+        select: { id: true },
+      });
+      if (duplicateCode) throw new ApiError(httpStatus.CONFLICT, 'Mã hàng hóa đã tồn tại trong quầy');
+    }
+
     if (body.categoryId && body.categoryId !== assigned.categoryId) {
       const category = await tx.productCategory.findFirst({
         where: { id: body.categoryId, storeId, isActive: true },
@@ -828,18 +908,41 @@ const updateMedicine = async (
     }
 
     if (changesSharedDetails) {
+      const requestedBarcodes = [
+        body.barcode === undefined ? assigned.medicine.barcode : asOptionalString(body.barcode),
+        body.secondaryBarcode === undefined ? assigned.medicine.secondaryBarcode : asOptionalString(body.secondaryBarcode),
+      ];
+      const suppliedBarcodes = requestedBarcodes.filter((barcode): barcode is string => Boolean(barcode));
+      if (new Set(suppliedBarcodes).size !== suppliedBarcodes.length) {
+        throw new ApiError(httpStatus.BAD_REQUEST, 'Mã vạch 1 và mã vạch 2 không được trùng nhau');
+      }
+      if (suppliedBarcodes.length) {
+        const barcodeConflict = await tx.medicine.findFirst({
+          where: {
+            id: { not: medicineId },
+            OR: [{ barcode: { in: suppliedBarcodes } }, { secondaryBarcode: { in: suppliedBarcodes } }],
+          },
+          select: { id: true },
+        });
+        if (barcodeConflict) throw new ApiError(httpStatus.CONFLICT, 'Mã vạch đã được sử dụng cho thuốc khác');
+      }
       await tx.medicine.update({
         where: { id: medicineId },
         data: {
           name: body.name?.trim(),
           baseUnitName: body.baseUnitName?.trim(),
           barcode: body.barcode === undefined ? undefined : asOptionalString(body.barcode),
+          secondaryBarcode: body.secondaryBarcode === undefined ? undefined : asOptionalString(body.secondaryBarcode),
           registrationNumber: body.registrationNumber === undefined ? undefined : asOptionalString(body.registrationNumber),
           category: body.category === undefined ? undefined : asOptionalString(body.category),
           activeIngredient: body.activeIngredient === undefined ? undefined : asOptionalString(body.activeIngredient),
           strength: body.strength === undefined ? undefined : asOptionalString(body.strength),
           dosageForm: body.dosageForm === undefined ? undefined : asOptionalString(body.dosageForm),
           manufacturer: body.manufacturer === undefined ? undefined : asOptionalString(body.manufacturer),
+          countryOfOrigin: body.countryOfOrigin === undefined ? undefined : asOptionalString(body.countryOfOrigin),
+          importerName: body.importerName === undefined ? undefined : asOptionalString(body.importerName),
+          specification: body.specification === undefined ? undefined : asOptionalString(body.specification),
+          usageInstructions: body.usageInstructions === undefined ? undefined : asOptionalString(body.usageInstructions),
           requiresPrescription: body.requiresPrescription,
           description: body.description === undefined ? undefined : asOptionalString(body.description),
         },
@@ -857,6 +960,8 @@ const updateMedicine = async (
       where: { storeId_medicineId: { storeId, medicineId } },
       data: {
         categoryId: body.categoryId,
+        code: body.code === undefined ? undefined : normalizeProductCode(body.code),
+        positionName: body.positionName === undefined ? undefined : asOptionalString(body.positionName),
         sellingPrice: body.sellingPrice === undefined ? undefined : toDecimal(body.sellingPrice),
         minStock: body.minStock === undefined ? undefined : toDecimal(body.minStock),
         isActive: body.isActive,
@@ -869,6 +974,8 @@ const updateMedicine = async (
       targetType: 'medicine',
       targetId: medicineId,
       metadata: {
+        code: updated.code,
+        positionName: updated.positionName,
         sellingPrice: Number(updated.sellingPrice),
         minStock: Number(updated.minStock),
         isActive: updated.isActive,

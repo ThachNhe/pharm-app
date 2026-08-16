@@ -119,7 +119,7 @@ export function MedicineLibraryPage() {
                             tabIndex={0}
                             aria-label="Bảng thông tin chi tiết thư viện thuốc"
                         >
-                            <table className="w-full min-w-[3400px] text-left text-sm">
+                            <table className="w-full min-w-[3800px] text-left text-sm">
                                 <thead className="bg-muted/55 text-muted-foreground text-xs uppercase">
                                     <tr>
                                         <th className="bg-muted sticky left-0 z-20 w-32 min-w-32 px-4 py-3 font-medium">
@@ -145,6 +145,12 @@ export function MedicineLibraryPage() {
                                         </th>
                                         <th className="px-4 py-3 font-medium">
                                             Hãng sản xuất
+                                        </th>
+                                        <th className="px-4 py-3 font-medium">
+                                            Nước SX
+                                        </th>
+                                        <th className="px-4 py-3 font-medium">
+                                            Nhà nhập khẩu
                                         </th>
                                         <th className="px-4 py-3 font-medium">
                                             Hoạt chất
@@ -235,6 +241,24 @@ export function MedicineLibraryPage() {
                                                     >
                                                         {showText(
                                                             product.manufacturer
+                                                        )}
+                                                    </span>
+                                                </td>
+                                                <td className="max-w-48 px-4 py-3">
+                                                    {showText(
+                                                        product.countryOfOrigin
+                                                    )}
+                                                </td>
+                                                <td className="max-w-64 px-4 py-3">
+                                                    <span
+                                                        className="line-clamp-2"
+                                                        title={
+                                                            product.importerName ??
+                                                            undefined
+                                                        }
+                                                    >
+                                                        {showText(
+                                                            product.importerName
                                                         )}
                                                     </span>
                                                 </td>

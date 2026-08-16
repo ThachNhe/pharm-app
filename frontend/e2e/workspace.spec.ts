@@ -104,7 +104,7 @@ test('system admin can use the workspace across desktop and mobile', async ({
 
     await page.goto('/admin/medicine-library');
     await expect(page.getByText(/\d[\d.]* sản phẩm/)).toBeVisible();
-    await expect(page.getByRole('columnheader')).toHaveCount(20);
+    await expect(page.getByRole('columnheader')).toHaveCount(22);
     await expect(
         page.getByText(/Số lô, hạn dùng và số lượng thực tế/)
     ).toBeVisible();
@@ -143,6 +143,9 @@ test('system admin can use the workspace across desktop and mobile', async ({
     await expect(medicineDialog.getByLabel('Tên thuốc')).toHaveValue(
         'Acyclovir 800Mg/ Stada'
     );
+    await expect(medicineDialog.getByLabel('Mã hàng hóa')).toHaveValue(
+        'HH02726'
+    );
     await expect(
         medicineDialog.getByRole('combobox', {
             name: 'Chọn nhóm hàng hóa',
@@ -173,6 +176,7 @@ test('system admin can use the workspace across desktop and mobile', async ({
     expect(createPayload).toMatchObject({
         referenceProductId: 'fffe7ae2-015e-4861-b4ce-501ef47ad5b7',
         categoryId: expect.any(String),
+        code: 'HH02726',
         name: 'Acyclovir 800Mg/ Stada',
         sellingPrice: 25000,
     });
