@@ -280,10 +280,22 @@ describe('Store operations flow', () => {
         id: faker.datatype.uuid(),
         code: `${search}-02`,
         name: `${search} B`,
+        unitName: 'Hộp',
+        registrationNumber: `${search}-GPNK`,
         barcode: sharedBarcode,
         secondaryBarcode: faker.random.alphaNumeric(12),
         manufacturer: 'Nhà sản xuất B',
+        activeIngredient: 'Hoạt chất B',
+        usageInstructions: 'Dùng theo chỉ dẫn',
+        categoryName: 'Dược phẩm',
+        positionName: 'Kệ B',
+        supplierName: 'Nhà cung cấp B',
+        inputPrice: 1200,
         referencePrice: 2000,
+        wholesalePrice: 1800,
+        doctorDiscountPercent: 5,
+        employeeDiscountPercent: 2,
+        minInventory: 7,
       },
       {
         id: faker.datatype.uuid(),
@@ -315,7 +327,19 @@ describe('Store operations flow', () => {
       expect.objectContaining({
         id: referenceProducts[1].id,
         code: referenceProducts[1].code,
+        unitName: 'Hộp',
+        registrationNumber: `${search}-GPNK`,
+        activeIngredient: 'Hoạt chất B',
+        usageInstructions: 'Dùng theo chỉ dẫn',
+        categoryName: 'Dược phẩm',
+        positionName: 'Kệ B',
+        supplierName: 'Nhà cung cấp B',
+        inputPrice: 1200,
         referencePrice: 2000,
+        wholesalePrice: 1800,
+        doctorDiscountPercent: 5,
+        employeeDiscountPercent: 2,
+        minInventory: 7,
         isAddedToStore: false,
       }),
     ]);
@@ -342,8 +366,13 @@ describe('Store operations flow', () => {
       .expect(httpStatus.CREATED);
     expect(firstMedicineRes.body).toMatchObject({
       name: referenceProducts[1].name,
+      baseUnitName: 'Hộp',
       barcode: referenceProducts[1].barcode,
+      registrationNumber: `${search}-GPNK`,
       manufacturer: referenceProducts[1].manufacturer,
+      activeIngredient: 'Hoạt chất B',
+      category: 'Dược phẩm',
+      description: 'Dùng theo chỉ dẫn',
     });
 
     const secondMedicineRes = await request(app)

@@ -103,10 +103,23 @@ test('system admin can use the workspace across desktop and mobile', async ({
 
     await page.goto('/admin/medicine-library');
     await expect(page.getByText(/\d[\d.]* sản phẩm/)).toBeVisible();
+    await expect(page.getByRole('columnheader')).toHaveCount(20);
+    await expect(
+        page.getByText(/Số lô, hạn dùng và số lượng thực tế/)
+    ).toBeVisible();
     await page.getByRole('button', { name: 'Trang 2', exact: true }).click();
     await expect(
         page.getByRole('button', { name: 'Trang 2', exact: true })
     ).toHaveAttribute('aria-current', 'page');
+    await page
+        .getByPlaceholder('Tìm tên, mã, barcode, SĐK, hoạt chất...')
+        .fill('HH02726');
+    const libraryRow = page.getByRole('row', {
+        name: /HH02726 Acyclovir 800Mg\/ Stada/,
+    });
+    await expect(libraryRow).toContainText('20.400');
+    await expect(libraryRow).toContainText('22.000');
+    await expect(libraryRow).toContainText('Dược phẩm');
 
     await page.goto('/admin/medicines');
     await page.getByRole('button', { name: 'Thêm thuốc', exact: true }).click();
@@ -189,6 +202,31 @@ test('system admin can use the workspace across desktop and mobile', async ({
     await expect(
         page.getByRole('navigation', { name: 'Điều hướng chính' }).last()
     ).toBeVisible();
+    await page
+        .getByRole('link', { name: 'Thư viện thuốc', exact: true })
+        .last()
+        .click();
+    await expect(
+        page.getByRole('heading', { name: 'Thư viện thuốc', exact: true })
+    ).toBeVisible();
+    await expect
+        .poll(() =>
+            page
+                .getByLabel('Bảng thông tin chi tiết thư viện thuốc')
+                .evaluate(
+                    (element) => element.scrollWidth > element.clientWidth
+                )
+        )
+        .toBe(true);
+    await expect
+        .poll(() =>
+            page.evaluate(
+                () => document.documentElement.scrollWidth <= window.innerWidth
+            )
+        )
+        .toBe(true);
+
+    await page.getByRole('button', { name: 'Mở menu' }).click();
     await page
         .getByRole('link', { name: 'Bán hàng', exact: true })
         .last()

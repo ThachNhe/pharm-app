@@ -202,11 +202,25 @@ const serializeReferenceProduct = (referenceProduct) => ({
   id: referenceProduct.id,
   code: referenceProduct.code,
   name: referenceProduct.name,
+  unitName: referenceProduct.unitName,
+  registrationNumber: referenceProduct.registrationNumber,
   barcode: referenceProduct.barcode,
   secondaryBarcode: referenceProduct.secondaryBarcode,
   manufacturer: referenceProduct.manufacturer,
+  activeIngredient: referenceProduct.activeIngredient,
   specification: referenceProduct.specification,
+  usageInstructions: referenceProduct.usageInstructions,
+  categoryName: referenceProduct.categoryName,
+  positionName: referenceProduct.positionName,
+  supplierName: referenceProduct.supplierName,
+  inputPrice: referenceProduct.inputPrice === null ? null : Number(referenceProduct.inputPrice),
   referencePrice: referenceProduct.referencePrice === null ? null : Number(referenceProduct.referencePrice),
+  wholesalePrice: referenceProduct.wholesalePrice === null ? null : Number(referenceProduct.wholesalePrice),
+  doctorDiscountPercent:
+    referenceProduct.doctorDiscountPercent === null ? null : Number(referenceProduct.doctorDiscountPercent),
+  employeeDiscountPercent:
+    referenceProduct.employeeDiscountPercent === null ? null : Number(referenceProduct.employeeDiscountPercent),
+  minInventory: referenceProduct.minInventory === null ? null : Number(referenceProduct.minInventory),
   isInternal: referenceProduct.isInternal,
   isNational: referenceProduct.isNational,
   syncedAt: referenceProduct.syncedAt,
@@ -486,6 +500,10 @@ const queryReferenceProducts = async (actor: Actor, storeId: string, query: Page
             { barcode: { contains: search, mode: 'insensitive' } },
             { secondaryBarcode: { contains: search, mode: 'insensitive' } },
             { manufacturer: { contains: search, mode: 'insensitive' } },
+            { registrationNumber: { contains: search, mode: 'insensitive' } },
+            { activeIngredient: { contains: search, mode: 'insensitive' } },
+            { categoryName: { contains: search, mode: 'insensitive' } },
+            { supplierName: { contains: search, mode: 'insensitive' } },
           ],
         }
       : {}),
@@ -527,10 +545,15 @@ const createMedicine = async (actor: Actor, storeId: string, body: MedicinePaylo
     let referenceProduct: {
       id: string;
       name: string;
+      unitName: string | null;
+      registrationNumber: string | null;
       barcode: string | null;
       secondaryBarcode: string | null;
       manufacturer: string | null;
+      activeIngredient: string | null;
       specification: string | null;
+      usageInstructions: string | null;
+      categoryName: string | null;
     } | null = null;
     if (body.referenceProductId) {
       referenceProduct = await tx.referenceProduct.findFirst({
@@ -538,10 +561,15 @@ const createMedicine = async (actor: Actor, storeId: string, body: MedicinePaylo
         select: {
           id: true,
           name: true,
+          unitName: true,
+          registrationNumber: true,
           barcode: true,
           secondaryBarcode: true,
           manufacturer: true,
+          activeIngredient: true,
           specification: true,
+          usageInstructions: true,
+          categoryName: true,
         },
       });
       if (!referenceProduct) {
@@ -566,19 +594,22 @@ const createMedicine = async (actor: Actor, storeId: string, body: MedicinePaylo
     const medicineData: Prisma.MedicineCreateInput = {
       referenceProduct: body.referenceProductId ? { connect: { id: body.referenceProductId } } : undefined,
       name: referenceProduct?.name ?? body.name.trim(),
-      baseUnitName: body.baseUnitName.trim(),
+      baseUnitName: referenceProduct?.unitName ?? body.baseUnitName.trim(),
       barcode: referenceProduct ? availableReferenceBarcode : asOptionalString(body.barcode),
-      registrationNumber: asOptionalString(body.registrationNumber),
-      category: asOptionalString(body.category),
-      activeIngredient: asOptionalString(body.activeIngredient),
+      registrationNumber: referenceProduct?.registrationNumber ?? asOptionalString(body.registrationNumber),
+      category: referenceProduct?.categoryName ?? asOptionalString(body.category),
+      activeIngredient: referenceProduct?.activeIngredient ?? asOptionalString(body.activeIngredient),
       strength: asOptionalString(body.strength),
       dosageForm: asOptionalString(body.dosageForm),
       manufacturer: referenceProduct ? asOptionalString(referenceProduct.manufacturer) : asOptionalString(body.manufacturer),
       requiresPrescription: body.requiresPrescription ?? false,
-      description: asOptionalString(body.description) ?? asOptionalString(referenceProduct?.specification),
+      description:
+        referenceProduct?.usageInstructions ??
+        asOptionalString(body.description) ??
+        asOptionalString(referenceProduct?.specification),
       units: {
         create: {
-          name: body.baseUnitName.trim(),
+          name: referenceProduct?.unitName ?? body.baseUnitName.trim(),
           conversionRate: 1,
           isBaseUnit: true,
         },

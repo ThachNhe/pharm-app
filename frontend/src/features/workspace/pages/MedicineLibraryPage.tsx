@@ -18,6 +18,14 @@ import {
 import { workspaceService } from '../services/workspace.service';
 import { useWorkspace } from '../useWorkspace';
 
+const showText = (value?: string | null) => value?.trim() || '—';
+const showMoney = (value?: number | null) =>
+    value == null ? '—' : formatCurrency(value);
+const showPercent = (value?: number | null) =>
+    value == null ? '—' : `${formatNumber(value)}%`;
+const showQuantity = (value?: number | null) =>
+    value == null ? '—' : formatNumber(value);
+
 export function MedicineLibraryPage() {
     const [search, setSearch] = useState('');
     const [page, setPage] = useState(1);
@@ -68,12 +76,12 @@ export function MedicineLibraryPage() {
                             setSearch(value);
                             setPage(1);
                         }}
-                        placeholder="Tìm tên, mã nguồn, barcode, nhà sản xuất"
+                        placeholder="Tìm tên, mã, barcode, SĐK, hoạt chất..."
                         className="sm:w-96"
                     />
                     <p className="text-muted-foreground flex items-center gap-2 text-sm">
                         {productsQuery.isFetching &&
-                            !productsQuery.isPending ? (
+                        !productsQuery.isPending ? (
                             <LoaderCircle
                                 className="size-4 animate-spin"
                                 aria-label="Đang cập nhật"
@@ -82,6 +90,11 @@ export function MedicineLibraryPage() {
                         {formatNumber(productsQuery.data?.totalResults ?? 0)}{' '}
                         sản phẩm
                     </p>
+                </div>
+                <div className="bg-secondary/35 text-muted-foreground border-border border-b px-4 py-2.5 text-xs">
+                    Số lô, hạn dùng và số lượng thực tế được quản lý tại Tồn kho
+                    theo từng quầy sau khi nhập hàng. Bảng chi tiết có thể cuộn
+                    ngang.
                 </div>
 
                 {productsQuery.isPending ? (
@@ -106,24 +119,70 @@ export function MedicineLibraryPage() {
                     />
                 ) : (
                     <>
-                        <div className="overflow-x-auto">
-                            <table className="w-full min-w-[1050px] text-left text-sm">
+                        <div
+                            className="overflow-x-auto"
+                            tabIndex={0}
+                            aria-label="Bảng thông tin chi tiết thư viện thuốc"
+                        >
+                            <table className="w-full min-w-[3400px] text-left text-sm">
                                 <thead className="bg-muted/55 text-muted-foreground text-xs uppercase">
                                     <tr>
-                                        <th className="px-4 py-3 font-medium">
-                                            Sản phẩm
+                                        <th className="bg-muted sticky left-0 z-20 w-32 min-w-32 px-4 py-3 font-medium">
+                                            Mã
+                                        </th>
+                                        <th className="bg-muted sticky left-32 z-20 w-80 min-w-80 px-4 py-3 font-medium">
+                                            Tên sản phẩm
                                         </th>
                                         <th className="px-4 py-3 font-medium">
-                                            Mã nguồn
-                                        </th>
-                                        <th className="px-4 py-3 font-medium">
-                                            Barcode
-                                        </th>
-                                        <th className="px-4 py-3 font-medium">
-                                            Nhà sản xuất
+                                            ĐVT
                                         </th>
                                         <th className="px-4 py-3 text-right font-medium">
-                                            Giá tham khảo
+                                            Giá nhập
+                                        </th>
+                                        <th className="px-4 py-3 text-right font-medium">
+                                            Giá bán lẻ
+                                        </th>
+                                        <th className="px-4 py-3 font-medium">
+                                            SĐK/GPNK
+                                        </th>
+                                        <th className="px-4 py-3 text-right font-medium">
+                                            Giá bán buôn
+                                        </th>
+                                        <th className="px-4 py-3 font-medium">
+                                            Hãng sản xuất
+                                        </th>
+                                        <th className="px-4 py-3 font-medium">
+                                            Hoạt chất
+                                        </th>
+                                        <th className="px-4 py-3 text-right font-medium">
+                                            % CK-BS
+                                        </th>
+                                        <th className="px-4 py-3 text-right font-medium">
+                                            % CK-NV
+                                        </th>
+                                        <th className="px-4 py-3 font-medium">
+                                            Mã vạch 1
+                                        </th>
+                                        <th className="px-4 py-3 font-medium">
+                                            Mã vạch 2
+                                        </th>
+                                        <th className="px-4 py-3 font-medium">
+                                            Hướng dẫn sử dụng
+                                        </th>
+                                        <th className="px-4 py-3 text-right font-medium">
+                                            Tồn kho T.T
+                                        </th>
+                                        <th className="px-4 py-3 font-medium">
+                                            Quy cách
+                                        </th>
+                                        <th className="px-4 py-3 font-medium">
+                                            Nhóm sản phẩm
+                                        </th>
+                                        <th className="px-4 py-3 font-medium">
+                                            Vị trí
+                                        </th>
+                                        <th className="px-4 py-3 font-medium">
+                                            Nhà cung cấp
                                         </th>
                                         <th className="px-4 py-3 font-medium">
                                             Tại quầy
@@ -135,47 +194,147 @@ export function MedicineLibraryPage() {
                                         (product) => (
                                             <tr
                                                 key={product.id}
-                                                className="hover:bg-muted/30"
+                                                className="group hover:bg-muted/30"
                                             >
-                                                <td className="max-w-80 px-4 py-3">
-                                                    <p className="font-medium">
+                                                <td className="bg-card group-hover:bg-muted sticky left-0 z-10 w-32 min-w-32 px-4 py-3 font-mono text-xs whitespace-nowrap transition-colors">
+                                                    {showText(product.code)}
+                                                </td>
+                                                <td className="bg-card group-hover:bg-muted sticky left-32 z-10 w-80 max-w-80 min-w-80 px-4 py-3 font-medium transition-colors">
+                                                    <span
+                                                        className="line-clamp-2"
+                                                        title={product.name}
+                                                    >
                                                         {product.name}
-                                                    </p>
-                                                    <p className="text-muted-foreground mt-0.5 truncate text-xs">
-                                                        {product.specification ||
-                                                            'Chưa có quy cách'}
-                                                    </p>
-                                                </td>
-                                                <td className="text-muted-foreground px-4 py-3 font-mono text-xs">
-                                                    {product.code || '—'}
-                                                </td>
-                                                <td className="px-4 py-3">
-                                                    <p className="font-mono text-xs">
-                                                        {product.barcode || '—'}
-                                                    </p>
-                                                    {product.secondaryBarcode &&
-                                                        product.secondaryBarcode !==
-                                                        product.barcode ? (
-                                                        <p className="text-muted-foreground mt-1 font-mono text-xs">
-                                                            {
-                                                                product.secondaryBarcode
-                                                            }
-                                                        </p>
-                                                    ) : null}
-                                                </td>
-                                                <td className="text-muted-foreground max-w-56 px-4 py-3">
-                                                    <span className="line-clamp-2">
-                                                        {product.manufacturer ||
-                                                            '—'}
                                                     </span>
                                                 </td>
-                                                <td className="px-4 py-3 text-right font-medium">
-                                                    {product.referencePrice &&
-                                                        product.referencePrice > 0
-                                                        ? formatCurrency(
-                                                            product.referencePrice
-                                                        )
-                                                        : '—'}
+                                                <td className="px-4 py-3 whitespace-nowrap">
+                                                    {showText(product.unitName)}
+                                                </td>
+                                                <td className="px-4 py-3 text-right whitespace-nowrap">
+                                                    {showMoney(
+                                                        product.inputPrice
+                                                    )}
+                                                </td>
+                                                <td className="px-4 py-3 text-right font-medium whitespace-nowrap">
+                                                    {showMoney(
+                                                        product.referencePrice
+                                                    )}
+                                                </td>
+                                                <td className="px-4 py-3 whitespace-nowrap">
+                                                    {showText(
+                                                        product.registrationNumber
+                                                    )}
+                                                </td>
+                                                <td className="px-4 py-3 text-right whitespace-nowrap">
+                                                    {showMoney(
+                                                        product.wholesalePrice
+                                                    )}
+                                                </td>
+                                                <td className="max-w-64 px-4 py-3">
+                                                    <span
+                                                        className="line-clamp-2"
+                                                        title={
+                                                            product.manufacturer ??
+                                                            undefined
+                                                        }
+                                                    >
+                                                        {showText(
+                                                            product.manufacturer
+                                                        )}
+                                                    </span>
+                                                </td>
+                                                <td className="max-w-64 px-4 py-3">
+                                                    <span
+                                                        className="line-clamp-2"
+                                                        title={
+                                                            product.activeIngredient ??
+                                                            undefined
+                                                        }
+                                                    >
+                                                        {showText(
+                                                            product.activeIngredient
+                                                        )}
+                                                    </span>
+                                                </td>
+                                                <td className="px-4 py-3 text-right whitespace-nowrap">
+                                                    {showPercent(
+                                                        product.doctorDiscountPercent
+                                                    )}
+                                                </td>
+                                                <td className="px-4 py-3 text-right whitespace-nowrap">
+                                                    {showPercent(
+                                                        product.employeeDiscountPercent
+                                                    )}
+                                                </td>
+                                                <td className="px-4 py-3 font-mono text-xs whitespace-nowrap">
+                                                    {showText(product.barcode)}
+                                                </td>
+                                                <td className="px-4 py-3 font-mono text-xs whitespace-nowrap">
+                                                    {showText(
+                                                        product.secondaryBarcode
+                                                    )}
+                                                </td>
+                                                <td className="max-w-72 px-4 py-3">
+                                                    <span
+                                                        className="line-clamp-2"
+                                                        title={
+                                                            product.usageInstructions ??
+                                                            undefined
+                                                        }
+                                                    >
+                                                        {showText(
+                                                            product.usageInstructions
+                                                        )}
+                                                    </span>
+                                                </td>
+                                                <td className="px-4 py-3 text-right whitespace-nowrap">
+                                                    {showQuantity(
+                                                        product.minInventory
+                                                    )}
+                                                </td>
+                                                <td className="max-w-72 px-4 py-3">
+                                                    <span
+                                                        className="line-clamp-2"
+                                                        title={
+                                                            product.specification ??
+                                                            undefined
+                                                        }
+                                                    >
+                                                        {showText(
+                                                            product.specification
+                                                        )}
+                                                    </span>
+                                                </td>
+                                                <td className="px-4 py-3 whitespace-nowrap">
+                                                    {showText(
+                                                        product.categoryName
+                                                    )}
+                                                </td>
+                                                <td className="max-w-64 px-4 py-3">
+                                                    <span
+                                                        className="line-clamp-2"
+                                                        title={
+                                                            product.positionName ??
+                                                            undefined
+                                                        }
+                                                    >
+                                                        {showText(
+                                                            product.positionName
+                                                        )}
+                                                    </span>
+                                                </td>
+                                                <td className="max-w-64 px-4 py-3">
+                                                    <span
+                                                        className="line-clamp-2"
+                                                        title={
+                                                            product.supplierName ??
+                                                            undefined
+                                                        }
+                                                    >
+                                                        {showText(
+                                                            product.supplierName
+                                                        )}
+                                                    </span>
                                                 </td>
                                                 <td className="px-4 py-3">
                                                     <StatusBadge

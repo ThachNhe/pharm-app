@@ -157,19 +157,31 @@ model UserStoreRole {
 }
 
 model ReferenceProduct {
-  id               String    @id @db.Uuid
-  code             String?   @db.VarChar(50)
-  name             String    @db.VarChar(255)
-  barcode          String?   @db.VarChar(100)
-  secondaryBarcode String?   @map("secondary_barcode") @db.VarChar(100)
-  manufacturer     String?   @db.VarChar(255)
-  specification    String?
-  referencePrice   Decimal?  @map("reference_price") @db.Decimal(20, 2)
-  isInternal       Boolean   @default(false) @map("is_internal")
-  isNational       Boolean   @default(false) @map("is_national")
-  isActive         Boolean   @default(true) @map("is_active")
-  syncedAt         DateTime  @default(now()) @map("synced_at") @db.Timestamptz(3)
-  medicine         Medicine?
+  id                      String    @id @db.Uuid
+  code                    String?   @db.VarChar(50)
+  name                    String    @db.VarChar(255)
+  unitName                String?   @map("unit_name") @db.VarChar(50)
+  registrationNumber      String?   @map("registration_number") @db.VarChar(100)
+  barcode                 String?   @db.VarChar(100)
+  secondaryBarcode        String?   @map("secondary_barcode") @db.VarChar(100)
+  manufacturer            String?   @db.VarChar(255)
+  activeIngredient        String?   @map("active_ingredient") @db.VarChar(255)
+  specification           String?
+  usageInstructions       String?   @map("usage_instructions")
+  categoryName            String?   @map("category_name") @db.VarChar(100)
+  positionName            String?   @map("position_name") @db.VarChar(255)
+  supplierName            String?   @map("supplier_name") @db.VarChar(255)
+  inputPrice              Decimal?  @map("input_price") @db.Decimal(20, 2)
+  referencePrice          Decimal?  @map("reference_price") @db.Decimal(20, 2)
+  wholesalePrice          Decimal?  @map("wholesale_price") @db.Decimal(20, 2)
+  doctorDiscountPercent   Decimal?  @map("doctor_discount_percent") @db.Decimal(7, 2)
+  employeeDiscountPercent Decimal?  @map("employee_discount_percent") @db.Decimal(7, 2)
+  minInventory            Decimal?  @map("min_inventory") @db.Decimal(12, 2)
+  isInternal              Boolean   @default(false) @map("is_internal")
+  isNational              Boolean   @default(false) @map("is_national")
+  isActive                Boolean   @default(true) @map("is_active")
+  syncedAt                DateTime  @default(now()) @map("synced_at") @db.Timestamptz(3)
+  medicine                Medicine?
 
   @@index([code])
   @@index([name])

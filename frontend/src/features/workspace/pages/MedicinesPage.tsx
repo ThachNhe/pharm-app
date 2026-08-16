@@ -152,8 +152,14 @@ function MedicineDialog({
         form.reset({
             ...emptyValues,
             name: product.name,
+            baseUnitName: product.unitName ?? emptyValues.baseUnitName,
             barcode: product.barcode ?? product.secondaryBarcode ?? '',
+            registrationNumber: product.registrationNumber ?? '',
+            category: product.categoryName ?? '',
+            activeIngredient: product.activeIngredient ?? '',
             manufacturer: product.manufacturer ?? '',
+            minStock: product.minInventory ?? 0,
+            description: product.usageInstructions ?? '',
         });
     };
 
@@ -419,7 +425,7 @@ function MedicineDialog({
                             error={errors.baseUnitName?.message}
                         >
                             <Input
-                                readOnly={sharedDetailsLocked}
+                                readOnly={referenceDetailsLocked}
                                 placeholder="Viên, chai, tuýp..."
                                 {...form.register('baseUnitName')}
                             />
@@ -429,7 +435,7 @@ function MedicineDialog({
                             error={errors.activeIngredient?.message}
                         >
                             <Input
-                                readOnly={sharedDetailsLocked}
+                                readOnly={referenceDetailsLocked}
                                 placeholder="Paracetamol"
                                 {...form.register('activeIngredient')}
                             />
@@ -439,7 +445,7 @@ function MedicineDialog({
                             error={errors.strength?.message}
                         >
                             <Input
-                                readOnly={sharedDetailsLocked}
+                                readOnly={referenceDetailsLocked}
                                 placeholder="500 mg"
                                 {...form.register('strength')}
                             />
@@ -456,7 +462,7 @@ function MedicineDialog({
                             error={errors.registrationNumber?.message}
                         >
                             <Input
-                                readOnly={sharedDetailsLocked}
+                                readOnly={referenceDetailsLocked}
                                 placeholder="VD-12345-24"
                                 {...form.register('registrationNumber')}
                             />
@@ -466,7 +472,7 @@ function MedicineDialog({
                             error={errors.category?.message}
                         >
                             <Input
-                                readOnly={sharedDetailsLocked}
+                                readOnly={referenceDetailsLocked}
                                 placeholder="Giảm đau - hạ sốt"
                                 {...form.register('category')}
                             />
@@ -476,7 +482,7 @@ function MedicineDialog({
                             error={errors.dosageForm?.message}
                         >
                             <Input
-                                readOnly={sharedDetailsLocked}
+                                readOnly={referenceDetailsLocked}
                                 placeholder="Viên nén"
                                 {...form.register('dosageForm')}
                             />
@@ -527,7 +533,7 @@ function MedicineDialog({
                             className="sm:col-span-2"
                         >
                             <textarea
-                                readOnly={sharedDetailsLocked}
+                                readOnly={referenceDetailsLocked}
                                 rows={3}
                                 className="border-input focus:border-ring focus:ring-ring/20 w-full resize-y rounded-md border bg-transparent px-3 py-2 text-sm outline-none focus:ring-3"
                                 placeholder="Thông tin sử dụng nội bộ"
@@ -537,7 +543,7 @@ function MedicineDialog({
                         <div className="flex flex-wrap gap-5 sm:col-span-2">
                             <label className="flex cursor-pointer items-center gap-2 text-sm">
                                 <Checkbox
-                                    disabled={sharedDetailsLocked}
+                                    disabled={referenceDetailsLocked}
                                     checked={requiresPrescription}
                                     onCheckedChange={(checked) =>
                                         form.setValue(
