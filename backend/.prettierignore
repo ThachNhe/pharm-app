@@ -2,3 +2,4 @@ dist/
 node_modules/
 src/generated/prisma/
 coverage/
+all_products.json

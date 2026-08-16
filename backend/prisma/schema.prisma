@@ -156,6 +156,27 @@ model UserStoreRole {
   @@map("user_store_roles")
 }
 
+model ReferenceProduct {
+  id               String   @id @db.Uuid
+  code             String?  @db.VarChar(50)
+  name             String   @db.VarChar(255)
+  barcode          String?  @db.VarChar(100)
+  secondaryBarcode String?  @map("secondary_barcode") @db.VarChar(100)
+  manufacturer     String?  @db.VarChar(255)
+  specification    String?
+  referencePrice   Decimal? @map("reference_price") @db.Decimal(20, 2)
+  isInternal       Boolean  @default(false) @map("is_internal")
+  isNational       Boolean  @default(false) @map("is_national")
+  isActive         Boolean  @default(true) @map("is_active")
+  syncedAt         DateTime @default(now()) @map("synced_at") @db.Timestamptz(3)
+
+  @@index([code])
+  @@index([name])
+  @@index([barcode])
+  @@index([secondaryBarcode])
+  @@map("reference_products")
+}
+
 model Medicine {
   id                   String              @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   name                 String              @db.VarChar(255)
