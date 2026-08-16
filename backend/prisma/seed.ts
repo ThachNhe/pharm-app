@@ -1,5 +1,6 @@
 import bcrypt from 'bcryptjs';
 import { prisma, disconnectDB } from '../src/config/database.js';
+import { defaultProductCategoryNames } from '../src/config/productCategories.js';
 
 const seedPassword = '12345abcd';
 
@@ -99,6 +100,18 @@ const seedDemoStore = async (seededUsers: Awaited<ReturnType<typeof seedUsers>>)
     });
   }
 
+  const categories = await Promise.all(
+    defaultProductCategoryNames.map((name) =>
+      prisma.productCategory.upsert({
+        where: { storeId_name: { storeId: store.id, name } },
+        update: { isActive: true },
+        create: { storeId: store.id, name },
+      }),
+    ),
+  );
+  const pharmaceuticalCategory = categories.find((category) => category.name === 'Dược phẩm');
+  if (!pharmaceuticalCategory) throw new Error('Missing default pharmaceutical category');
+
   await prisma.supplier.upsert({
     where: {
       storeId_code: {
@@ -151,6 +164,7 @@ const seedDemoStore = async (seededUsers: Awaited<ReturnType<typeof seedUsers>>)
       },
     },
     update: {
+      categoryId: pharmaceuticalCategory.id,
       sellingPrice: 2000,
       minStock: 20,
       isActive: true,
@@ -158,6 +172,7 @@ const seedDemoStore = async (seededUsers: Awaited<ReturnType<typeof seedUsers>>)
     create: {
       storeId: store.id,
       medicineId: medicine.id,
+      categoryId: pharmaceuticalCategory.id,
       sellingPrice: 2000,
       minStock: 20,
     },

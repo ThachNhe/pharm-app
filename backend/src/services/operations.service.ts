@@ -20,6 +20,7 @@ type DateQuery = PageQuery & {
 
 type MedicinePayload = {
   referenceProductId?: string | null;
+  categoryId: string;
   name: string;
   baseUnitName: string;
   barcode?: string | null;
@@ -33,6 +34,12 @@ type MedicinePayload = {
   description?: string | null;
   sellingPrice: number | string;
   minStock?: number | string;
+  isActive?: boolean;
+};
+
+type ProductCategoryPayload = {
+  name: string;
+  description?: string | null;
   isActive?: boolean;
 };
 
@@ -176,6 +183,16 @@ const serializeSupplier = (supplier) => ({
   ...supplier,
 });
 
+const serializeProductCategory = (category) => ({
+  id: category.id,
+  name: category.name,
+  description: category.description,
+  isActive: category.isActive,
+  productCount: category._count?.storeMedicines ?? 0,
+  createdAt: category.createdAt,
+  updatedAt: category.updatedAt,
+});
+
 const serializeMedicine = (storeMedicine, stock?: { total: Prisma.Decimal; available: Prisma.Decimal }) => ({
   id: storeMedicine.medicine.id,
   storeMedicineId: storeMedicine.id,
@@ -184,7 +201,8 @@ const serializeMedicine = (storeMedicine, stock?: { total: Prisma.Decimal; avail
   baseUnitName: storeMedicine.medicine.baseUnitName,
   barcode: storeMedicine.medicine.barcode,
   registrationNumber: storeMedicine.medicine.registrationNumber,
-  category: storeMedicine.medicine.category,
+  categoryId: storeMedicine.categoryId,
+  category: storeMedicine.category.name,
   activeIngredient: storeMedicine.medicine.activeIngredient,
   strength: storeMedicine.medicine.strength,
   dosageForm: storeMedicine.medicine.dosageForm,
@@ -270,6 +288,7 @@ const buildInventoryRows = async (storeId: string, search?: string) => {
     orderBy: { medicine: { name: 'asc' } },
     include: {
       medicine: true,
+      category: true,
     },
   });
 
@@ -469,6 +488,112 @@ const updateSupplier = async (actor: Actor, storeId: string, supplierId: string,
   });
 };
 
+const queryProductCategories = async (actor: Actor, storeId: string, query: PageQuery & { active?: string | boolean }) => {
+  await getStoreAccess(actor, storeId, 'staff');
+  const { page, limit, skip } = getPagination(query);
+  const active = query.active === undefined ? undefined : query.active === true || query.active === 'true';
+  const where: Prisma.ProductCategoryWhereInput = {
+    storeId,
+    isActive: active,
+    ...(query.search
+      ? {
+          OR: [
+            { name: { contains: query.search, mode: 'insensitive' } },
+            { description: { contains: query.search, mode: 'insensitive' } },
+          ],
+        }
+      : {}),
+  };
+  const [totalResults, results] = await prisma.$transaction([
+    prisma.productCategory.count({ where }),
+    prisma.productCategory.findMany({
+      where,
+      orderBy: [{ isActive: 'desc' }, { name: 'asc' }],
+      skip,
+      take: limit,
+      include: { _count: { select: { storeMedicines: true } } },
+    }),
+  ]);
+
+  return {
+    results: results.map(serializeProductCategory),
+    page,
+    limit,
+    totalPages: Math.ceil(totalResults / limit),
+    totalResults,
+  };
+};
+
+const createProductCategory = async (actor: Actor, storeId: string, body: ProductCategoryPayload) => {
+  await getStoreAccess(actor, storeId, 'manager');
+  const name = body.name.trim();
+
+  return prisma.$transaction(async (tx) => {
+    const duplicate = await tx.productCategory.findFirst({
+      where: { storeId, name: { equals: name, mode: 'insensitive' } },
+      select: { id: true },
+    });
+    if (duplicate) throw new ApiError(httpStatus.CONFLICT, 'Nhóm sản phẩm đã tồn tại');
+
+    const category = await tx.productCategory.create({
+      data: {
+        storeId,
+        name,
+        description: asOptionalString(body.description),
+        isActive: body.isActive ?? true,
+      },
+      include: { _count: { select: { storeMedicines: true } } },
+    });
+    await writeAudit(tx, actor, {
+      storeId,
+      action: 'product_category.create',
+      targetType: 'product_category',
+      targetId: category.id,
+    });
+    return serializeProductCategory(category);
+  });
+};
+
+const updateProductCategory = async (
+  actor: Actor,
+  storeId: string,
+  categoryId: string,
+  body: Partial<ProductCategoryPayload>,
+) => {
+  await getStoreAccess(actor, storeId, 'manager');
+  const existing = await prisma.productCategory.findFirst({ where: { id: categoryId, storeId } });
+  if (!existing) throw new ApiError(httpStatus.NOT_FOUND, 'Không tìm thấy nhóm sản phẩm');
+
+  return prisma.$transaction(async (tx) => {
+    const name = body.name?.trim();
+    if (name) {
+      const duplicate = await tx.productCategory.findFirst({
+        where: { id: { not: categoryId }, storeId, name: { equals: name, mode: 'insensitive' } },
+        select: { id: true },
+      });
+      if (duplicate) throw new ApiError(httpStatus.CONFLICT, 'Nhóm sản phẩm đã tồn tại');
+    }
+
+    const category = await tx.productCategory.update({
+      where: { id: categoryId },
+      data: {
+        name,
+        description: body.description === undefined ? undefined : asOptionalString(body.description),
+        isActive: body.isActive,
+      },
+      include: { _count: { select: { storeMedicines: true } } },
+    });
+    await writeAudit(tx, actor, {
+      storeId,
+      action: 'product_category.update',
+      targetType: 'product_category',
+      targetId: category.id,
+      metadata: { isActive: category.isActive },
+    });
+    return serializeProductCategory(category);
+  });
+};
+
 const queryMedicines = async (
   actor: Actor,
   storeId: string,
@@ -542,6 +667,13 @@ const createMedicine = async (actor: Actor, storeId: string, body: MedicinePaylo
   await getStoreAccess(actor, storeId, 'manager');
 
   return prisma.$transaction(async (tx) => {
+    const productCategory = await tx.productCategory.findFirst({
+      where: { id: body.categoryId, storeId, isActive: true },
+    });
+    if (!productCategory) {
+      throw new ApiError(httpStatus.BAD_REQUEST, 'Nhóm sản phẩm không hợp lệ hoặc đã ngừng hoạt động');
+    }
+
     let referenceProduct: {
       id: string;
       name: string;
@@ -597,7 +729,7 @@ const createMedicine = async (actor: Actor, storeId: string, body: MedicinePaylo
       baseUnitName: referenceProduct?.unitName ?? body.baseUnitName.trim(),
       barcode: referenceProduct ? availableReferenceBarcode : asOptionalString(body.barcode),
       registrationNumber: referenceProduct?.registrationNumber ?? asOptionalString(body.registrationNumber),
-      category: referenceProduct?.categoryName ?? asOptionalString(body.category),
+      category: referenceProduct?.categoryName ?? productCategory.name,
       activeIngredient: referenceProduct?.activeIngredient ?? asOptionalString(body.activeIngredient),
       strength: asOptionalString(body.strength),
       dosageForm: asOptionalString(body.dosageForm),
@@ -635,11 +767,12 @@ const createMedicine = async (actor: Actor, storeId: string, body: MedicinePaylo
       data: {
         storeId,
         medicineId: medicine.id,
+        categoryId: productCategory.id,
         sellingPrice: toDecimal(body.sellingPrice),
         minStock: toDecimal(body.minStock ?? 0),
         isActive: body.isActive ?? true,
       },
-      include: { medicine: true },
+      include: { medicine: true, category: true },
     });
     await writeAudit(tx, actor, {
       storeId,
@@ -684,6 +817,16 @@ const updateMedicine = async (
   }
 
   return prisma.$transaction(async (tx) => {
+    if (body.categoryId && body.categoryId !== assigned.categoryId) {
+      const category = await tx.productCategory.findFirst({
+        where: { id: body.categoryId, storeId, isActive: true },
+        select: { id: true },
+      });
+      if (!category) {
+        throw new ApiError(httpStatus.BAD_REQUEST, 'Nhóm sản phẩm không hợp lệ hoặc đã ngừng hoạt động');
+      }
+    }
+
     if (changesSharedDetails) {
       await tx.medicine.update({
         where: { id: medicineId },
@@ -713,11 +856,12 @@ const updateMedicine = async (
     const updated = await tx.storeMedicine.update({
       where: { storeId_medicineId: { storeId, medicineId } },
       data: {
+        categoryId: body.categoryId,
         sellingPrice: body.sellingPrice === undefined ? undefined : toDecimal(body.sellingPrice),
         minStock: body.minStock === undefined ? undefined : toDecimal(body.minStock),
         isActive: body.isActive,
       },
-      include: { medicine: true },
+      include: { medicine: true, category: true },
     });
     await writeAudit(tx, actor, {
       storeId,
@@ -728,6 +872,7 @@ const updateMedicine = async (
         sellingPrice: Number(updated.sellingPrice),
         minStock: Number(updated.minStock),
         isActive: updated.isActive,
+        categoryId: updated.categoryId,
       },
     });
     return serializeMedicine(updated);
@@ -1347,6 +1492,7 @@ export {
   completeImportReceipt,
   createImportReceipt,
   createMedicine,
+  createProductCategory,
   createSale,
   createSupplier,
   getContext,
@@ -1358,9 +1504,11 @@ export {
   queryInventory,
   queryInventoryMovements,
   queryMedicines,
+  queryProductCategories,
   queryReferenceProducts,
   querySales,
   querySuppliers,
   updateMedicine,
+  updateProductCategory,
   updateSupplier,
 };

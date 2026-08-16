@@ -19,6 +19,7 @@ import { Route as AdminSuppliersRouteImport } from './routes/admin.suppliers'
 import { Route as AdminStoresRouteImport } from './routes/admin.stores'
 import { Route as AdminSalesRouteImport } from './routes/admin.sales'
 import { Route as AdminReportsRouteImport } from './routes/admin.reports'
+import { Route as AdminProductCategoriesRouteImport } from './routes/admin.product-categories'
 import { Route as AdminMedicinesRouteImport } from './routes/admin.medicines'
 import { Route as AdminMedicineLibraryRouteImport } from './routes/admin.medicine-library'
 import { Route as AdminInventoryRouteImport } from './routes/admin.inventory'
@@ -74,6 +75,11 @@ const AdminReportsRoute = AdminReportsRouteImport.update({
   path: '/reports',
   getParentRoute: () => AdminRoute,
 } as any)
+const AdminProductCategoriesRoute = AdminProductCategoriesRouteImport.update({
+  id: '/product-categories',
+  path: '/product-categories',
+  getParentRoute: () => AdminRoute,
+} as any)
 const AdminMedicinesRoute = AdminMedicinesRouteImport.update({
   id: '/medicines',
   path: '/medicines',
@@ -104,6 +110,7 @@ export interface FileRoutesByFullPath {
   '/admin/inventory': typeof AdminInventoryRoute
   '/admin/medicine-library': typeof AdminMedicineLibraryRoute
   '/admin/medicines': typeof AdminMedicinesRoute
+  '/admin/product-categories': typeof AdminProductCategoriesRoute
   '/admin/reports': typeof AdminReportsRoute
   '/admin/sales': typeof AdminSalesRoute
   '/admin/stores': typeof AdminStoresRoute
@@ -119,6 +126,7 @@ export interface FileRoutesByTo {
   '/admin/inventory': typeof AdminInventoryRoute
   '/admin/medicine-library': typeof AdminMedicineLibraryRoute
   '/admin/medicines': typeof AdminMedicinesRoute
+  '/admin/product-categories': typeof AdminProductCategoriesRoute
   '/admin/reports': typeof AdminReportsRoute
   '/admin/sales': typeof AdminSalesRoute
   '/admin/stores': typeof AdminStoresRoute
@@ -136,6 +144,7 @@ export interface FileRoutesById {
   '/admin/inventory': typeof AdminInventoryRoute
   '/admin/medicine-library': typeof AdminMedicineLibraryRoute
   '/admin/medicines': typeof AdminMedicinesRoute
+  '/admin/product-categories': typeof AdminProductCategoriesRoute
   '/admin/reports': typeof AdminReportsRoute
   '/admin/sales': typeof AdminSalesRoute
   '/admin/stores': typeof AdminStoresRoute
@@ -154,6 +163,7 @@ export interface FileRouteTypes {
     | '/admin/inventory'
     | '/admin/medicine-library'
     | '/admin/medicines'
+    | '/admin/product-categories'
     | '/admin/reports'
     | '/admin/sales'
     | '/admin/stores'
@@ -169,6 +179,7 @@ export interface FileRouteTypes {
     | '/admin/inventory'
     | '/admin/medicine-library'
     | '/admin/medicines'
+    | '/admin/product-categories'
     | '/admin/reports'
     | '/admin/sales'
     | '/admin/stores'
@@ -185,6 +196,7 @@ export interface FileRouteTypes {
     | '/admin/inventory'
     | '/admin/medicine-library'
     | '/admin/medicines'
+    | '/admin/product-categories'
     | '/admin/reports'
     | '/admin/sales'
     | '/admin/stores'
@@ -272,6 +284,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AdminReportsRouteImport
       parentRoute: typeof AdminRoute
     }
+    '/admin/product-categories': {
+      id: '/admin/product-categories'
+      path: '/product-categories'
+      fullPath: '/admin/product-categories'
+      preLoaderRoute: typeof AdminProductCategoriesRouteImport
+      parentRoute: typeof AdminRoute
+    }
     '/admin/medicines': {
       id: '/admin/medicines'
       path: '/medicines'
@@ -308,6 +327,7 @@ interface AdminRouteChildren {
   AdminInventoryRoute: typeof AdminInventoryRoute
   AdminMedicineLibraryRoute: typeof AdminMedicineLibraryRoute
   AdminMedicinesRoute: typeof AdminMedicinesRoute
+  AdminProductCategoriesRoute: typeof AdminProductCategoriesRoute
   AdminReportsRoute: typeof AdminReportsRoute
   AdminSalesRoute: typeof AdminSalesRoute
   AdminStoresRoute: typeof AdminStoresRoute
@@ -321,6 +341,7 @@ const AdminRouteChildren: AdminRouteChildren = {
   AdminInventoryRoute: AdminInventoryRoute,
   AdminMedicineLibraryRoute: AdminMedicineLibraryRoute,
   AdminMedicinesRoute: AdminMedicinesRoute,
+  AdminProductCategoriesRoute: AdminProductCategoriesRoute,
   AdminReportsRoute: AdminReportsRoute,
   AdminSalesRoute: AdminSalesRoute,
   AdminStoresRoute: AdminStoresRoute,

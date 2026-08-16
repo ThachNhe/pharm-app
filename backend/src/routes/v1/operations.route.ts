@@ -24,6 +24,17 @@ router.patch(
 );
 
 router
+  .route('/:storeId/product-categories')
+  .get(validate(operationsValidation.getProductCategories), operationsController.getProductCategories)
+  .post(validate(operationsValidation.createProductCategory), operationsController.createProductCategory);
+
+router.patch(
+  '/:storeId/product-categories/:categoryId',
+  validate(operationsValidation.updateProductCategory),
+  operationsController.updateProductCategory,
+);
+
+router
   .route('/:storeId/medicines')
   .get(validate(operationsValidation.getMedicines), operationsController.getMedicines)
   .post(validate(operationsValidation.createMedicine), operationsController.createMedicine);

@@ -3,6 +3,7 @@ import bcrypt from 'bcryptjs';
 import httpStatus from 'http-status';
 import type { Prisma, StoreRole } from '../generated/prisma/client.js';
 import { prisma } from '../config/database.js';
+import { defaultProductCategoryNames } from '../config/productCategories.js';
 import ApiError from '../utils/ApiError.js';
 import * as emailService from './email.service.js';
 import * as tokenService from './token.service.js';
@@ -272,6 +273,10 @@ const createStore = async (actor: Actor, body) => {
         address: body.address,
         phone: body.phone,
       },
+    });
+
+    await tx.productCategory.createMany({
+      data: defaultProductCategoryNames.map((name) => ({ storeId: store.id, name })),
     });
 
     let owner = null;

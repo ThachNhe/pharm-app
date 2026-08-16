@@ -2,6 +2,7 @@ export interface Medicine {
     id: string;
     storeMedicineId: string;
     referenceProductId?: string | null;
+    categoryId?: string | null;
     name: string;
     baseUnitName: string;
     barcode?: string | null;
@@ -49,6 +50,7 @@ export interface ReferenceProduct {
 
 export interface MedicinePayload {
     referenceProductId?: string;
+    categoryId: string;
     name: string;
     baseUnitName: string;
     barcode?: string;

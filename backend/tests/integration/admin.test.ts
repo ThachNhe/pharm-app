@@ -81,6 +81,7 @@ describe('Admin routes', () => {
           role: 'owner',
         }),
       ]);
+      expect(await prisma.productCategory.count({ where: { storeId: res.body.store.id } })).toBe(5);
     });
 
     test('should return 403 if non system admin creates a store', async () => {

@@ -23,6 +23,8 @@ import { usePaginatedSearch } from '../hooks/usePaginatedSearch';
 import { workspaceService } from '../services/workspace.service';
 import type { Medicine, ReferenceProduct } from '../types';
 import { useWorkspace } from '../hooks/useWorkspace';
+import { ProductCategoryDialog } from '../components/ProductCategoryDialog';
+import { ProductCategorySelect } from '../components/ProductCategorySelect';
 import {
     EmptyState,
     ErrorState,
@@ -36,11 +38,11 @@ import {
 } from '../components/shared';
 
 const medicineSchema = z.object({
+    categoryId: z.string().min(1, 'Chọn nhóm hàng hóa'),
     name: z.string().trim().min(1, 'Nhập tên thuốc').max(255),
     baseUnitName: z.string().trim().min(1, 'Nhập đơn vị cơ bản').max(50),
     barcode: z.string().trim().max(100),
     registrationNumber: z.string().trim().max(100),
-    category: z.string().trim().max(100),
     activeIngredient: z.string().trim().max(255),
     strength: z.string().trim().max(100),
     dosageForm: z.string().trim().max(100),
@@ -59,11 +61,11 @@ const medicineSchema = z.object({
 type MedicineFormValues = z.infer<typeof medicineSchema>;
 
 const emptyValues: MedicineFormValues = {
+    categoryId: '',
     name: '',
     baseUnitName: 'Viên',
     barcode: '',
     registrationNumber: '',
-    category: '',
     activeIngredient: '',
     strength: '',
     dosageForm: '',
@@ -76,11 +78,11 @@ const emptyValues: MedicineFormValues = {
 };
 
 const getMedicineValues = (medicine: Medicine): MedicineFormValues => ({
+    categoryId: medicine.categoryId ?? '',
     name: medicine.name,
     baseUnitName: medicine.baseUnitName,
     barcode: medicine.barcode ?? '',
     registrationNumber: medicine.registrationNumber ?? '',
-    category: medicine.category ?? '',
     activeIngredient: medicine.activeIngredient ?? '',
     strength: medicine.strength ?? '',
     dosageForm: medicine.dosageForm ?? '',
@@ -109,6 +111,7 @@ function MedicineDialog({
     const [librarySearch, setLibrarySearch] = useState('');
     const [selectedReferenceProduct, setSelectedReferenceProduct] =
         useState<ReferenceProduct | null>(null);
+    const [categoryDialogOpen, setCategoryDialogOpen] = useState(false);
     const debouncedLibrarySearch = useDebounce(librarySearch, 350);
     const form = useForm<MedicineFormValues>({
         resolver: zodResolver(medicineSchema),
@@ -119,6 +122,21 @@ function MedicineDialog({
         name: 'requiresPrescription',
     });
     const isActive = useWatch({ control: form.control, name: 'isActive' });
+    const categoryId = useWatch({ control: form.control, name: 'categoryId' });
+    const categoriesQuery = useQuery({
+        queryKey: [
+            'workspace',
+            selectedStoreId,
+            'product-categories',
+            'picker',
+        ],
+        queryFn: () =>
+            workspaceService.getProductCategories(selectedStoreId, {
+                page: 1,
+                limit: 100,
+            }),
+        enabled: open && Boolean(selectedStoreId),
+    });
     const libraryQuery = useQuery({
         queryKey: [
             'workspace',
@@ -150,13 +168,20 @@ function MedicineDialog({
     const chooseReferenceProduct = (product: ReferenceProduct) => {
         if (product.isAddedToStore) return;
         setSelectedReferenceProduct(product);
+        const matchingCategory = categoriesQuery.data?.results.find(
+            (category) =>
+                category.isActive &&
+                category.name.localeCompare(product.categoryName ?? '', 'vi', {
+                    sensitivity: 'accent',
+                }) === 0
+        );
         form.reset({
             ...emptyValues,
+            categoryId: matchingCategory?.id ?? '',
             name: product.name,
             baseUnitName: product.unitName ?? emptyValues.baseUnitName,
             barcode: product.barcode ?? product.secondaryBarcode ?? '',
             registrationNumber: product.registrationNumber ?? '',
-            category: product.categoryName ?? '',
             activeIngredient: product.activeIngredient ?? '',
             manufacturer: product.manufacturer ?? '',
             minStock: product.minInventory ?? 0,
@@ -171,6 +196,7 @@ function MedicineDialog({
                     selectedStoreId,
                     medicine.id,
                     {
+                        categoryId: values.categoryId,
                         sellingPrice: values.sellingPrice,
                         minStock: values.minStock,
                         isActive: values.isActive,
@@ -182,7 +208,6 @@ function MedicineDialog({
                 referenceProductId: selectedReferenceProduct?.id,
                 barcode: values.barcode || undefined,
                 registrationNumber: values.registrationNumber || undefined,
-                category: values.category || undefined,
                 activeIngredient: values.activeIngredient || undefined,
                 strength: values.strength || undefined,
                 dosageForm: values.dosageForm || undefined,
@@ -232,8 +257,13 @@ function MedicineDialog({
         sourceMode === 'manual' ||
         Boolean(selectedReferenceProduct);
 
+    const handleOpenChange = (nextOpen: boolean) => {
+        if (!nextOpen) setCategoryDialogOpen(false);
+        onOpenChange(nextOpen);
+    };
+
     return (
-        <Dialog open={open} onOpenChange={onOpenChange}>
+        <Dialog open={open} onOpenChange={handleOpenChange}>
             <DialogContent className="max-h-[92vh] overflow-y-auto sm:max-w-3xl">
                 <DialogHeader>
                     <DialogTitle>
@@ -468,16 +498,57 @@ function MedicineDialog({
                                 {...form.register('registrationNumber')}
                             />
                         </Field>
-                        <Field
-                            label="Nhóm thuốc"
-                            error={errors.category?.message}
-                        >
-                            <Input
-                                readOnly={referenceDetailsLocked}
-                                placeholder="Giảm đau - hạ sốt"
-                                {...form.register('category')}
+                        <div className="grid gap-1.5 text-sm">
+                            <span className="font-medium">
+                                Nhóm hàng hóa
+                                <span className="text-destructive ml-1">*</span>
+                            </span>
+                            <input
+                                type="hidden"
+                                {...form.register('categoryId')}
                             />
-                        </Field>
+                            <div className="flex gap-2">
+                                <ProductCategorySelect
+                                    value={categoryId}
+                                    categories={
+                                        categoriesQuery.data?.results ?? []
+                                    }
+                                    onChange={(value) =>
+                                        form.setValue('categoryId', value, {
+                                            shouldDirty: true,
+                                            shouldValidate: true,
+                                        })
+                                    }
+                                    disabled={categoriesQuery.isPending}
+                                />
+                                <Button
+                                    type="button"
+                                    size="icon"
+                                    variant="outline"
+                                    onClick={() => setCategoryDialogOpen(true)}
+                                    aria-label="Thêm nhóm sản phẩm"
+                                    title="Thêm nhóm sản phẩm"
+                                >
+                                    <Plus />
+                                </Button>
+                            </div>
+                            {categoriesQuery.isError ? (
+                                <button
+                                    type="button"
+                                    className="text-destructive w-fit text-xs underline"
+                                    onClick={() =>
+                                        void categoriesQuery.refetch()
+                                    }
+                                >
+                                    Không tải được danh sách nhóm. Thử lại
+                                </button>
+                            ) : null}
+                            {errors.categoryId?.message ? (
+                                <span className="text-destructive text-xs">
+                                    {errors.categoryId.message}
+                                </span>
+                            ) : null}
+                        </div>
                         <Field
                             label="Dạng bào chế"
                             error={errors.dosageForm?.message}
@@ -601,6 +672,18 @@ function MedicineDialog({
                     ) : null}
                 </DialogFooter>
             </DialogContent>
+            {categoryDialogOpen ? (
+                <ProductCategoryDialog
+                    open
+                    onOpenChange={setCategoryDialogOpen}
+                    onSaved={(category) =>
+                        form.setValue('categoryId', category.id, {
+                            shouldDirty: true,
+                            shouldValidate: true,
+                        })
+                    }
+                />
+            ) : null}
         </Dialog>
     );
 }
@@ -698,7 +781,7 @@ export function MedicinesPage() {
                 ) : (
                     <>
                         <div className="overflow-x-auto">
-                            <table className="w-full min-w-[900px] text-left text-sm">
+                            <table className="w-full min-w-[1040px] text-left text-sm">
                                 <thead className="bg-muted/55 text-muted-foreground text-xs uppercase">
                                     <tr>
                                         <th className="px-4 py-3 font-medium">
@@ -706,6 +789,9 @@ export function MedicinesPage() {
                                         </th>
                                         <th className="px-4 py-3 font-medium">
                                             Mã vạch
+                                        </th>
+                                        <th className="px-4 py-3 font-medium">
+                                            Nhóm hàng hóa
                                         </th>
                                         <th className="px-4 py-3 text-right font-medium">
                                             Giá bán
@@ -747,6 +833,9 @@ export function MedicinesPage() {
                                                 </td>
                                                 <td className="text-muted-foreground px-4 py-3 font-mono text-xs">
                                                     {medicine.barcode || '—'}
+                                                </td>
+                                                <td className="px-4 py-3">
+                                                    {medicine.category || '—'}
                                                 </td>
                                                 <td className="px-4 py-3 text-right font-medium">
                                                     {formatCurrency(

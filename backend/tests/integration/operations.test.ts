@@ -32,6 +32,12 @@ describe('Store operations flow', () => {
     const staffToken = accessToken(userTwo.id);
     const importedAt = moment().subtract(2, 'days').format('YYYY-MM-DD');
 
+    const categoryRes = await request(app)
+      .post(`/v1/stores/${store.id}/product-categories`)
+      .set('Authorization', `Bearer ${ownerToken}`)
+      .send({ name: 'Dược phẩm', description: 'Thuốc và dược phẩm' })
+      .expect(httpStatus.CREATED);
+
     const supplierRes = await request(app)
       .post(`/v1/stores/${store.id}/suppliers`)
       .set('Authorization', `Bearer ${ownerToken}`)
@@ -49,6 +55,7 @@ describe('Store operations flow', () => {
       .post(`/v1/stores/${store.id}/medicines`)
       .set('Authorization', `Bearer ${ownerToken}`)
       .send({
+        categoryId: categoryRes.body.id,
         name: 'Paracetamol 500mg',
         baseUnitName: 'Viên',
         barcode: faker.random.alphaNumeric(12),
@@ -248,6 +255,65 @@ describe('Store operations flow', () => {
       .expect(httpStatus.FORBIDDEN);
   });
 
+  test('should manage store-scoped product categories with pagination and role checks', async () => {
+    await insertUsers([userOne, userTwo]);
+    const [managedStore, otherStore] = await Promise.all([
+      prisma.store.create({ data: { name: 'Category store' } }),
+      prisma.store.create({ data: { name: 'Other category store' } }),
+    ]);
+    await prisma.userStoreRole.createMany({
+      data: [
+        { userId: userOne.id, storeId: managedStore.id, role: 'owner' },
+        { userId: userTwo.id, storeId: managedStore.id, role: 'staff' },
+      ],
+    });
+    const ownerToken = accessToken(userOne.id);
+    const staffToken = accessToken(userTwo.id);
+
+    const categoryRes = await request(app)
+      .post(`/v1/stores/${managedStore.id}/product-categories`)
+      .set('Authorization', `Bearer ${ownerToken}`)
+      .send({ name: 'Dược phẩm', description: 'Nhóm sản phẩm chính' })
+      .expect(httpStatus.CREATED);
+
+    await request(app)
+      .post(`/v1/stores/${managedStore.id}/product-categories`)
+      .set('Authorization', `Bearer ${ownerToken}`)
+      .send({ name: 'dược PHẨM' })
+      .expect(httpStatus.CONFLICT);
+
+    await request(app)
+      .post(`/v1/stores/${managedStore.id}/product-categories`)
+      .set('Authorization', `Bearer ${staffToken}`)
+      .send({ name: 'Không được tạo' })
+      .expect(httpStatus.FORBIDDEN);
+
+    const listRes = await request(app)
+      .get(`/v1/stores/${managedStore.id}/product-categories`)
+      .query({ search: 'dược', page: 1, limit: 1 })
+      .set('Authorization', `Bearer ${staffToken}`)
+      .expect(httpStatus.OK);
+    expect(listRes.body).toMatchObject({ page: 1, limit: 1, totalPages: 1, totalResults: 1 });
+    expect(listRes.body.results[0]).toMatchObject({
+      id: categoryRes.body.id,
+      name: 'Dược phẩm',
+      productCount: 0,
+      isActive: true,
+    });
+
+    const updatedRes = await request(app)
+      .patch(`/v1/stores/${managedStore.id}/product-categories/${categoryRes.body.id}`)
+      .set('Authorization', `Bearer ${ownerToken}`)
+      .send({ name: 'Dược phẩm chính', isActive: false })
+      .expect(httpStatus.OK);
+    expect(updatedRes.body).toMatchObject({ name: 'Dược phẩm chính', isActive: false });
+
+    await request(app)
+      .get(`/v1/stores/${otherStore.id}/product-categories`)
+      .set('Authorization', `Bearer ${staffToken}`)
+      .expect(httpStatus.FORBIDDEN);
+  });
+
   test('should paginate the library and reuse a reference medicine across stores', async () => {
     await insertUsers([userOne, userTwo]);
     const [firstStore, secondStore, unrelatedStore] = await Promise.all([
@@ -309,6 +375,12 @@ describe('Store operations flow', () => {
     ];
     await prisma.referenceProduct.createMany({ data: referenceProducts });
 
+    const [firstCategory, secondCategory, updatedCategory] = await Promise.all([
+      prisma.productCategory.create({ data: { storeId: firstStore.id, name: 'Dược phẩm' } }),
+      prisma.productCategory.create({ data: { storeId: secondStore.id, name: 'Dược phẩm' } }),
+      prisma.productCategory.create({ data: { storeId: firstStore.id, name: 'Thuốc kê đơn' } }),
+    ]);
+
     const ownerToken = accessToken(userOne.id);
     const staffToken = accessToken(userTwo.id);
     const libraryRes = await request(app)
@@ -350,6 +422,7 @@ describe('Store operations flow', () => {
       .expect(httpStatus.FORBIDDEN);
 
     const createPayload = {
+      categoryId: firstCategory.id,
       referenceProductId: referenceProducts[1].id,
       name: 'Tên giả từ client',
       baseUnitName: 'Viên',
@@ -378,12 +451,13 @@ describe('Store operations flow', () => {
     const secondMedicineRes = await request(app)
       .post(`/v1/stores/${secondStore.id}/medicines`)
       .set('Authorization', `Bearer ${ownerToken}`)
-      .send({ ...createPayload, sellingPrice: 3500, minStock: 20 })
+      .send({ ...createPayload, categoryId: secondCategory.id, sellingPrice: 3500, minStock: 20 })
       .expect(httpStatus.CREATED);
 
     expect(secondMedicineRes.body).toMatchObject({
       id: firstMedicineRes.body.id,
       referenceProductId: referenceProducts[1].id,
+      categoryId: secondCategory.id,
       sellingPrice: 3500,
       minStock: 20,
     });
@@ -423,10 +497,16 @@ describe('Store operations flow', () => {
     const updatedRes = await request(app)
       .patch(`/v1/stores/${firstStore.id}/medicines/${firstMedicineRes.body.id}`)
       .set('Authorization', `Bearer ${ownerToken}`)
-      .send({ sellingPrice: 4200, minStock: 15, isActive: false })
+      .send({ categoryId: updatedCategory.id, sellingPrice: 4200, minStock: 15, isActive: false })
       .expect(httpStatus.OK);
 
-    expect(updatedRes.body).toMatchObject({ sellingPrice: 4200, minStock: 15, isActive: false });
+    expect(updatedRes.body).toMatchObject({
+      categoryId: updatedCategory.id,
+      category: 'Thuốc kê đơn',
+      sellingPrice: 4200,
+      minStock: 15,
+      isActive: false,
+    });
     const secondAssignment = await prisma.storeMedicine.findUniqueOrThrow({
       where: {
         storeId_medicineId: {
@@ -437,6 +517,7 @@ describe('Store operations flow', () => {
     });
     expect(Number(secondAssignment.sellingPrice)).toBe(3500);
     expect(Number(secondAssignment.minStock)).toBe(20);
+    expect(secondAssignment.categoryId).toBe(secondCategory.id);
     expect(secondAssignment.isActive).toBe(true);
 
     const updatedLibraryRes = await request(app)

@@ -25,6 +25,21 @@ const updateSupplier = catchAsync(async (req, res) => {
   res.send(await operationsService.updateSupplier(req.user, param(req, 'storeId'), param(req, 'supplierId'), req.body));
 });
 
+const getProductCategories = catchAsync(async (req, res) => {
+  res.send(await operationsService.queryProductCategories(req.user, param(req, 'storeId'), req.query));
+});
+
+const createProductCategory = catchAsync(async (req, res) => {
+  const result = await operationsService.createProductCategory(req.user, param(req, 'storeId'), req.body);
+  res.status(httpStatus.CREATED).send(result);
+});
+
+const updateProductCategory = catchAsync(async (req, res) => {
+  res.send(
+    await operationsService.updateProductCategory(req.user, param(req, 'storeId'), param(req, 'categoryId'), req.body),
+  );
+});
+
 const getMedicines = catchAsync(async (req, res) => {
   res.send(await operationsService.queryMedicines(req.user, param(req, 'storeId'), req.query));
 });
@@ -93,6 +108,7 @@ export {
   completeImportReceipt,
   createImportReceipt,
   createMedicine,
+  createProductCategory,
   createSale,
   createSupplier,
   getContext,
@@ -102,11 +118,13 @@ export {
   getInventory,
   getInventoryMovements,
   getMedicines,
+  getProductCategories,
   getProfitReport,
   getReferenceProducts,
   getSale,
   getSales,
   getSuppliers,
   updateMedicine,
+  updateProductCategory,
   updateSupplier,
 };

@@ -127,6 +127,7 @@ model Store {
   updatedAt            DateTime             @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(3)
   roles                UserStoreRole[]
   medicines            StoreMedicine[]
+  productCategories    ProductCategory[]
   suppliers            Supplier[]
   importReceipts       ImportReceipt[]
   inventoryMovements   InventoryMovement[]
@@ -235,20 +236,39 @@ model MedicineUnit {
   @@map("medicine_units")
 }
 
+model ProductCategory {
+  id             String          @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  storeId        String          @map("store_id") @db.Uuid
+  name           String          @db.VarChar(100)
+  description    String?
+  isActive       Boolean         @default(true) @map("is_active")
+  createdAt      DateTime        @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt      DateTime        @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(3)
+  store          Store           @relation(fields: [storeId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  storeMedicines StoreMedicine[]
+
+  @@unique([storeId, name])
+  @@index([storeId, isActive, name])
+  @@map("product_categories")
+}
+
 model StoreMedicine {
-  id           String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  storeId      String   @map("store_id") @db.Uuid
-  medicineId   String   @map("medicine_id") @db.Uuid
-  sellingPrice Decimal  @default(0) @map("selling_price") @db.Decimal(14, 2)
-  minStock     Decimal  @default(0) @map("min_stock") @db.Decimal(12, 2)
-  isActive     Boolean  @default(true) @map("is_active")
-  createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
-  updatedAt    DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(3)
-  store        Store    @relation(fields: [storeId], references: [id], onDelete: Cascade, onUpdate: Cascade)
-  medicine     Medicine @relation(fields: [medicineId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  id           String           @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  storeId      String           @map("store_id") @db.Uuid
+  medicineId   String           @map("medicine_id") @db.Uuid
+  categoryId   String           @map("category_id") @db.Uuid
+  sellingPrice Decimal          @default(0) @map("selling_price") @db.Decimal(14, 2)
+  minStock     Decimal          @default(0) @map("min_stock") @db.Decimal(12, 2)
+  isActive     Boolean          @default(true) @map("is_active")
+  createdAt    DateTime         @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt    DateTime         @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(3)
+  store        Store            @relation(fields: [storeId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  medicine     Medicine         @relation(fields: [medicineId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  category     ProductCategory  @relation(fields: [categoryId], references: [id], onDelete: Restrict, onUpdate: Cascade)
 
   @@unique([storeId, medicineId])
   @@index([medicineId])
+  @@index([categoryId])
   @@map("store_medicines")
 }
 

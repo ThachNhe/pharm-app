@@ -9,6 +9,8 @@ import type {
     MedicinePayload,
     Paginated,
     ProfitReport,
+    ProductCategory,
+    ProductCategoryPayload,
     ReferenceProduct,
     Sale,
     SalePayload,
@@ -45,6 +47,26 @@ export const workspaceService = {
     ) =>
         apiPatch<Supplier>(
             API_ENDPOINTS.OPERATIONS.SUPPLIER(storeId, supplierId),
+            payload
+        ),
+
+    getProductCategories: (storeId: string, params?: Record<string, unknown>) =>
+        apiGet<Paginated<ProductCategory>>(
+            API_ENDPOINTS.OPERATIONS.PRODUCT_CATEGORIES(storeId),
+            cleanParams(params)
+        ),
+    createProductCategory: (storeId: string, payload: ProductCategoryPayload) =>
+        apiPost<ProductCategory>(
+            API_ENDPOINTS.OPERATIONS.PRODUCT_CATEGORIES(storeId),
+            payload
+        ),
+    updateProductCategory: (
+        storeId: string,
+        categoryId: string,
+        payload: Partial<ProductCategoryPayload>
+    ) =>
+        apiPatch<ProductCategory>(
+            API_ENDPOINTS.OPERATIONS.PRODUCT_CATEGORY(storeId, categoryId),
             payload
         ),
 

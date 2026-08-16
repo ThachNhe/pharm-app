@@ -57,6 +57,39 @@ const updateSupplier = {
     .min(1),
 };
 
+const getProductCategories = {
+  params: Joi.object().keys(storeParams),
+  query: Joi.object().keys({
+    search: Joi.string().trim().allow('').max(100),
+    active: Joi.boolean(),
+    ...pagination,
+  }),
+};
+
+const productCategoryBody = {
+  name: Joi.string().trim().required().max(100),
+  description: Joi.string().allow('', null).max(1000),
+  isActive: Joi.boolean(),
+};
+
+const createProductCategory = {
+  params: Joi.object().keys(storeParams),
+  body: Joi.object().keys(productCategoryBody),
+};
+
+const updateProductCategory = {
+  params: Joi.object().keys({
+    ...storeParams,
+    categoryId: Joi.string().required().custom(objectId),
+  }),
+  body: Joi.object()
+    .keys({
+      ...productCategoryBody,
+      name: Joi.string().trim().max(100),
+    })
+    .min(1),
+};
+
 const getMedicines = {
   params: Joi.object().keys(storeParams),
   query: Joi.object().keys({
@@ -76,6 +109,7 @@ const getReferenceProducts = {
 };
 
 const medicineBody = {
+  categoryId: Joi.string().required().custom(objectId),
   name: Joi.string().trim().required().max(255),
   baseUnitName: Joi.string().trim().required().max(50),
   barcode: Joi.string().allow('', null).max(100),
@@ -110,6 +144,7 @@ const updateMedicine = {
       ...medicineBody,
       name: Joi.string().trim().max(255),
       baseUnitName: Joi.string().trim().max(50),
+      categoryId: Joi.string().custom(objectId),
       sellingPrice: Joi.number().min(0),
     })
     .min(1),
@@ -204,6 +239,7 @@ const getProfitReport = {
 export {
   createImportReceipt,
   createMedicine,
+  createProductCategory,
   createSale,
   createSupplier,
   getContext,
@@ -212,6 +248,7 @@ export {
   getInventory,
   getInventoryMovements,
   getMedicines,
+  getProductCategories,
   getProfitReport,
   getReferenceProducts,
   getSales,
@@ -219,5 +256,6 @@ export {
   receiptParams,
   saleParams,
   updateMedicine,
+  updateProductCategory,
   updateSupplier,
 };

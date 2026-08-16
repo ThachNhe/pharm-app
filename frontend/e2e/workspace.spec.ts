@@ -87,6 +87,7 @@ test('system admin can use the workspace across desktop and mobile', async ({
         ['Tồn kho', 'Tồn kho'],
         ['Danh mục thuốc', 'Danh mục thuốc'],
         ['Thư viện thuốc', 'Thư viện thuốc'],
+        ['Nhóm sản phẩm', 'Nhóm sản phẩm'],
         ['Nhập hàng', 'Nhập hàng'],
         ['Nhà cung cấp', 'Nhà cung cấp'],
         ['Tài khoản', 'Tài khoản nhân sự'],
@@ -142,6 +143,11 @@ test('system admin can use the workspace across desktop and mobile', async ({
     await expect(medicineDialog.getByLabel('Tên thuốc')).toHaveValue(
         'Acyclovir 800Mg/ Stada'
     );
+    await expect(
+        medicineDialog.getByRole('combobox', {
+            name: 'Chọn nhóm hàng hóa',
+        })
+    ).toContainText('Dược phẩm');
 
     let createPayload: Record<string, unknown> | null = null;
     await page.route(/\/v1\/stores\/[^/]+\/medicines$/, async (route) => {
@@ -166,6 +172,7 @@ test('system admin can use the workspace across desktop and mobile', async ({
     await expect.poll(() => createPayload).not.toBeNull();
     expect(createPayload).toMatchObject({
         referenceProductId: 'fffe7ae2-015e-4861-b4ce-501ef47ad5b7',
+        categoryId: expect.any(String),
         name: 'Acyclovir 800Mg/ Stada',
         sellingPrice: 25000,
     });
@@ -176,6 +183,11 @@ test('system admin can use the workspace across desktop and mobile', async ({
         .getByRole('button', { name: 'Nhập thủ công', exact: true })
         .click();
     await expect(page.getByLabel('Tên thuốc')).toBeVisible();
+    await page.getByRole('button', { name: 'Thêm nhóm sản phẩm' }).click();
+    await expect(
+        page.getByRole('heading', { name: 'Thêm nhóm sản phẩm' })
+    ).toBeVisible();
+    await page.getByRole('button', { name: 'Hủy', exact: true }).last().click();
     await page.getByRole('button', { name: 'Hủy', exact: true }).click();
 
     await page.goto('/admin/inventory?alert=low');
@@ -265,6 +277,7 @@ test('owner sees store management features but not system store administration',
         'Tồn kho',
         'Danh mục thuốc',
         'Thư viện thuốc',
+        'Nhóm sản phẩm',
         'Nhập hàng',
         'Nhà cung cấp',
         'Tài khoản',
@@ -299,6 +312,9 @@ test('manager can manage staff only', async ({ page, request }) => {
         page.getByRole('link', { name: 'Tài khoản', exact: true })
     ).toBeVisible();
     await expect(
+        page.getByRole('link', { name: 'Nhóm sản phẩm', exact: true })
+    ).toBeVisible();
+    await expect(
         page.getByRole('link', { name: 'Quầy thuốc', exact: true })
     ).toHaveCount(0);
 
@@ -331,6 +347,7 @@ test('staff navigation and direct routes remain permission scoped', async ({
         'Nhà cung cấp',
         'Tài khoản',
         'Báo cáo',
+        'Nhóm sản phẩm',
         'Quầy thuốc',
     ]) {
         await expect(

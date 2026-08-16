@@ -11,6 +11,7 @@ import {
     Pill,
     RefreshCw,
     ShoppingCart,
+    Tags,
     Truck,
     UserRoundCog,
     X,
@@ -43,6 +44,7 @@ type NavItem = {
         | '/admin/users'
         | '/admin/medicines'
         | '/admin/medicine-library'
+        | '/admin/product-categories'
         | '/admin/suppliers'
         | '/admin/imports'
         | '/admin/inventory'
@@ -83,6 +85,12 @@ const navItems: NavItem[] = [
         to: '/admin/medicine-library',
         icon: Library,
         minimumRole: 'staff',
+    },
+    {
+        label: 'Nhóm sản phẩm',
+        to: '/admin/product-categories',
+        icon: Tags,
+        minimumRole: 'manager',
     },
     {
         label: 'Nhập hàng',
