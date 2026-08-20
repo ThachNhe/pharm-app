@@ -71,7 +71,7 @@ export const workspaceService = {
         ),
 
     getMedicines: (storeId: string, params?: Record<string, unknown>) =>
-        apiGet<Paginated<Medicine>>(
+        apiGet<Paginated<InventoryMedicine>>(
             API_ENDPOINTS.OPERATIONS.MEDICINES(storeId),
             cleanParams(params)
         ),

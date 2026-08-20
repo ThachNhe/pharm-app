@@ -124,6 +124,38 @@ describe('Store operations flow', () => {
     expect(await prisma.stockBatch.count()).toBe(2);
     expect(await prisma.inventoryMovement.count({ where: { type: 'import' } })).toBe(2);
 
+    const staffMedicinesRes = await request(app)
+      .get(`/v1/stores/${store.id}/medicines`)
+      .set('Authorization', `Bearer ${staffToken}`)
+      .expect(httpStatus.OK);
+    expect(staffMedicinesRes.body.results[0]).toMatchObject({
+      code: 'SP-PARA-001',
+      availableStock: 100,
+      nearestExpiry: expect.any(String),
+      batches: [
+        expect.objectContaining({
+          batchNumber: 'LO-GAN',
+          quantityRemaining: 30,
+        }),
+        expect.objectContaining({
+          batchNumber: 'LO-XA',
+          quantityRemaining: 70,
+        }),
+      ],
+    });
+    expect(staffMedicinesRes.body.results[0]).not.toHaveProperty('inventoryValue');
+    expect(staffMedicinesRes.body.results[0].batches[0]).not.toHaveProperty('importPrice');
+
+    const ownerMedicinesRes = await request(app)
+      .get(`/v1/stores/${store.id}/medicines`)
+      .set('Authorization', `Bearer ${ownerToken}`)
+      .expect(httpStatus.OK);
+    expect(ownerMedicinesRes.body.results[0].inventoryValue).toBe(94000);
+    expect(ownerMedicinesRes.body.results[0].batches[0]).toMatchObject({
+      batchNumber: 'LO-GAN',
+      importPrice: 800,
+    });
+
     await request(app)
       .post(`/v1/stores/${store.id}/imports/${importRes.body.id}/complete`)
       .set('Authorization', `Bearer ${ownerToken}`)

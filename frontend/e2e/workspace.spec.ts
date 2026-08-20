@@ -123,6 +123,26 @@ test('system admin can use the workspace across desktop and mobile', async ({
     await expect(libraryRow).toContainText('Dược phẩm');
 
     await page.goto('/admin/medicines');
+    const storeProductsTable = page.getByLabel(
+        'Bảng sản phẩm đang bán tại quầy'
+    );
+    await expect(storeProductsTable).toBeVisible();
+    await expect(
+        storeProductsTable.getByRole('columnheader', { name: 'Lô bán trước' })
+    ).toBeVisible();
+    await expect(
+        storeProductsTable.getByRole('columnheader', { name: 'Hạn dùng' })
+    ).toBeVisible();
+    await expect(
+        storeProductsTable.getByRole('columnheader', { name: 'Giá nhập' })
+    ).toBeVisible();
+    await expect(
+        storeProductsTable.getByRole('columnheader', { name: 'Giá bán lẻ' })
+    ).toBeVisible();
+    await page.screenshot({
+        path: '/tmp/pharm-medicines-desktop.png',
+        fullPage: true,
+    });
     await page.getByRole('button', { name: 'Thêm thuốc', exact: true }).click();
     const medicineDialog = page.getByRole('dialog');
     await expect(
@@ -229,6 +249,28 @@ test('system admin can use the workspace across desktop and mobile', async ({
         .poll(() =>
             page
                 .getByLabel('Bảng thông tin chi tiết thư viện thuốc')
+                .evaluate(
+                    (element) => element.scrollWidth > element.clientWidth
+                )
+        )
+        .toBe(true);
+    await expect
+        .poll(() =>
+            page.evaluate(
+                () => document.documentElement.scrollWidth <= window.innerWidth
+            )
+        )
+        .toBe(true);
+
+    await page.getByRole('button', { name: 'Mở menu' }).click();
+    await page
+        .getByRole('link', { name: 'Danh mục thuốc', exact: true })
+        .last()
+        .click();
+    await expect
+        .poll(() =>
+            page
+                .getByLabel('Bảng sản phẩm đang bán tại quầy')
                 .evaluate(
                     (element) => element.scrollWidth > element.clientWidth
                 )

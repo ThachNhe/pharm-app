@@ -366,6 +366,16 @@ const buildInventoryRows = async (storeId: string, search?: string) => {
   });
 };
 
+const hideInventoryCosts = (rows: Awaited<ReturnType<typeof buildInventoryRows>>) =>
+  rows.map((item) => ({
+    ...item,
+    inventoryValue: undefined,
+    batches: item.batches.map((batch) => ({
+      ...batch,
+      importPrice: undefined,
+    })),
+  }));
+
 const getDashboard = async (actor: Actor, storeId: string) => {
   const access = await getStoreAccess(actor, storeId, 'staff');
   const today = startOfCurrentBusinessDay();
@@ -624,7 +634,7 @@ const queryMedicines = async (
   storeId: string,
   query: PageQuery & { alert?: 'low' | 'expiring'; active?: string | boolean },
 ) => {
-  await getStoreAccess(actor, storeId, 'staff');
+  const access = await getStoreAccess(actor, storeId, 'staff');
   const { page, limit } = getPagination(query);
   let rows = await buildInventoryRows(storeId, query.search);
   if (query.alert === 'low') rows = rows.filter((item) => item.isLowStock);
@@ -633,7 +643,8 @@ const queryMedicines = async (
     const active = query.active === true || query.active === 'true';
     rows = rows.filter((item) => item.isActive === active);
   }
-  return paginateRows(rows, page, limit);
+  const canViewCosts = access.user.isSystemAdmin || access.role === 'owner' || access.role === 'manager';
+  return paginateRows(canViewCosts ? rows : hideInventoryCosts(rows), page, limit);
 };
 
 const queryReferenceProducts = async (actor: Actor, storeId: string, query: PageQuery) => {
@@ -1240,17 +1251,7 @@ const queryInventory = async (actor: Actor, storeId: string, query: PageQuery & 
   if (query.alert === 'low') rows = rows.filter((item) => item.isLowStock);
   if (query.alert === 'expiring') rows = rows.filter((item) => item.hasExpiringBatch);
   const canViewCosts = access.user.isSystemAdmin || access.role === 'owner' || access.role === 'manager';
-  const scopedRows = canViewCosts
-    ? rows
-    : rows.map((item) => ({
-        ...item,
-        inventoryValue: undefined,
-        batches: item.batches.map((batch) => ({
-          ...batch,
-          importPrice: undefined,
-        })),
-      }));
-  return paginateRows(scopedRows, page, limit);
+  return paginateRows(canViewCosts ? rows : hideInventoryCosts(rows), page, limit);
 };
 
 const queryInventoryMovements = async (actor: Actor, storeId: string, query: DateQuery) => {

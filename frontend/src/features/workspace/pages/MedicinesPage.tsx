@@ -17,11 +17,11 @@ import {
 } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { useDebounce } from '@/hooks/useDebounce';
-import { formatCurrency, formatNumber } from '@/lib/utils';
+import { formatCurrency, formatDate, formatNumber } from '@/lib/utils';
 import { getApiErrorMessage } from '../utils/api-error';
 import { usePaginatedSearch } from '../hooks/usePaginatedSearch';
 import { workspaceService } from '../services/workspace.service';
-import type { Medicine, ReferenceProduct } from '../types';
+import type { InventoryMedicine, Medicine, ReferenceProduct } from '../types';
 import { useWorkspace } from '../hooks/useWorkspace';
 import { ProductCategoryDialog } from '../components/ProductCategoryDialog';
 import { ProductCategorySelect } from '../components/ProductCategorySelect';
@@ -125,6 +125,9 @@ const getMedicineValues = (medicine: Medicine): MedicineFormValues => ({
     description: medicine.description ?? '',
     isActive: medicine.isActive,
 });
+
+const getNextSaleBatch = (medicine: InventoryMedicine) =>
+    medicine.batches.find((batch) => !batch.isExpired);
 
 function MedicineDialog({
     open,
@@ -850,7 +853,7 @@ export function MedicinesPage() {
         <div className="space-y-5">
             <PageHeader
                 title="Danh mục thuốc"
-                description="Tra cứu thuốc, giá bán và định mức tồn của quầy."
+                description="Tra cứu thông tin bán hàng, lô FEFO, giá và tồn kho của quầy."
                 actions={
                     canManage ? (
                         <Button onClick={openCreate}>
@@ -872,6 +875,10 @@ export function MedicinesPage() {
                         {formatNumber(medicinesQuery.data?.totalResults ?? 0)}{' '}
                         mặt hàng
                     </p>
+                </div>
+                <div className="bg-secondary/35 text-muted-foreground border-border border-b px-4 py-2.5 text-xs">
+                    Lô và hạn dùng hiển thị theo lô còn hạn được ưu tiên bán
+                    trước (FEFO). Số lượng là tổng tồn khả dụng tại quầy.
                 </div>
 
                 {medicinesQuery.isPending ? (
@@ -901,30 +908,63 @@ export function MedicinesPage() {
                     />
                 ) : (
                     <>
-                        <div className="overflow-x-auto">
-                            <table className="w-full min-w-[1240px] text-left text-sm">
+                        <div
+                            className="overflow-x-auto"
+                            tabIndex={0}
+                            aria-label="Bảng sản phẩm đang bán tại quầy"
+                        >
+                            <table className="w-full min-w-[2600px] text-left text-sm">
                                 <thead className="bg-muted/55 text-muted-foreground text-xs uppercase">
                                     <tr>
-                                        <th className="px-4 py-3 font-medium">
-                                            Thuốc
+                                        <th className="bg-muted sticky left-0 z-20 w-16 min-w-16 px-4 py-3 text-right font-medium">
+                                            STT
+                                        </th>
+                                        <th className="bg-muted sticky left-16 z-20 w-32 min-w-32 px-4 py-3 font-medium">
+                                            Mã
+                                        </th>
+                                        <th className="bg-muted sticky left-48 z-20 w-80 min-w-80 px-4 py-3 font-medium">
+                                            Tên sản phẩm
                                         </th>
                                         <th className="px-4 py-3 font-medium">
-                                            Mã hàng hóa
+                                            ĐVT
+                                        </th>
+                                        <th className="px-4 py-3 font-medium">
+                                            Lô bán trước
+                                        </th>
+                                        <th className="px-4 py-3 font-medium">
+                                            Hạn dùng
+                                        </th>
+                                        <th className="px-4 py-3 text-right font-medium">
+                                            Số lượng
+                                        </th>
+                                        {canManage ? (
+                                            <th className="px-4 py-3 text-right font-medium">
+                                                Giá nhập
+                                            </th>
+                                        ) : null}
+                                        <th className="px-4 py-3 text-right font-medium">
+                                            Giá bán lẻ
+                                        </th>
+                                        <th className="px-4 py-3 font-medium">
+                                            Số đăng ký
                                         </th>
                                         <th className="px-4 py-3 font-medium">
                                             Mã vạch
                                         </th>
                                         <th className="px-4 py-3 font-medium">
-                                            Nhóm hàng hóa
+                                            Kê đơn
+                                        </th>
+                                        <th className="px-4 py-3 font-medium">
+                                            Hoạt chất
+                                        </th>
+                                        <th className="px-4 py-3 font-medium">
+                                            Hãng sản xuất
+                                        </th>
+                                        <th className="px-4 py-3 font-medium">
+                                            Nhóm sản phẩm
                                         </th>
                                         <th className="px-4 py-3 font-medium">
                                             Vị trí
-                                        </th>
-                                        <th className="px-4 py-3 text-right font-medium">
-                                            Giá bán
-                                        </th>
-                                        <th className="px-4 py-3 text-right font-medium">
-                                            Tồn khả dụng
                                         </th>
                                         <th className="px-4 py-3 font-medium">
                                             Trạng thái
@@ -938,68 +978,144 @@ export function MedicinesPage() {
                                 </thead>
                                 <tbody className="divide-border divide-y">
                                     {medicinesQuery.data.results.map(
-                                        (medicine) => (
-                                            <tr
-                                                key={medicine.id}
-                                                className="hover:bg-muted/30"
-                                            >
-                                                <td className="px-4 py-3">
-                                                    <p className="font-medium">
-                                                        {medicine.name}
-                                                    </p>
-                                                    <p className="text-muted-foreground mt-0.5 text-xs">
+                                        (medicine, index) => {
+                                            const nextBatch =
+                                                getNextSaleBatch(medicine);
+                                            return (
+                                                <tr
+                                                    key={medicine.id}
+                                                    className="group hover:bg-muted/30"
+                                                >
+                                                    <td className="bg-card group-hover:bg-muted sticky left-0 z-10 w-16 min-w-16 px-4 py-3 text-right transition-colors">
+                                                        {(medicinesQuery.data
+                                                            .page -
+                                                            1) *
+                                                            medicinesQuery.data
+                                                                .limit +
+                                                            index +
+                                                            1}
+                                                    </td>
+                                                    <td
+                                                        className="bg-card group-hover:bg-muted sticky left-16 z-10 w-32 max-w-32 min-w-32 truncate px-4 py-3 font-mono text-xs transition-colors"
+                                                        title={medicine.code}
+                                                    >
+                                                        {medicine.code}
+                                                    </td>
+                                                    <td className="bg-card group-hover:bg-muted sticky left-48 z-10 w-80 max-w-80 min-w-80 px-4 py-3 transition-colors">
+                                                        <p
+                                                            className="line-clamp-2 font-medium"
+                                                            title={
+                                                                medicine.name
+                                                            }
+                                                        >
+                                                            {medicine.name}
+                                                        </p>
+                                                        <p className="text-muted-foreground mt-0.5 text-xs">
+                                                            {[
+                                                                medicine.strength,
+                                                                medicine.dosageForm,
+                                                            ]
+                                                                .filter(Boolean)
+                                                                .join(' · ') ||
+                                                                'Chưa bổ sung mô tả'}
+                                                        </p>
+                                                    </td>
+                                                    <td className="px-4 py-3 whitespace-nowrap">
+                                                        {medicine.baseUnitName}
+                                                    </td>
+                                                    <td className="px-4 py-3 font-mono text-xs whitespace-nowrap">
+                                                        {nextBatch?.batchNumber ??
+                                                            '—'}
+                                                    </td>
+                                                    <td className="px-4 py-3 whitespace-nowrap">
+                                                        {nextBatch
+                                                            ? formatDate(
+                                                                  nextBatch.expiryDate
+                                                              )
+                                                            : '—'}
+                                                    </td>
+                                                    <td className="px-4 py-3 text-right whitespace-nowrap">
+                                                        <span
+                                                            className={
+                                                                medicine.availableStock <=
+                                                                medicine.minStock
+                                                                    ? 'text-destructive font-semibold'
+                                                                    : 'font-medium'
+                                                            }
+                                                        >
+                                                            {formatNumber(
+                                                                medicine.availableStock
+                                                            )}
+                                                        </span>{' '}
+                                                        <span className="text-muted-foreground">
+                                                            {medicine.baseUnitName.toLowerCase()}
+                                                        </span>
+                                                    </td>
+                                                    {canManage ? (
+                                                        <td className="px-4 py-3 text-right whitespace-nowrap">
+                                                            {nextBatch?.importPrice ==
+                                                            null
+                                                                ? '—'
+                                                                : formatCurrency(
+                                                                      nextBatch.importPrice
+                                                                  )}
+                                                        </td>
+                                                    ) : null}
+                                                    <td className="px-4 py-3 text-right font-medium whitespace-nowrap">
+                                                        {formatCurrency(
+                                                            medicine.sellingPrice
+                                                        )}
+                                                    </td>
+                                                    <td className="px-4 py-3 whitespace-nowrap">
+                                                        {medicine.registrationNumber ||
+                                                            '—'}
+                                                    </td>
+                                                    <td className="px-4 py-3 font-mono text-xs whitespace-nowrap">
                                                         {[
-                                                            medicine.activeIngredient,
-                                                            medicine.strength,
-                                                            medicine.dosageForm,
+                                                            medicine.barcode,
+                                                            medicine.secondaryBarcode,
                                                         ]
                                                             .filter(Boolean)
-                                                            .join(' · ') ||
-                                                            'Chưa bổ sung mô tả'}
-                                                    </p>
-                                                </td>
-                                                <td className="px-4 py-3 font-mono text-xs whitespace-nowrap">
-                                                    {medicine.code}
-                                                </td>
-                                                <td className="text-muted-foreground px-4 py-3 font-mono text-xs">
-                                                    {[
-                                                        medicine.barcode,
-                                                        medicine.secondaryBarcode,
-                                                    ]
-                                                        .filter(Boolean)
-                                                        .join(' / ') || '—'}
-                                                </td>
-                                                <td className="px-4 py-3">
-                                                    {medicine.category || '—'}
-                                                </td>
-                                                <td className="px-4 py-3">
-                                                    {medicine.positionName ||
-                                                        '—'}
-                                                </td>
-                                                <td className="px-4 py-3 text-right font-medium">
-                                                    {formatCurrency(
-                                                        medicine.sellingPrice
-                                                    )}
-                                                </td>
-                                                <td className="px-4 py-3 text-right">
-                                                    <span
-                                                        className={
-                                                            medicine.availableStock <=
-                                                            medicine.minStock
-                                                                ? 'text-destructive font-semibold'
-                                                                : 'font-medium'
-                                                        }
-                                                    >
-                                                        {formatNumber(
-                                                            medicine.availableStock
-                                                        )}
-                                                    </span>{' '}
-                                                    <span className="text-muted-foreground">
-                                                        {medicine.baseUnitName.toLowerCase()}
-                                                    </span>
-                                                </td>
-                                                <td className="px-4 py-3">
-                                                    <div className="flex flex-wrap gap-1.5">
+                                                            .join(' / ') || '—'}
+                                                    </td>
+                                                    <td className="px-4 py-3">
+                                                        {medicine.requiresPrescription
+                                                            ? 'Có'
+                                                            : 'Không'}
+                                                    </td>
+                                                    <td className="max-w-64 px-4 py-3">
+                                                        <span
+                                                            className="line-clamp-2"
+                                                            title={
+                                                                medicine.activeIngredient ??
+                                                                undefined
+                                                            }
+                                                        >
+                                                            {medicine.activeIngredient ||
+                                                                '—'}
+                                                        </span>
+                                                    </td>
+                                                    <td className="max-w-64 px-4 py-3">
+                                                        <span
+                                                            className="line-clamp-2"
+                                                            title={
+                                                                medicine.manufacturer ??
+                                                                undefined
+                                                            }
+                                                        >
+                                                            {medicine.manufacturer ||
+                                                                '—'}
+                                                        </span>
+                                                    </td>
+                                                    <td className="px-4 py-3 whitespace-nowrap">
+                                                        {medicine.category ||
+                                                            '—'}
+                                                    </td>
+                                                    <td className="px-4 py-3 whitespace-nowrap">
+                                                        {medicine.positionName ||
+                                                            '—'}
+                                                    </td>
+                                                    <td className="px-4 py-3">
                                                         <StatusBadge
                                                             tone={
                                                                 medicine.isActive
@@ -1011,32 +1127,27 @@ export function MedicinesPage() {
                                                                 ? 'Đang bán'
                                                                 : 'Ngừng bán'}
                                                         </StatusBadge>
-                                                        {medicine.requiresPrescription ? (
-                                                            <StatusBadge tone="warning">
-                                                                Kê đơn
-                                                            </StatusBadge>
-                                                        ) : null}
-                                                    </div>
-                                                </td>
-                                                {canManage ? (
-                                                    <td className="px-4 py-3 text-right">
-                                                        <Button
-                                                            size="icon-sm"
-                                                            variant="ghost"
-                                                            onClick={() =>
-                                                                openEdit(
-                                                                    medicine
-                                                                )
-                                                            }
-                                                            aria-label={`Sửa ${medicine.name}`}
-                                                            title="Sửa thuốc"
-                                                        >
-                                                            <Edit3 />
-                                                        </Button>
                                                     </td>
-                                                ) : null}
-                                            </tr>
-                                        )
+                                                    {canManage ? (
+                                                        <td className="px-4 py-3 text-right">
+                                                            <Button
+                                                                size="icon-sm"
+                                                                variant="ghost"
+                                                                onClick={() =>
+                                                                    openEdit(
+                                                                        medicine
+                                                                    )
+                                                                }
+                                                                aria-label={`Sửa ${medicine.name}`}
+                                                                title="Sửa thuốc"
+                                                            >
+                                                                <Edit3 />
+                                                            </Button>
+                                                        </td>
+                                                    ) : null}
+                                                </tr>
+                                            );
+                                        }
                                     )}
                                 </tbody>
                             </table>
