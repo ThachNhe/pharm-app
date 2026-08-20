@@ -21,6 +21,10 @@ export interface Sale {
         quantity: number;
         salePrice: number;
         costPrice?: number;
+        displayQuantity: number;
+        displaySalePrice: number;
+        unitName: string;
+        conversionRate: number;
         medicine: { id: string; name: string; baseUnitName: string };
         stockBatch?: {
             id: string;
@@ -63,5 +67,6 @@ export interface SalePayload {
     items: Array<{
         medicineId: string;
         quantity: number;
+        unitId?: string;
     }>;
 }

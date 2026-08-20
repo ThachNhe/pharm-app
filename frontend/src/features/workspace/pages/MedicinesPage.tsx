@@ -1,9 +1,16 @@
 import { useState } from 'react';
 import { z } from 'zod';
 import { zodResolver } from '@hookform/resolvers/zod';
-import { useForm, useWatch } from 'react-hook-form';
+import { useFieldArray, useForm, useWatch } from 'react-hook-form';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { CheckCircle2, Edit3, Library, LoaderCircle, Plus } from 'lucide-react';
+import {
+    CheckCircle2,
+    Edit3,
+    Library,
+    LoaderCircle,
+    Plus,
+    Trash2,
+} from 'lucide-react';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -37,6 +44,25 @@ import {
     StatusBadge,
 } from '../components/shared';
 
+const COMMON_UNIT_NAMES = [
+    'Viên',
+    'Vỉ',
+    'Hộp',
+    'Chai',
+    'Gói',
+    'Ống',
+    'Lọ',
+    'Tuýp',
+    'Thùng',
+    'Kit',
+];
+
+const baseUnit = (name: string) => ({
+    name,
+    conversionRate: 1,
+    isBaseUnit: true,
+});
+
 const medicineSchema = z
     .object({
         categoryId: z.string().min(1, 'Chọn nhóm hàng hóa'),
@@ -64,6 +90,19 @@ const medicineSchema = z
         requiresPrescription: z.boolean(),
         description: z.string().trim().max(2000),
         isActive: z.boolean(),
+        units: z
+            .array(
+                z.object({
+                    name: z.string().trim().min(1, 'Chọn đơn vị tính').max(50),
+                    conversionRate: z
+                        .number({ error: 'Nhập hệ số hợp lệ' })
+                        .positive('Hệ số phải lớn hơn 0')
+                        .multipleOf(0.01, 'Hệ số có tối đa 2 số thập phân'),
+                    isBaseUnit: z.boolean(),
+                })
+            )
+            .min(1)
+            .max(10, 'Mỗi thuốc có tối đa 10 đơn vị tính'),
     })
     .refine(
         (values) =>
@@ -74,7 +113,40 @@ const medicineSchema = z
             path: ['secondaryBarcode'],
             message: 'Mã vạch 2 phải khác mã vạch chính',
         }
-    );
+    )
+    .superRefine((values, context) => {
+        const baseUnits = values.units.filter((unit) => unit.isBaseUnit);
+        if (
+            baseUnits.length !== 1 ||
+            baseUnits[0].name !== values.baseUnitName ||
+            baseUnits[0].conversionRate !== 1
+        ) {
+            context.addIssue({
+                code: 'custom',
+                path: ['units'],
+                message: 'Đơn vị nhỏ nhất phải có hệ số bằng 1',
+            });
+        }
+        const names = values.units.map((unit) =>
+            unit.name.trim().toLocaleLowerCase('vi')
+        );
+        if (new Set(names).size !== names.length) {
+            context.addIssue({
+                code: 'custom',
+                path: ['units'],
+                message: 'Tên đơn vị tính không được trùng nhau',
+            });
+        }
+        values.units.forEach((unit, index) => {
+            if (!unit.isBaseUnit && unit.conversionRate <= 1) {
+                context.addIssue({
+                    code: 'custom',
+                    path: ['units', index, 'conversionRate'],
+                    message: 'Hệ số phải lớn hơn 1',
+                });
+            }
+        });
+    });
 
 type MedicineFormValues = z.infer<typeof medicineSchema>;
 
@@ -100,6 +172,7 @@ const emptyValues: MedicineFormValues = {
     requiresPrescription: false,
     description: '',
     isActive: true,
+    units: [baseUnit('Viên')],
 };
 
 const getMedicineValues = (medicine: Medicine): MedicineFormValues => ({
@@ -124,6 +197,13 @@ const getMedicineValues = (medicine: Medicine): MedicineFormValues => ({
     requiresPrescription: medicine.requiresPrescription,
     description: medicine.description ?? '',
     isActive: medicine.isActive,
+    units: medicine.units.length
+        ? medicine.units.map((unit) => ({
+              name: unit.name,
+              conversionRate: unit.conversionRate,
+              isBaseUnit: unit.isBaseUnit,
+          }))
+        : [baseUnit(medicine.baseUnitName)],
 });
 
 const getNextSaleBatch = (medicine: InventoryMedicine) =>
@@ -147,6 +227,9 @@ function MedicineDialog({
     const [selectedReferenceProduct, setSelectedReferenceProduct] =
         useState<ReferenceProduct | null>(null);
     const [categoryDialogOpen, setCategoryDialogOpen] = useState(false);
+    const [unitDialogOpen, setUnitDialogOpen] = useState(false);
+    const [customUnitName, setCustomUnitName] = useState('');
+    const [customUnitNames, setCustomUnitNames] = useState<string[]>([]);
     const debouncedLibrarySearch = useDebounce(librarySearch, 350);
     const form = useForm<MedicineFormValues>({
         resolver: zodResolver(medicineSchema),
@@ -158,6 +241,19 @@ function MedicineDialog({
     });
     const isActive = useWatch({ control: form.control, name: 'isActive' });
     const categoryId = useWatch({ control: form.control, name: 'categoryId' });
+    const baseUnitName = useWatch({
+        control: form.control,
+        name: 'baseUnitName',
+    });
+    const units = useWatch({ control: form.control, name: 'units' });
+    const unitFields = useFieldArray({ control: form.control, name: 'units' });
+    const unitNames = [
+        ...new Set([
+            ...COMMON_UNIT_NAMES,
+            ...customUnitNames,
+            ...units.map((unit) => unit.name),
+        ]),
+    ];
     const categoriesQuery = useQuery({
         queryKey: [
             'workspace',
@@ -210,13 +306,15 @@ function MedicineDialog({
                     sensitivity: 'accent',
                 }) === 0
         );
+        const selectedBaseUnitName =
+            product.unitName ?? emptyValues.baseUnitName;
         form.reset({
             ...emptyValues,
             categoryId: matchingCategory?.id ?? '',
             code: product.code ?? '',
             positionName: product.positionName ?? '',
             name: product.name,
-            baseUnitName: product.unitName ?? emptyValues.baseUnitName,
+            baseUnitName: selectedBaseUnitName,
             barcode: product.barcode ?? product.secondaryBarcode ?? '',
             secondaryBarcode:
                 product.secondaryBarcode &&
@@ -231,7 +329,49 @@ function MedicineDialog({
             specification: product.specification ?? '',
             usageInstructions: product.usageInstructions ?? '',
             minStock: product.minInventory ?? 0,
+            units: product.medicineUnits.length
+                ? product.medicineUnits.map((unit) => ({
+                      name: unit.name,
+                      conversionRate: unit.conversionRate,
+                      isBaseUnit: unit.isBaseUnit,
+                  }))
+                : [baseUnit(selectedBaseUnitName)],
         });
+    };
+
+    const changeBaseUnit = (name: string) => {
+        const nextUnits = [
+            baseUnit(name),
+            ...units
+                .filter((unit) => !unit.isBaseUnit)
+                .filter(
+                    (unit) =>
+                        unit.name.localeCompare(name, 'vi', {
+                            sensitivity: 'accent',
+                        }) !== 0
+                ),
+        ];
+        form.setValue('baseUnitName', name, {
+            shouldDirty: true,
+            shouldValidate: true,
+        });
+        unitFields.replace(nextUnits);
+    };
+
+    const addCustomUnit = () => {
+        const name = customUnitName.trim();
+        if (!name) return;
+        const existing = unitNames.find(
+            (unitName) =>
+                unitName.localeCompare(name, 'vi', {
+                    sensitivity: 'accent',
+                }) === 0
+        );
+        const selectedName = existing ?? name;
+        if (!existing) setCustomUnitNames((current) => [...current, name]);
+        changeBaseUnit(selectedName);
+        setCustomUnitName('');
+        setUnitDialogOpen(false);
     };
 
     const mutation = useMutation({
@@ -247,6 +387,7 @@ function MedicineDialog({
                         sellingPrice: values.sellingPrice,
                         minStock: values.minStock,
                         isActive: values.isActive,
+                        units: values.units,
                     }
                 );
             }
@@ -310,7 +451,10 @@ function MedicineDialog({
         Boolean(selectedReferenceProduct);
 
     const handleOpenChange = (nextOpen: boolean) => {
-        if (!nextOpen) setCategoryDialogOpen(false);
+        if (!nextOpen) {
+            setCategoryDialogOpen(false);
+            setUnitDialogOpen(false);
+        }
         onOpenChange(nextOpen);
     };
 
@@ -513,15 +657,42 @@ function MedicineDialog({
                             />
                         </Field>
                         <Field
-                            label="Đơn vị cơ bản"
+                            label="Đơn vị nhỏ nhất"
                             required
                             error={errors.baseUnitName?.message}
                         >
-                            <Input
-                                readOnly={referenceDetailsLocked}
-                                placeholder="Viên, chai, tuýp..."
+                            <input
+                                type="hidden"
                                 {...form.register('baseUnitName')}
                             />
+                            <div className="flex gap-2">
+                                <select
+                                    value={baseUnitName}
+                                    disabled={referenceDetailsLocked}
+                                    onChange={(event) =>
+                                        changeBaseUnit(event.target.value)
+                                    }
+                                    className="border-input bg-input-background focus:border-ring focus:ring-ring/20 h-9 min-w-0 flex-1 rounded-md border px-3 text-sm outline-none focus:ring-3 disabled:cursor-not-allowed disabled:opacity-60"
+                                    aria-label="Đơn vị nhỏ nhất"
+                                >
+                                    {unitNames.map((unitName) => (
+                                        <option key={unitName} value={unitName}>
+                                            {unitName}
+                                        </option>
+                                    ))}
+                                </select>
+                                <Button
+                                    type="button"
+                                    size="icon"
+                                    variant="outline"
+                                    disabled={referenceDetailsLocked}
+                                    onClick={() => setUnitDialogOpen(true)}
+                                    aria-label="Thêm đơn vị tính"
+                                    title="Thêm đơn vị tính"
+                                >
+                                    <Plus />
+                                </Button>
+                            </div>
                         </Field>
                         <Field
                             label="Hoạt chất"
@@ -533,6 +704,155 @@ function MedicineDialog({
                                 {...form.register('activeIngredient')}
                             />
                         </Field>
+                        <div className="border-border bg-muted/20 space-y-3 rounded-md border p-3 sm:col-span-2">
+                            <div className="flex flex-wrap items-start justify-between gap-3">
+                                <div>
+                                    <p className="text-sm font-medium">
+                                        Quy đổi đơn vị bán
+                                    </p>
+                                    <p className="text-muted-foreground mt-0.5 text-xs">
+                                        Tồn kho luôn lưu theo{' '}
+                                        {baseUnitName.toLowerCase()}.
+                                    </p>
+                                </div>
+                                <Button
+                                    type="button"
+                                    size="sm"
+                                    variant="outline"
+                                    onClick={() =>
+                                        unitFields.append({
+                                            name:
+                                                unitNames.find(
+                                                    (name) =>
+                                                        !units.some(
+                                                            (unit) =>
+                                                                unit.name ===
+                                                                name
+                                                        )
+                                                ) ?? '',
+                                            conversionRate: 10,
+                                            isBaseUnit: false,
+                                        })
+                                    }
+                                    disabled={unitFields.fields.length >= 10}
+                                >
+                                    <Plus />
+                                    Thêm quy đổi
+                                </Button>
+                            </div>
+                            {unitFields.fields.length === 1 ? (
+                                <p className="text-muted-foreground text-xs">
+                                    Ví dụ: 1 vỉ = 10 viên hoặc 1 hộp = 100 viên.
+                                </p>
+                            ) : (
+                                <div className="space-y-2">
+                                    {unitFields.fields
+                                        .slice(1)
+                                        .map((field, offset) => {
+                                            const index = offset + 1;
+                                            const unitError =
+                                                errors.units?.[index];
+                                            return (
+                                                <div
+                                                    key={field.id}
+                                                    className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_140px_36px]"
+                                                >
+                                                    <div>
+                                                        <select
+                                                            className="border-input bg-input-background focus:border-ring focus:ring-ring/20 h-9 w-full rounded-md border px-3 text-sm outline-none focus:ring-3"
+                                                            aria-label={`Đơn vị quy đổi ${index}`}
+                                                            {...form.register(
+                                                                `units.${index}.name`
+                                                            )}
+                                                        >
+                                                            <option value="">
+                                                                Chọn đơn vị
+                                                            </option>
+                                                            {unitNames.map(
+                                                                (unitName) => (
+                                                                    <option
+                                                                        key={
+                                                                            unitName
+                                                                        }
+                                                                        value={
+                                                                            unitName
+                                                                        }
+                                                                    >
+                                                                        {
+                                                                            unitName
+                                                                        }
+                                                                    </option>
+                                                                )
+                                                            )}
+                                                        </select>
+                                                        {unitError?.name
+                                                            ?.message ? (
+                                                            <p className="text-destructive mt-1 text-xs">
+                                                                {
+                                                                    unitError
+                                                                        .name
+                                                                        .message
+                                                                }
+                                                            </p>
+                                                        ) : null}
+                                                    </div>
+                                                    <div>
+                                                        <div className="relative">
+                                                            <Input
+                                                                type="number"
+                                                                min="1.01"
+                                                                step="0.01"
+                                                                inputMode="decimal"
+                                                                className="pr-12"
+                                                                aria-label={`Hệ số quy đổi ${index}`}
+                                                                {...form.register(
+                                                                    `units.${index}.conversionRate`,
+                                                                    {
+                                                                        valueAsNumber: true,
+                                                                    }
+                                                                )}
+                                                            />
+                                                            <span className="text-muted-foreground pointer-events-none absolute top-1/2 right-3 -translate-y-1/2 text-xs">
+                                                                x {baseUnitName}
+                                                            </span>
+                                                        </div>
+                                                        {unitError
+                                                            ?.conversionRate
+                                                            ?.message ? (
+                                                            <p className="text-destructive mt-1 text-xs">
+                                                                {
+                                                                    unitError
+                                                                        .conversionRate
+                                                                        .message
+                                                                }
+                                                            </p>
+                                                        ) : null}
+                                                    </div>
+                                                    <Button
+                                                        type="button"
+                                                        size="icon"
+                                                        variant="ghost"
+                                                        onClick={() =>
+                                                            unitFields.remove(
+                                                                index
+                                                            )
+                                                        }
+                                                        aria-label={`Xóa đơn vị quy đổi ${index}`}
+                                                        title="Xóa đơn vị quy đổi"
+                                                    >
+                                                        <Trash2 className="text-destructive" />
+                                                    </Button>
+                                                </div>
+                                            );
+                                        })}
+                                </div>
+                            )}
+                            {errors.units?.message ? (
+                                <p className="text-destructive text-xs">
+                                    {errors.units.message}
+                                </p>
+                            ) : null}
+                        </div>
                         <Field
                             label="Hàm lượng"
                             error={errors.strength?.message}
@@ -695,7 +1015,7 @@ function MedicineDialog({
                             />
                         </Field>
                         <Field
-                            label="Giá bán"
+                            label={`Giá bán / ${baseUnitName.toLowerCase()}`}
                             required
                             error={errors.sellingPrice?.message}
                         >
@@ -710,7 +1030,7 @@ function MedicineDialog({
                             />
                         </Field>
                         <Field
-                            label="Tồn tối thiểu"
+                            label={`Tồn tối thiểu (${baseUnitName.toLowerCase()})`}
                             error={errors.minStock?.message}
                         >
                             <Input
@@ -808,6 +1128,50 @@ function MedicineDialog({
                     }
                 />
             ) : null}
+            <Dialog open={unitDialogOpen} onOpenChange={setUnitDialogOpen}>
+                <DialogContent className="sm:max-w-sm">
+                    <DialogHeader>
+                        <DialogTitle>Thêm đơn vị tính</DialogTitle>
+                        <DialogDescription>
+                            Thêm tên đơn vị chưa có trong danh sách, ví dụ “Ống”
+                            hoặc “Bình”.
+                        </DialogDescription>
+                    </DialogHeader>
+                    <Field label="Tên đơn vị" required>
+                        <Input
+                            autoFocus
+                            maxLength={50}
+                            value={customUnitName}
+                            onChange={(event) =>
+                                setCustomUnitName(event.target.value)
+                            }
+                            onKeyDown={(event) => {
+                                if (event.key === 'Enter') {
+                                    event.preventDefault();
+                                    addCustomUnit();
+                                }
+                            }}
+                            placeholder="Ví dụ: Bình"
+                        />
+                    </Field>
+                    <DialogFooter>
+                        <Button
+                            type="button"
+                            variant="outline"
+                            onClick={() => setUnitDialogOpen(false)}
+                        >
+                            Hủy
+                        </Button>
+                        <Button
+                            type="button"
+                            disabled={!customUnitName.trim()}
+                            onClick={addCustomUnit}
+                        >
+                            Thêm đơn vị
+                        </Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
         </Dialog>
     );
 }
@@ -1021,7 +1385,32 @@ export function MedicinesPage() {
                                                         </p>
                                                     </td>
                                                     <td className="px-4 py-3 whitespace-nowrap">
-                                                        {medicine.baseUnitName}
+                                                        <p>
+                                                            {
+                                                                medicine.baseUnitName
+                                                            }
+                                                        </p>
+                                                        {medicine.units.length >
+                                                        1 ? (
+                                                            <p className="text-muted-foreground mt-0.5 text-xs">
+                                                                {medicine.units
+                                                                    .filter(
+                                                                        (
+                                                                            unit
+                                                                        ) =>
+                                                                            !unit.isBaseUnit
+                                                                    )
+                                                                    .map(
+                                                                        (
+                                                                            unit
+                                                                        ) =>
+                                                                            `${unit.name} = ${formatNumber(unit.conversionRate)} ${medicine.baseUnitName.toLowerCase()}`
+                                                                    )
+                                                                    .join(
+                                                                        ' · '
+                                                                    )}
+                                                            </p>
+                                                        ) : null}
                                                     </td>
                                                     <td className="px-4 py-3 font-mono text-xs whitespace-nowrap">
                                                         {nextBatch?.batchNumber ??

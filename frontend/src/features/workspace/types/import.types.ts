@@ -18,6 +18,10 @@ export interface ImportReceipt {
         batchNumber: string;
         quantity: number;
         importPrice: number;
+        baseQuantity: number;
+        baseImportPrice: number;
+        unitName: string;
+        conversionRate: number;
         expiryDate: string;
         medicine: { id: string; name: string; baseUnitName: string };
     }>;
@@ -33,5 +37,6 @@ export interface ImportPayload {
         quantity: number;
         importPrice: number;
         expiryDate: string;
+        unitId?: string;
     }>;
 }

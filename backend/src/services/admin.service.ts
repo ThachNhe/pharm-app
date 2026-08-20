@@ -623,13 +623,35 @@ const resetUserPassword = async (actor: Actor, userId: string, body) => {
 };
 
 const validateMedicineUnits = (baseUnitName: string, units = []) => {
-  const normalizedUnits = units.length ? units : [{ name: baseUnitName, conversionRate: 1, isBaseUnit: true }];
+  const normalizedBaseUnitName = baseUnitName.trim();
+  const normalizedUnits = (
+    units.length ? units : [{ name: normalizedBaseUnitName, conversionRate: 1, isBaseUnit: true }]
+  ).map((unit) => ({
+    name: unit.name.trim(),
+    conversionRate: Number(unit.conversionRate),
+    isBaseUnit: unit.isBaseUnit,
+  }));
   const baseUnits = normalizedUnits.filter((unit) => unit.isBaseUnit);
-  if (baseUnits.length !== 1) {
-    throw new ApiError(httpStatus.BAD_REQUEST, 'Medicine must have exactly one base unit');
+  if (
+    baseUnits.length !== 1 ||
+    baseUnits[0].name.localeCompare(normalizedBaseUnitName, 'vi', { sensitivity: 'accent' }) !== 0 ||
+    baseUnits[0].conversionRate !== 1
+  ) {
+    throw new ApiError(httpStatus.BAD_REQUEST, 'Đơn vị nhỏ nhất phải có hệ số quy đổi bằng 1');
   }
-  if (baseUnits[0].name !== baseUnitName || Number(baseUnits[0].conversionRate) !== 1) {
-    throw new ApiError(httpStatus.BAD_REQUEST, 'Base unit must match baseUnitName and have conversion rate 1');
+  if (
+    normalizedUnits.some(
+      (unit) => !unit.name || unit.name.length > 50 || !Number.isFinite(unit.conversionRate) || unit.conversionRate <= 0,
+    )
+  ) {
+    throw new ApiError(httpStatus.BAD_REQUEST, 'Đơn vị quy đổi không hợp lệ');
+  }
+  if (normalizedUnits.some((unit) => !unit.isBaseUnit && unit.conversionRate <= 1)) {
+    throw new ApiError(httpStatus.BAD_REQUEST, 'Đơn vị quy đổi phải lớn hơn đơn vị nhỏ nhất');
+  }
+  const uniqueNames = new Set(normalizedUnits.map((unit) => unit.name.toLocaleLowerCase('vi')));
+  if (uniqueNames.size !== normalizedUnits.length) {
+    throw new ApiError(httpStatus.BAD_REQUEST, 'Tên đơn vị tính không được trùng nhau');
   }
   return normalizedUnits;
 };
@@ -705,6 +727,19 @@ const updateMedicine = async (actor: Actor, medicineId: string, body) => {
   const units = body.units ? validateMedicineUnits(body.baseUnitName, body.units) : null;
 
   const medicine = await prisma.$transaction(async (tx) => {
+    if (body.baseUnitName) {
+      const existing = await tx.medicine.findUnique({ where: { id: medicineId }, select: { baseUnitName: true } });
+      if (existing && body.baseUnitName.trim().localeCompare(existing.baseUnitName, 'vi', { sensitivity: 'accent' }) !== 0) {
+        const [importDetailCount, saleDetailCount] = await Promise.all([
+          tx.importDetail.count({ where: { medicineId } }),
+          tx.saleDetail.count({ where: { medicineId } }),
+        ]);
+        if (importDetailCount || saleDetailCount) {
+          throw new ApiError(httpStatus.CONFLICT, 'Không thể đổi đơn vị nhỏ nhất của thuốc đã phát sinh nhập hoặc bán');
+        }
+      }
+    }
+
     const updated = await tx.medicine.update({
       where: { id: medicineId },
       data: {

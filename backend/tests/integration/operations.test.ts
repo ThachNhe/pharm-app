@@ -70,6 +70,10 @@ describe('Store operations flow', () => {
         sellingPrice: 2000,
         minStock: 20,
         isActive: true,
+        units: [
+          { name: 'Viên', conversionRate: 1, isBaseUnit: true },
+          { name: 'Vỉ', conversionRate: 10, isBaseUnit: false },
+        ],
       })
       .expect(httpStatus.CREATED);
 
@@ -82,6 +86,12 @@ describe('Store operations flow', () => {
       usageInstructions: 'Uống sau ăn',
       isActive: true,
     });
+    expect(medicineRes.body.units).toEqual([
+      expect.objectContaining({ name: 'Viên', conversionRate: 1, isBaseUnit: true }),
+      expect.objectContaining({ name: 'Vỉ', conversionRate: 10, isBaseUnit: false }),
+    ]);
+    const baseUnitId = medicineRes.body.units.find((unit) => unit.isBaseUnit).id;
+    const blisterUnitId = medicineRes.body.units.find((unit) => unit.name === 'Vỉ').id;
 
     const importRes = await request(app)
       .post(`/v1/stores/${store.id}/imports`)
@@ -93,8 +103,9 @@ describe('Store operations flow', () => {
           {
             medicineId: medicineRes.body.id,
             batchNumber: 'LO-GAN',
-            quantity: 30,
-            importPrice: 800,
+            quantity: 3,
+            importPrice: 8000,
+            unitId: blisterUnitId,
             expiryDate: futureDate(60),
           },
           {
@@ -102,6 +113,7 @@ describe('Store operations flow', () => {
             batchNumber: 'LO-XA',
             quantity: 70,
             importPrice: 1000,
+            unitId: baseUnitId,
             expiryDate: futureDate(365),
           },
         ],
@@ -111,6 +123,14 @@ describe('Store operations flow', () => {
     expect(importRes.body).toMatchObject({
       status: 'draft',
       totalAmount: 94000,
+    });
+    expect(importRes.body.details[0]).toMatchObject({
+      quantity: 3,
+      importPrice: 8000,
+      baseQuantity: 30,
+      baseImportPrice: 800,
+      unitName: 'Vỉ',
+      conversionRate: 10,
     });
     expect(await prisma.stockBatch.count()).toBe(0);
 
@@ -189,7 +209,7 @@ describe('Store operations flow', () => {
       .send({
         paymentMethod: 'cash',
         discountAmount: 10000,
-        items: [{ medicineId: medicineRes.body.id, quantity: 40 }],
+        items: [{ medicineId: medicineRes.body.id, quantity: 4, unitId: blisterUnitId }],
       })
       .expect(httpStatus.CREATED);
 
@@ -201,9 +221,17 @@ describe('Store operations flow', () => {
     expect(saleRes.body.details).toHaveLength(2);
     expect(saleRes.body.details[0]).toMatchObject({
       quantity: 30,
+      displayQuantity: 3,
+      displaySalePrice: 20000,
+      unitName: 'Vỉ',
+      conversionRate: 10,
     });
     expect(saleRes.body.details[1]).toMatchObject({
       quantity: 10,
+      displayQuantity: 1,
+      displaySalePrice: 20000,
+      unitName: 'Vỉ',
+      conversionRate: 10,
     });
     expect(saleRes.body.details[0]).not.toHaveProperty('costPrice');
     expect(saleRes.body.details[1]).not.toHaveProperty('costPrice');
@@ -251,6 +279,15 @@ describe('Store operations flow', () => {
       quantity: 40,
       grossProfit: 36000,
     });
+
+    await request(app)
+      .patch(`/v1/stores/${store.id}/medicines/${medicineRes.body.id}`)
+      .set('Authorization', `Bearer ${ownerToken}`)
+      .send({
+        baseUnitName: 'Gói',
+        units: [{ name: 'Gói', conversionRate: 1, isBaseUnit: true }],
+      })
+      .expect(httpStatus.CONFLICT);
 
     const saleCount = await prisma.sale.count();
     await request(app)

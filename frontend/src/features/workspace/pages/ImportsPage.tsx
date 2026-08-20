@@ -63,6 +63,7 @@ const importSchema = z.object({
         .array(
             z.object({
                 medicineId: z.string().min(1, 'Chọn thuốc'),
+                unitId: z.string().min(1, 'Chọn đơn vị'),
                 batchNumber: z.string().trim().min(1, 'Nhập số lô').max(100),
                 quantity: z
                     .number({ error: 'Nhập số lượng hợp lệ' })
@@ -86,6 +87,7 @@ type ImportFormValues = z.infer<typeof importSchema>;
 
 const emptyItem: ImportFormValues['items'][number] = {
     medicineId: '',
+    unitId: '',
     batchNumber: '',
     quantity: 1,
     importPrice: 0,
@@ -253,10 +255,16 @@ function CreateImportDialog({
                             {fields.fields.map((field, index) => {
                                 const itemErrors =
                                     form.formState.errors.items?.[index];
+                                const selectedMedicine =
+                                    medicinesQuery.data?.results.find(
+                                        (medicine) =>
+                                            medicine.id ===
+                                            items[index]?.medicineId
+                                    );
                                 return (
                                     <div
                                         key={field.id}
-                                        className="grid gap-3 p-4 lg:grid-cols-[minmax(180px,1.6fr)_minmax(120px,1fr)_110px_140px_155px_36px]"
+                                        className="grid gap-3 p-4 lg:grid-cols-[minmax(180px,1.6fr)_100px_minmax(120px,1fr)_110px_140px_155px_36px]"
                                     >
                                         <Field
                                             label="Thuốc"
@@ -268,7 +276,30 @@ function CreateImportDialog({
                                             <select
                                                 className="border-input bg-input-background focus:border-ring focus:ring-ring/20 h-9 w-full min-w-0 rounded-md border px-3 text-sm outline-none focus:ring-3"
                                                 {...form.register(
-                                                    `items.${index}.medicineId`
+                                                    `items.${index}.medicineId`,
+                                                    {
+                                                        onChange: (event) => {
+                                                            const medicine =
+                                                                medicinesQuery.data?.results.find(
+                                                                    (item) =>
+                                                                        item.id ===
+                                                                        event
+                                                                            .target
+                                                                            .value
+                                                                );
+                                                            form.setValue(
+                                                                `items.${index}.unitId`,
+                                                                medicine?.units.find(
+                                                                    (unit) =>
+                                                                        unit.isBaseUnit
+                                                                )?.id ?? '',
+                                                                {
+                                                                    shouldDirty: true,
+                                                                    shouldValidate: true,
+                                                                }
+                                                            );
+                                                        },
+                                                    }
                                                 )}
                                             >
                                                 <option value="">
@@ -281,6 +312,36 @@ function CreateImportDialog({
                                                             value={medicine.id}
                                                         >
                                                             {medicine.name}
+                                                        </option>
+                                                    )
+                                                )}
+                                            </select>
+                                        </Field>
+                                        <Field
+                                            label="ĐVT"
+                                            required
+                                            error={itemErrors?.unitId?.message}
+                                        >
+                                            <select
+                                                className="border-input bg-input-background focus:border-ring focus:ring-ring/20 h-9 w-full rounded-md border px-2 text-sm outline-none focus:ring-3"
+                                                disabled={!selectedMedicine}
+                                                {...form.register(
+                                                    `items.${index}.unitId`
+                                                )}
+                                            >
+                                                <option value="">
+                                                    Chọn ĐVT
+                                                </option>
+                                                {selectedMedicine?.units.map(
+                                                    (unit) => (
+                                                        <option
+                                                            key={unit.id}
+                                                            value={unit.id}
+                                                        >
+                                                            {unit.name}
+                                                            {unit.isBaseUnit
+                                                                ? ''
+                                                                : ` (x${formatNumber(unit.conversionRate)})`}
                                                         </option>
                                                     )
                                                 )}
@@ -301,7 +362,7 @@ function CreateImportDialog({
                                             />
                                         </Field>
                                         <Field
-                                            label="Số lượng"
+                                            label={`Số lượng${selectedMedicine ? ` (${selectedMedicine.units.find((unit) => unit.id === items[index]?.unitId)?.name ?? selectedMedicine.baseUnitName})` : ''}`}
                                             required
                                             error={
                                                 itemErrors?.quantity?.message
@@ -321,7 +382,7 @@ function CreateImportDialog({
                                             />
                                         </Field>
                                         <Field
-                                            label="Giá nhập"
+                                            label="Giá nhập / ĐVT"
                                             required
                                             error={
                                                 itemErrors?.importPrice?.message
@@ -561,7 +622,16 @@ function ImportDetailDialog({
                                     </td>
                                     <td className="px-4 py-3 text-right">
                                         {formatNumber(detail.quantity)}{' '}
-                                        {detail.medicine.baseUnitName.toLowerCase()}
+                                        {detail.unitName.toLowerCase()}
+                                        {detail.conversionRate !== 1 ? (
+                                            <p className="text-muted-foreground text-xs">
+                                                ={' '}
+                                                {formatNumber(
+                                                    detail.baseQuantity
+                                                )}{' '}
+                                                {detail.medicine.baseUnitName.toLowerCase()}
+                                            </p>
+                                        ) : null}
                                     </td>
                                     <td className="px-4 py-3 text-right">
                                         {formatCurrency(detail.importPrice)}

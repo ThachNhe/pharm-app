@@ -41,7 +41,20 @@ import {
 type CartItem = {
     medicine: Medicine;
     quantity: number;
+    unitId: string;
 };
+
+const getBaseUnit = (medicine: Medicine) =>
+    medicine.units.find((unit) => unit.isBaseUnit) ?? {
+        id: '',
+        name: medicine.baseUnitName,
+        conversionRate: 1,
+        isBaseUnit: true,
+    };
+
+const getCartUnit = (item: CartItem) =>
+    item.medicine.units.find((unit) => unit.id === item.unitId) ??
+    getBaseUnit(item.medicine);
 
 const paymentLabels: Record<PaymentMethod, string> = {
     cash: 'Tiền mặt',
@@ -60,6 +73,50 @@ function SaleReceipt({
 }) {
     const { selectedStore } = useWorkspace();
     if (!sale) return null;
+    const receiptLines = [
+        ...sale.details
+            .reduce(
+                (lines, detail) => {
+                    const key = `${detail.medicineId}:${detail.unitName}`;
+                    const current = lines.get(key);
+                    if (current) {
+                        current.quantity += detail.displayQuantity;
+                        current.amount += detail.quantity * detail.salePrice;
+                        if (detail.stockBatch?.batchNumber) {
+                            current.batches.add(detail.stockBatch.batchNumber);
+                        }
+                    } else {
+                        lines.set(key, {
+                            key,
+                            medicineName: detail.medicine.name,
+                            unitName: detail.unitName,
+                            quantity: detail.displayQuantity,
+                            unitPrice: detail.displaySalePrice,
+                            amount: detail.quantity * detail.salePrice,
+                            batches: new Set(
+                                detail.stockBatch?.batchNumber
+                                    ? [detail.stockBatch.batchNumber]
+                                    : []
+                            ),
+                        });
+                    }
+                    return lines;
+                },
+                new Map<
+                    string,
+                    {
+                        key: string;
+                        medicineName: string;
+                        unitName: string;
+                        quantity: number;
+                        unitPrice: number;
+                        amount: number;
+                        batches: Set<string>;
+                    }
+                >()
+            )
+            .values(),
+    ];
 
     return (
         <Dialog open onOpenChange={(open) => !open && onClose()}>
@@ -121,29 +178,27 @@ function SaleReceipt({
                                 </tr>
                             </thead>
                             <tbody className="divide-border divide-y">
-                                {sale.details.map((detail) => (
-                                    <tr key={detail.id}>
+                                {receiptLines.map((line) => (
+                                    <tr key={line.key}>
                                         <td className="py-2 pr-3">
                                             <p className="font-medium">
-                                                {detail.medicine.name}
+                                                {line.medicineName}
                                             </p>
                                             <p className="text-muted-foreground text-xs">
                                                 Lô{' '}
-                                                {detail.stockBatch
-                                                    ?.batchNumber ?? '—'}
+                                                {[...line.batches].join(', ') ||
+                                                    '—'}
                                             </p>
                                         </td>
                                         <td className="px-2 py-2 text-right">
-                                            {formatNumber(detail.quantity)}
+                                            {formatNumber(line.quantity)}{' '}
+                                            {line.unitName.toLowerCase()}
                                         </td>
                                         <td className="px-2 py-2 text-right">
-                                            {formatCurrency(detail.salePrice)}
+                                            {formatCurrency(line.unitPrice)}
                                         </td>
                                         <td className="py-2 pl-3 text-right font-medium">
-                                            {formatCurrency(
-                                                detail.quantity *
-                                                    detail.salePrice
-                                            )}
+                                            {formatCurrency(line.amount)}
                                         </td>
                                     </tr>
                                 ))}
@@ -230,7 +285,11 @@ function PointOfSale({ onCreated }: { onCreated: (sale: Sale) => void }) {
     const availableMedicines = medicinesQuery.data?.results ?? [];
 
     const subtotal = cart.reduce(
-        (sum, item) => sum + item.medicine.sellingPrice * item.quantity,
+        (sum, item) =>
+            sum +
+            item.medicine.sellingPrice *
+                getCartUnit(item).conversionRate *
+                item.quantity,
         0
     );
     const payable = Math.max(0, subtotal - discount);
@@ -238,18 +297,39 @@ function PointOfSale({ onCreated }: { onCreated: (sale: Sale) => void }) {
     const updateQuantity = (medicineId: string, quantity: number) => {
         setCart((current) =>
             current
-                .map((item) =>
-                    item.medicine.id === medicineId
-                        ? {
-                              ...item,
-                              quantity: Math.min(
-                                  Math.max(quantity, 0),
-                                  item.medicine.availableStock
-                              ),
-                          }
-                        : item
-                )
+                .map((item) => {
+                    if (item.medicine.id !== medicineId) return item;
+                    const maxQuantity =
+                        item.medicine.availableStock /
+                        getCartUnit(item).conversionRate;
+                    return {
+                        ...item,
+                        quantity: Math.min(Math.max(quantity, 0), maxQuantity),
+                    };
+                })
                 .filter((item) => item.quantity > 0)
+        );
+    };
+
+    const changeUnit = (medicineId: string, unitId: string) => {
+        setCart((current) =>
+            current.map((item) => {
+                if (item.medicine.id !== medicineId) return item;
+                const previousRate = getCartUnit(item).conversionRate;
+                const nextUnit =
+                    item.medicine.units.find((unit) => unit.id === unitId) ??
+                    getBaseUnit(item.medicine);
+                return {
+                    ...item,
+                    unitId: nextUnit.id ?? '',
+                    quantity: Number(
+                        (
+                            (item.quantity * previousRate) /
+                            nextUnit.conversionRate
+                        ).toFixed(2)
+                    ),
+                };
+            })
         );
     };
 
@@ -262,14 +342,31 @@ function PointOfSale({ onCreated }: { onCreated: (sale: Sale) => void }) {
             const existing = current.find(
                 (item) => item.medicine.id === medicine.id
             );
-            if (!existing) return [...current, { medicine, quantity: 1 }];
-            if (existing.quantity >= medicine.availableStock) {
+            if (!existing) {
+                const base = getBaseUnit(medicine);
+                return [
+                    ...current,
+                    { medicine, quantity: 1, unitId: base.id ?? '' },
+                ];
+            }
+            const unit = getCartUnit(existing);
+            if (
+                existing.quantity * unit.conversionRate >=
+                medicine.availableStock
+            ) {
                 toast.warning(`Đã đạt số lượng tồn của ${medicine.name}`);
                 return current;
             }
             return current.map((item) =>
                 item.medicine.id === medicine.id
-                    ? { ...item, quantity: item.quantity + 1 }
+                    ? {
+                          ...item,
+                          quantity: Math.min(
+                              item.quantity + 1,
+                              item.medicine.availableStock /
+                                  getCartUnit(item).conversionRate
+                          ),
+                      }
                     : item
             );
         });
@@ -284,6 +381,7 @@ function PointOfSale({ onCreated }: { onCreated: (sale: Sale) => void }) {
                 items: cart.map((item) => ({
                     medicineId: item.medicine.id,
                     quantity: item.quantity,
+                    unitId: item.unitId || undefined,
                 })),
             }),
         onSuccess: (sale) => {
@@ -392,7 +490,10 @@ function PointOfSale({ onCreated }: { onCreated: (sale: Sale) => void }) {
                                                 Trong giỏ:{' '}
                                                 {formatNumber(
                                                     cartItem.quantity
-                                                )}
+                                                )}{' '}
+                                                {getCartUnit(
+                                                    cartItem
+                                                ).name.toLowerCase()}
                                             </p>
                                         ) : (
                                             <p className="text-muted-foreground text-xs">
@@ -427,97 +528,136 @@ function PointOfSale({ onCreated }: { onCreated: (sale: Sale) => void }) {
                         />
                     ) : (
                         <div className="divide-border divide-y">
-                            {cart.map((item) => (
-                                <div key={item.medicine.id} className="p-4">
-                                    <div className="flex items-start gap-3">
-                                        <div className="min-w-0 flex-1">
-                                            <p className="font-medium">
-                                                {item.medicine.name}
-                                            </p>
-                                            <p className="text-muted-foreground mt-0.5 text-xs">
-                                                {formatCurrency(
-                                                    item.medicine.sellingPrice
-                                                )}{' '}
-                                                /{' '}
-                                                {item.medicine.baseUnitName.toLowerCase()}
-                                            </p>
-                                        </div>
-                                        <Button
-                                            size="icon-sm"
-                                            variant="ghost"
-                                            onClick={() =>
-                                                updateQuantity(
-                                                    item.medicine.id,
-                                                    0
-                                                )
-                                            }
-                                            aria-label={`Xóa ${item.medicine.name}`}
-                                            title="Xóa khỏi giỏ"
-                                        >
-                                            <Trash2 className="text-destructive" />
-                                        </Button>
-                                    </div>
-                                    <div className="mt-3 flex items-center justify-between gap-3">
-                                        <div className="border-input flex items-center rounded-md border">
+                            {cart.map((item) => {
+                                const unit = getCartUnit(item);
+                                const maxQuantity =
+                                    item.medicine.availableStock /
+                                    unit.conversionRate;
+                                return (
+                                    <div key={item.medicine.id} className="p-4">
+                                        <div className="flex items-start gap-3">
+                                            <div className="min-w-0 flex-1">
+                                                <p className="font-medium">
+                                                    {item.medicine.name}
+                                                </p>
+                                                <p className="text-muted-foreground mt-0.5 text-xs">
+                                                    {formatCurrency(
+                                                        item.medicine
+                                                            .sellingPrice *
+                                                            unit.conversionRate
+                                                    )}{' '}
+                                                    / {unit.name.toLowerCase()}
+                                                </p>
+                                            </div>
                                             <Button
                                                 size="icon-sm"
                                                 variant="ghost"
                                                 onClick={() =>
                                                     updateQuantity(
                                                         item.medicine.id,
-                                                        item.quantity - 1
+                                                        0
                                                     )
                                                 }
-                                                aria-label={`Giảm ${item.medicine.name}`}
+                                                aria-label={`Xóa ${item.medicine.name}`}
+                                                title="Xóa khỏi giỏ"
                                             >
-                                                <Minus />
+                                                <Trash2 className="text-destructive" />
                                             </Button>
-                                            <Input
-                                                type="number"
-                                                min="0.01"
-                                                max={
-                                                    item.medicine.availableStock
-                                                }
-                                                step="0.01"
-                                                value={item.quantity}
-                                                onChange={(event) =>
-                                                    updateQuantity(
-                                                        item.medicine.id,
-                                                        Number(
+                                        </div>
+                                        {item.medicine.units.length > 1 ? (
+                                            <label className="mt-3 grid gap-1 text-xs font-medium">
+                                                Đơn vị bán
+                                                <select
+                                                    value={unit.id ?? ''}
+                                                    onChange={(event) =>
+                                                        changeUnit(
+                                                            item.medicine.id,
                                                             event.target.value
                                                         )
-                                                    )
-                                                }
-                                                className="h-8 w-20 rounded-none border-y-0 text-center shadow-none"
-                                                aria-label={`Số lượng ${item.medicine.name}`}
-                                            />
-                                            <Button
-                                                size="icon-sm"
-                                                variant="ghost"
-                                                disabled={
-                                                    item.quantity >=
-                                                    item.medicine.availableStock
-                                                }
-                                                onClick={() =>
-                                                    updateQuantity(
-                                                        item.medicine.id,
-                                                        item.quantity + 1
-                                                    )
-                                                }
-                                                aria-label={`Tăng ${item.medicine.name}`}
-                                            >
-                                                <Plus />
-                                            </Button>
+                                                    }
+                                                    className="border-input bg-input-background focus:border-ring h-9 rounded-md border px-3 text-sm outline-none"
+                                                    aria-label={`Đơn vị bán ${item.medicine.name}`}
+                                                >
+                                                    {item.medicine.units.map(
+                                                        (option) => (
+                                                            <option
+                                                                key={option.id}
+                                                                value={
+                                                                    option.id
+                                                                }
+                                                            >
+                                                                {option.name}
+                                                                {option.isBaseUnit
+                                                                    ? ''
+                                                                    : ` (${formatNumber(option.conversionRate)} ${item.medicine.baseUnitName.toLowerCase()})`}
+                                                            </option>
+                                                        )
+                                                    )}
+                                                </select>
+                                            </label>
+                                        ) : null}
+                                        <div className="mt-3 flex items-center justify-between gap-3">
+                                            <div className="border-input flex items-center rounded-md border">
+                                                <Button
+                                                    size="icon-sm"
+                                                    variant="ghost"
+                                                    onClick={() =>
+                                                        updateQuantity(
+                                                            item.medicine.id,
+                                                            item.quantity - 1
+                                                        )
+                                                    }
+                                                    aria-label={`Giảm ${item.medicine.name}`}
+                                                >
+                                                    <Minus />
+                                                </Button>
+                                                <Input
+                                                    type="number"
+                                                    min="0.01"
+                                                    max={maxQuantity}
+                                                    step="0.01"
+                                                    value={item.quantity}
+                                                    onChange={(event) =>
+                                                        updateQuantity(
+                                                            item.medicine.id,
+                                                            Number(
+                                                                event.target
+                                                                    .value
+                                                            )
+                                                        )
+                                                    }
+                                                    className="h-8 w-20 rounded-none border-y-0 text-center shadow-none"
+                                                    aria-label={`Số lượng ${item.medicine.name}`}
+                                                />
+                                                <Button
+                                                    size="icon-sm"
+                                                    variant="ghost"
+                                                    disabled={
+                                                        item.quantity >=
+                                                        maxQuantity
+                                                    }
+                                                    onClick={() =>
+                                                        updateQuantity(
+                                                            item.medicine.id,
+                                                            item.quantity + 1
+                                                        )
+                                                    }
+                                                    aria-label={`Tăng ${item.medicine.name}`}
+                                                >
+                                                    <Plus />
+                                                </Button>
+                                            </div>
+                                            <p className="font-semibold">
+                                                {formatCurrency(
+                                                    item.medicine.sellingPrice *
+                                                        unit.conversionRate *
+                                                        item.quantity
+                                                )}
+                                            </p>
                                         </div>
-                                        <p className="font-semibold">
-                                            {formatCurrency(
-                                                item.medicine.sellingPrice *
-                                                    item.quantity
-                                            )}
-                                        </p>
                                     </div>
-                                </div>
-                            ))}
+                                );
+                            })}
                         </div>
                     )}
                 </div>

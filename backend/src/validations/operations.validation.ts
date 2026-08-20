@@ -108,6 +108,12 @@ const getReferenceProducts = {
   }),
 };
 
+const medicineUnit = Joi.object().keys({
+  name: Joi.string().trim().required().max(50),
+  conversionRate: Joi.number().positive().precision(2).required(),
+  isBaseUnit: Joi.boolean().required(),
+});
+
 const medicineBody = {
   categoryId: Joi.string().required().custom(objectId),
   code: Joi.string().trim().required().max(50),
@@ -131,6 +137,7 @@ const medicineBody = {
   sellingPrice: Joi.number().min(0).required(),
   minStock: Joi.number().min(0),
   isActive: Joi.boolean(),
+  units: Joi.array().items(medicineUnit).min(1).max(10),
 };
 
 const createMedicine = {
@@ -164,6 +171,7 @@ const importItem = Joi.object().keys({
   quantity: Joi.number().positive().required(),
   importPrice: Joi.number().min(0).required(),
   expiryDate: Joi.date().iso().required(),
+  unitId: Joi.string().custom(objectId),
 });
 
 const getImportReceipts = {
@@ -220,6 +228,7 @@ const getSales = {
 const saleItem = Joi.object().keys({
   medicineId: Joi.string().required().custom(objectId),
   quantity: Joi.number().positive().required(),
+  unitId: Joi.string().custom(objectId),
 });
 
 const createSale = {

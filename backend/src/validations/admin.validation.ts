@@ -10,7 +10,7 @@ const storeRole = Joi.string().valid('owner', 'manager', 'staff');
 
 const medicineUnit = Joi.object().keys({
   name: Joi.string().required().max(50),
-  conversionRate: Joi.number().positive().required(),
+  conversionRate: Joi.number().positive().precision(2).required(),
   isBaseUnit: Joi.boolean().required(),
 });
 
@@ -124,7 +124,7 @@ const createMedicine = {
     usageInstructions: Joi.string().allow('', null).max(2000),
     requiresPrescription: Joi.boolean(),
     description: Joi.string().allow('', null),
-    units: Joi.array().items(medicineUnit).min(1),
+    units: Joi.array().items(medicineUnit).min(1).max(10),
   }),
 };
 

@@ -199,6 +199,13 @@ test('system admin can use the workspace across desktop and mobile', async ({
         code: 'HH02726',
         name: 'Acyclovir 800Mg/ Stada',
         sellingPrice: 25000,
+        units: expect.arrayContaining([
+            {
+                name: expect.any(String),
+                conversionRate: 1,
+                isBaseUnit: true,
+            },
+        ]),
     });
     await expect(medicineDialog).toBeHidden();
 
@@ -207,6 +214,19 @@ test('system admin can use the workspace across desktop and mobile', async ({
         .getByRole('button', { name: 'Nhập thủ công', exact: true })
         .click();
     await expect(page.getByLabel('Tên thuốc')).toBeVisible();
+    await page.getByRole('button', { name: 'Thêm đơn vị tính' }).click();
+    await page.getByLabel('Tên đơn vị').fill('Bình');
+    await page
+        .getByRole('button', { name: 'Thêm đơn vị', exact: true })
+        .click();
+    await expect(page.getByLabel('Đơn vị nhỏ nhất')).toHaveValue('Bình');
+    await page.getByLabel('Đơn vị nhỏ nhất').selectOption('Viên');
+    await page.getByRole('button', { name: 'Thêm quy đổi' }).click();
+    await page
+        .getByLabel('Đơn vị quy đổi 1', { exact: true })
+        .selectOption('Vỉ');
+    await page.getByLabel('Hệ số quy đổi 1').fill('12');
+    await expect(page.getByText('Tồn kho luôn lưu theo viên.')).toBeVisible();
     await page.getByRole('button', { name: 'Thêm nhóm sản phẩm' }).click();
     await expect(
         page.getByRole('heading', { name: 'Thêm nhóm sản phẩm' })

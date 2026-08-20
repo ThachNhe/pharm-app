@@ -1,3 +1,10 @@
+export interface MedicineUnit {
+    id?: string;
+    name: string;
+    conversionRate: number;
+    isBaseUnit: boolean;
+}
+
 export interface Medicine {
     id: string;
     storeMedicineId: string;
@@ -26,6 +33,7 @@ export interface Medicine {
     minStock: number;
     totalStock: number;
     availableStock: number;
+    units: MedicineUnit[];
 }
 
 export interface ReferenceProduct {
@@ -55,6 +63,7 @@ export interface ReferenceProduct {
     isNational: boolean;
     syncedAt: string;
     isAddedToStore: boolean;
+    medicineUnits: MedicineUnit[];
 }
 
 export interface MedicinePayload {
@@ -81,4 +90,5 @@ export interface MedicinePayload {
     sellingPrice: number;
     minStock?: number;
     isActive?: boolean;
+    units?: MedicineUnit[];
 }

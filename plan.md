@@ -188,7 +188,7 @@ Thông tin tối thiểu:
 - Trạng thái đang kinh doanh.
 - Có yêu cầu đơn thuốc hay không.
 
-MVP chỉ dùng một đơn vị bán cơ bản cho mỗi thuốc. Quy đổi hộp, vỉ và viên để sau.
+Tồn kho luôn lưu theo đơn vị nhỏ nhất. Mỗi thuốc có thể cấu hình thêm đơn vị nhập/bán với hệ số quy đổi, ví dụ `1 vỉ = 10 viên`; backend chịu trách nhiệm quy đổi và chứng từ lưu snapshot đơn vị đã chọn.
 
 ### 3.5 Nhà cung cấp
 
@@ -204,7 +204,7 @@ Flow chính:
 
 1. Owner hoặc Manager tạo phiếu nhập.
 2. Chọn nhà cung cấp.
-3. Thêm thuốc, số lượng, giá nhập, số lô và hạn sử dụng.
+3. Thêm thuốc, đơn vị nhập, số lượng, giá nhập theo đơn vị đã chọn, số lô và hạn sử dụng.
 4. Kiểm tra dữ liệu.
 5. Hoàn tất phiếu nhập.
 6. Hệ thống tăng tồn kho theo đúng thuốc, lô và quầy.
@@ -224,7 +224,7 @@ MVP chưa cần quy trình duyệt phiếu nhập nhiều cấp.
 Flow chính:
 
 1. Nhân viên tìm thuốc bằng tên hoặc barcode.
-2. Chọn thuốc và số lượng.
+2. Chọn thuốc, đơn vị bán và số lượng.
 3. Hệ thống kiểm tra tồn có thể bán.
 4. Nhập giảm giá nếu role được phép.
 5. Chọn tiền mặt hoặc chuyển khoản.
@@ -342,7 +342,6 @@ MVP được xem là hoàn thành khi:
 Các chức năng sau chỉ triển khai sau khi MVP vận hành ổn định:
 
 - Khách hàng, bác sĩ và quản lý đơn thuốc chi tiết.
-- Nhiều đơn vị tính và quy đổi hộp, vỉ, viên.
 - Trả hàng và hoàn tiền.
 - Kiểm kê và điều chỉnh tồn.
 - Chuyển kho giữa các quầy.

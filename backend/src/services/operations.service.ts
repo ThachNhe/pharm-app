@@ -18,6 +18,12 @@ type DateQuery = PageQuery & {
   to?: string | Date;
 };
 
+type MedicineUnitPayload = {
+  name: string;
+  conversionRate: number | string;
+  isBaseUnit: boolean;
+};
+
 type MedicinePayload = {
   referenceProductId?: string | null;
   categoryId: string;
@@ -42,6 +48,7 @@ type MedicinePayload = {
   sellingPrice: number | string;
   minStock?: number | string;
   isActive?: boolean;
+  units?: MedicineUnitPayload[];
 };
 
 type ProductCategoryPayload = {
@@ -56,6 +63,7 @@ type ImportItemPayload = {
   quantity: number | string;
   importPrice: number | string;
   expiryDate: string | Date;
+  unitId?: string;
 };
 
 type ImportPayload = {
@@ -72,6 +80,7 @@ type SalePayload = {
   items: Array<{
     medicineId: string;
     quantity: number | string;
+    unitId?: string;
   }>;
 };
 
@@ -83,6 +92,40 @@ const asOptionalString = (value?: string | null) => {
 const normalizeProductCode = (value: string) => value.trim().toUpperCase();
 
 const toDecimal = (value: number | string | Prisma.Decimal) => new PrismaRuntime.Decimal(value);
+
+const normalizeMedicineUnits = (baseUnitName: string, units?: MedicineUnitPayload[]) => {
+  const normalizedBaseUnitName = baseUnitName.trim();
+  const normalized = (units?.length ? units : [{ name: normalizedBaseUnitName, conversionRate: 1, isBaseUnit: true }]).map(
+    (unit) => ({
+      name: unit.name.trim(),
+      conversionRate: toDecimal(unit.conversionRate),
+      isBaseUnit: unit.isBaseUnit,
+    }),
+  );
+  const baseUnits = normalized.filter((unit) => unit.isBaseUnit);
+  if (
+    baseUnits.length !== 1 ||
+    baseUnits[0].name.localeCompare(normalizedBaseUnitName, 'vi', { sensitivity: 'accent' }) !== 0 ||
+    !baseUnits[0].conversionRate.equals(1)
+  ) {
+    throw new ApiError(httpStatus.BAD_REQUEST, 'Đơn vị nhỏ nhất phải có hệ số quy đổi bằng 1');
+  }
+  if (
+    normalized.some(
+      (unit) => !unit.name || unit.name.length > 50 || unit.conversionRate.lte(0) || unit.conversionRate.decimalPlaces() > 2,
+    )
+  ) {
+    throw new ApiError(httpStatus.BAD_REQUEST, 'Đơn vị quy đổi không hợp lệ');
+  }
+  if (normalized.some((unit) => !unit.isBaseUnit && unit.conversionRate.lte(1))) {
+    throw new ApiError(httpStatus.BAD_REQUEST, 'Đơn vị quy đổi phải lớn hơn đơn vị nhỏ nhất');
+  }
+  const uniqueNames = new Set(normalized.map((unit) => unit.name.toLocaleLowerCase('vi')));
+  if (uniqueNames.size !== normalized.length) {
+    throw new ApiError(httpStatus.BAD_REQUEST, 'Tên đơn vị tính không được trùng nhau');
+  }
+  return normalized;
+};
 
 const BUSINESS_TIME_ZONE = 'Asia/Ho_Chi_Minh';
 const BUSINESS_UTC_OFFSET = '+07:00';
@@ -230,6 +273,12 @@ const serializeMedicine = (storeMedicine, stock?: { total: Prisma.Decimal; avail
   minStock: Number(storeMedicine.minStock),
   totalStock: Number(stock?.total ?? 0),
   availableStock: Number(stock?.available ?? 0),
+  units: storeMedicine.medicine.units.map((unit) => ({
+    id: unit.id,
+    name: unit.name,
+    conversionRate: Number(unit.conversionRate),
+    isBaseUnit: unit.isBaseUnit,
+  })),
 });
 
 const serializeReferenceProduct = (referenceProduct) => ({
@@ -261,6 +310,13 @@ const serializeReferenceProduct = (referenceProduct) => ({
   isNational: referenceProduct.isNational,
   syncedAt: referenceProduct.syncedAt,
   isAddedToStore: Boolean(referenceProduct.medicine?.storeMedicines.length),
+  medicineUnits:
+    referenceProduct.medicine?.units.map((unit) => ({
+      id: unit.id,
+      name: unit.name,
+      conversionRate: Number(unit.conversionRate),
+      isBaseUnit: unit.isBaseUnit,
+    })) ?? [],
 });
 
 const serializeImportReceipt = (receipt) => ({
@@ -268,8 +324,12 @@ const serializeImportReceipt = (receipt) => ({
   totalAmount: Number(receipt.totalAmount),
   details: receipt.details.map((detail) => ({
     ...detail,
-    quantity: Number(detail.quantity),
-    importPrice: Number(detail.importPrice),
+    quantity: Number(detail.enteredQuantity),
+    importPrice: Number(detail.enteredImportPrice),
+    baseQuantity: Number(detail.quantity),
+    baseImportPrice: Number(detail.importPrice),
+    conversionRate: Number(detail.conversionRateSnapshot),
+    unitName: detail.unitNameSnapshot,
   })),
 });
 
@@ -281,6 +341,10 @@ const serializeSale = (sale, includeCosts = true) => ({
     ...detail,
     quantity: Number(detail.quantity),
     salePrice: Number(detail.salePrice),
+    displayQuantity: Number(detail.quantity.div(detail.conversionRateSnapshot)),
+    displaySalePrice: Number(detail.salePrice.mul(detail.conversionRateSnapshot)),
+    conversionRate: Number(detail.conversionRateSnapshot),
+    unitName: detail.unitNameSnapshot,
     costPrice: includeCosts ? Number(detail.costPrice) : undefined,
   })),
 });
@@ -312,7 +376,7 @@ const buildInventoryRows = async (storeId: string, search?: string) => {
     },
     orderBy: { medicine: { name: 'asc' } },
     include: {
-      medicine: true,
+      medicine: { include: { units: { orderBy: [{ isBaseUnit: 'desc' }, { conversionRate: 'asc' }] } } },
       category: true,
     },
   });
@@ -682,6 +746,7 @@ const queryReferenceProducts = async (actor: Actor, storeId: string, query: Page
       include: {
         medicine: {
           select: {
+            units: { orderBy: [{ isBaseUnit: 'desc' }, { conversionRate: 'asc' }] },
             storeMedicines: {
               where: { storeId },
               select: { id: true },
@@ -790,10 +855,12 @@ const createMedicine = async (actor: Actor, storeId: string, body: MedicinePaylo
       if (barcodeConflict) throw new ApiError(httpStatus.CONFLICT, 'Mã vạch đã được sử dụng cho thuốc khác');
     }
 
+    const baseUnitName = referenceProduct?.unitName?.trim() || body.baseUnitName.trim();
+    const medicineUnits = normalizeMedicineUnits(baseUnitName, body.units);
     const medicineData: Prisma.MedicineCreateInput = {
       referenceProduct: body.referenceProductId ? { connect: { id: body.referenceProductId } } : undefined,
       name: referenceProduct?.name ?? body.name.trim(),
-      baseUnitName: referenceProduct?.unitName ?? body.baseUnitName.trim(),
+      baseUnitName,
       barcode: referenceProduct ? (availableReferenceBarcodes[0] ?? null) : asOptionalString(body.barcode),
       secondaryBarcode: referenceProduct ? (availableReferenceBarcodes[1] ?? null) : asOptionalString(body.secondaryBarcode),
       registrationNumber: referenceProduct?.registrationNumber ?? asOptionalString(body.registrationNumber),
@@ -815,11 +882,7 @@ const createMedicine = async (actor: Actor, storeId: string, body: MedicinePaylo
       requiresPrescription: body.requiresPrescription ?? false,
       description: asOptionalString(body.description),
       units: {
-        create: {
-          name: referenceProduct?.unitName ?? body.baseUnitName.trim(),
-          conversionRate: 1,
-          isBaseUnit: true,
-        },
+        create: medicineUnits,
       },
     };
     const medicine = body.referenceProductId
@@ -849,7 +912,10 @@ const createMedicine = async (actor: Actor, storeId: string, body: MedicinePaylo
         minStock: toDecimal(body.minStock ?? 0),
         isActive: body.isActive ?? true,
       },
-      include: { medicine: true, category: true },
+      include: {
+        medicine: { include: { units: { orderBy: [{ isBaseUnit: 'desc' }, { conversionRate: 'asc' }] } } },
+        category: true,
+      },
     });
     await writeAudit(tx, actor, {
       storeId,
@@ -871,7 +937,17 @@ const updateMedicine = async (
   await getStoreAccess(actor, storeId, 'manager');
   const assigned = await prisma.storeMedicine.findUnique({
     where: { storeId_medicineId: { storeId, medicineId } },
-    include: { medicine: { select: { referenceProductId: true, barcode: true, secondaryBarcode: true } } },
+    include: {
+      medicine: {
+        select: {
+          referenceProductId: true,
+          barcode: true,
+          secondaryBarcode: true,
+          baseUnitName: true,
+          units: true,
+        },
+      },
+    },
   });
   if (!assigned) {
     throw new ApiError(httpStatus.NOT_FOUND, 'Thuốc chưa được cấu hình tại quầy này');
@@ -897,6 +973,9 @@ const updateMedicine = async (
   if (assigned.medicine.referenceProductId && changesSharedDetails) {
     throw new ApiError(httpStatus.BAD_REQUEST, 'Thông tin thuốc từ thư viện chỉ được sửa bởi System Admin');
   }
+  const medicineUnits = body.units
+    ? normalizeMedicineUnits(body.baseUnitName ?? assigned.medicine.baseUnitName, body.units)
+    : null;
 
   return prisma.$transaction(async (tx) => {
     if (body.code !== undefined) {
@@ -919,6 +998,18 @@ const updateMedicine = async (
     }
 
     if (changesSharedDetails) {
+      if (
+        body.baseUnitName &&
+        body.baseUnitName.trim().localeCompare(assigned.medicine.baseUnitName, 'vi', { sensitivity: 'accent' }) !== 0
+      ) {
+        const [importDetailCount, saleDetailCount] = await Promise.all([
+          tx.importDetail.count({ where: { medicineId } }),
+          tx.saleDetail.count({ where: { medicineId } }),
+        ]);
+        if (importDetailCount || saleDetailCount) {
+          throw new ApiError(httpStatus.CONFLICT, 'Không thể đổi đơn vị nhỏ nhất của thuốc đã phát sinh nhập hoặc bán');
+        }
+      }
       const requestedBarcodes = [
         body.barcode === undefined ? assigned.medicine.barcode : asOptionalString(body.barcode),
         body.secondaryBarcode === undefined ? assigned.medicine.secondaryBarcode : asOptionalString(body.secondaryBarcode),
@@ -967,6 +1058,13 @@ const updateMedicine = async (
       }
     }
 
+    if (medicineUnits) {
+      await tx.medicineUnit.deleteMany({ where: { medicineId } });
+      await tx.medicineUnit.createMany({
+        data: medicineUnits.map((unit) => ({ medicineId, ...unit })),
+      });
+    }
+
     const updated = await tx.storeMedicine.update({
       where: { storeId_medicineId: { storeId, medicineId } },
       data: {
@@ -977,7 +1075,10 @@ const updateMedicine = async (
         minStock: body.minStock === undefined ? undefined : toDecimal(body.minStock),
         isActive: body.isActive,
       },
-      include: { medicine: true, category: true },
+      include: {
+        medicine: { include: { units: { orderBy: [{ isBaseUnit: 'desc' }, { conversionRate: 'asc' }] } } },
+        category: true,
+      },
     });
     await writeAudit(tx, actor, {
       storeId,
@@ -1012,15 +1113,16 @@ const validateImportReferences = async (
   }
 
   const medicineIds = [...new Set(items.map((item) => item.medicineId))];
-  const configuredCount = await prisma.storeMedicine.count({
+  const configuredMedicines = await prisma.storeMedicine.findMany({
     where: {
       storeId,
       medicineId: { in: medicineIds },
       isActive: true,
       medicine: { isActive: true },
     },
+    include: { medicine: { include: { units: true } } },
   });
-  if (configuredCount !== medicineIds.length) {
+  if (configuredMedicines.length !== medicineIds.length) {
     throw new ApiError(httpStatus.BAD_REQUEST, 'Có thuốc chưa được cấu hình hoặc đã ngừng bán tại quầy');
   }
 
@@ -1033,6 +1135,29 @@ const validateImportReferences = async (
   if (items.some((item) => toDateOnly(item.expiryDate) <= today)) {
     throw new ApiError(httpStatus.BAD_REQUEST, 'Hạn sử dụng phải sau ngày hiện tại');
   }
+
+  const configuredByMedicine = new Map(configuredMedicines.map((item) => [item.medicineId, item]));
+  return items.map((item) => {
+    const configured = configuredByMedicine.get(item.medicineId);
+    const unit = item.unitId
+      ? configured?.medicine.units.find((candidate) => candidate.id === item.unitId)
+      : configured?.medicine.units.find((candidate) => candidate.isBaseUnit);
+    if (!unit) throw new ApiError(httpStatus.BAD_REQUEST, 'Đơn vị nhập không hợp lệ cho thuốc đã chọn');
+    const enteredQuantity = toDecimal(item.quantity);
+    const enteredImportPrice = toDecimal(item.importPrice);
+    const quantity = enteredQuantity.mul(unit.conversionRate);
+    if (quantity.decimalPlaces() > 2) {
+      throw new ApiError(httpStatus.BAD_REQUEST, 'Số lượng sau quy đổi chỉ được có tối đa 2 chữ số thập phân');
+    }
+    return {
+      ...item,
+      enteredQuantity,
+      enteredImportPrice,
+      quantity,
+      importPrice: enteredImportPrice.div(unit.conversionRate),
+      unit,
+    };
+  });
 };
 
 const getImportTotal = (items: ImportItemPayload[]) =>
@@ -1043,7 +1168,7 @@ const getImportTotal = (items: ImportItemPayload[]) =>
 
 const createImportReceipt = async (actor: Actor, storeId: string, body: ImportPayload) => {
   await getStoreAccess(actor, storeId, 'manager');
-  await validateImportReferences(storeId, body.supplierId, body.items);
+  const resolvedItems = await validateImportReferences(storeId, body.supplierId, body.items);
   const supplier = body.supplierId ? await prisma.supplier.findFirst({ where: { id: body.supplierId, storeId } }) : null;
   const totalAmount = getImportTotal(body.items);
 
@@ -1059,12 +1184,16 @@ const createImportReceipt = async (actor: Actor, storeId: string, body: ImportPa
         note: asOptionalString(body.note),
         importedAt: body.importedAt ? new Date(body.importedAt) : new Date(),
         details: {
-          create: body.items.map((item) => ({
+          create: resolvedItems.map((item) => ({
             storeId,
             medicineId: item.medicineId,
             batchNumber: item.batchNumber.trim(),
-            quantity: toDecimal(item.quantity),
-            importPrice: toDecimal(item.importPrice),
+            quantity: item.quantity,
+            importPrice: item.importPrice,
+            enteredQuantity: item.enteredQuantity,
+            enteredImportPrice: item.enteredImportPrice,
+            unitNameSnapshot: item.unit.name,
+            conversionRateSnapshot: item.unit.conversionRate,
             expiryDate: toDateOnly(item.expiryDate),
           })),
         },
@@ -1365,18 +1494,34 @@ const createSale = async (actor: Actor, storeId: string, body: SalePayload) => {
             isActive: true,
             medicine: { isActive: true },
           },
-          include: { medicine: true },
+          include: { medicine: { include: { units: true } } },
         });
         if (storeMedicines.length !== medicineIds.length) {
           throw new ApiError(httpStatus.BAD_REQUEST, 'Có thuốc không còn được bán tại quầy');
         }
 
         const itemByMedicine = new Map(body.items.map((item) => [item.medicineId, item]));
+        const resolvedItems = new Map<
+          string,
+          {
+            quantity: Prisma.Decimal;
+            unit: (typeof storeMedicines)[number]['medicine']['units'][number];
+          }
+        >();
         let grossAmount = new PrismaRuntime.Decimal(0);
         for (const configured of storeMedicines) {
           const item = itemByMedicine.get(configured.medicineId);
           if (!item) continue;
-          grossAmount = grossAmount.plus(configured.sellingPrice.mul(toDecimal(item.quantity)));
+          const unit = item.unitId
+            ? configured.medicine.units.find((candidate) => candidate.id === item.unitId)
+            : configured.medicine.units.find((candidate) => candidate.isBaseUnit);
+          if (!unit) throw new ApiError(httpStatus.BAD_REQUEST, `Đơn vị bán không hợp lệ cho ${configured.medicine.name}`);
+          const quantity = toDecimal(item.quantity).mul(unit.conversionRate);
+          if (quantity.decimalPlaces() > 2) {
+            throw new ApiError(httpStatus.BAD_REQUEST, 'Số lượng sau quy đổi chỉ được có tối đa 2 chữ số thập phân');
+          }
+          resolvedItems.set(configured.medicineId, { quantity, unit });
+          grossAmount = grossAmount.plus(configured.sellingPrice.mul(quantity));
         }
 
         const discountAmount = toDecimal(body.discountAmount ?? 0);
@@ -1400,9 +1545,9 @@ const createSale = async (actor: Actor, storeId: string, body: SalePayload) => {
         const movementRows: Prisma.InventoryMovementCreateManyInput[] = [];
 
         for (const configured of storeMedicines) {
-          const item = itemByMedicine.get(configured.medicineId);
-          if (!item) continue;
-          let remaining = toDecimal(item.quantity);
+          const resolved = resolvedItems.get(configured.medicineId);
+          if (!resolved) continue;
+          let remaining = resolved.quantity;
           const batches = await tx.stockBatch.findMany({
             where: {
               storeId,
@@ -1437,6 +1582,8 @@ const createSale = async (actor: Actor, storeId: string, body: SalePayload) => {
               quantity: take,
               salePrice: configured.sellingPrice,
               costPrice: batch.importPrice,
+              unitNameSnapshot: resolved.unit.name,
+              conversionRateSnapshot: resolved.unit.conversionRate,
             });
             movementRows.push({
               storeId,
