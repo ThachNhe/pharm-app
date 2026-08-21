@@ -1,4 +1,64 @@
+name: pharm-prod
+
 services:
+  web:
+    build:
+      context: ./frontend
+      target: prod
+      args:
+        VITE_API_URL: /v1
+        VITE_ACCESS_TOKEN_HEADER: X-Pharm-Authorization
+        VITE_APP_NAME: ${VITE_APP_NAME:-Pharm App}
+        VITE_APP_VERSION: ${VITE_APP_VERSION:-latest}
+    restart: unless-stopped
+    ports:
+      - '127.0.0.1:${APP_PORT:-8080}:80'
+    volumes:
+      - ./deploy/prod/nginx.conf:/etc/nginx/conf.d/default.conf:ro
+    secrets:
+      - basic_auth_htpasswd
+    depends_on:
+      - backend
+    networks:
+      - prod
+
   backend:
-    container_name: backend-prod
-    command: yarn start
+    build:
+      context: ./backend
+    restart: unless-stopped
+    command: ['sh', '-c', 'npm run prisma:deploy && npm start']
+    env_file:
+      - ./env/prod/prod.env
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - prod
+
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U "$${POSTGRES_USER}" -d "$${POSTGRES_DB}"']
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    volumes:
+      - prod_postgres_data:/var/lib/postgresql/data
+    networks:
+      - prod
+
+secrets:
+  basic_auth_htpasswd:
+    file: ./env/prod/.htpasswd
+
+volumes:
+  prod_postgres_data:
+
+networks:
+  prod:
+    driver: bridge

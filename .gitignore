@@ -18,6 +18,7 @@ frontend/.env.*
 
 env/**/*.env
 env/**/*.local
+env/**/.htpasswd
 !env/**/*.env.example
 
 # Docker/database local data

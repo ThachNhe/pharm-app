@@ -3,6 +3,12 @@ import { useAuthStore } from '@/stores/useAuthStore'
 import type { ApiErrorResponse, RefreshTokenResponse } from '@/types/api.types'
 import { API_ENDPOINTS } from './endpoints'
 
+const accessTokenHeader = import.meta.env.VITE_ACCESS_TOKEN_HEADER || 'Authorization'
+
+const setAccessToken = (config: InternalAxiosRequestConfig, token: string) => {
+  config.headers[accessTokenHeader] = `Bearer ${token}`
+}
+
 // ─── Axios Instance ────────────────────────────────────────────────────────
 
 export const api = axios.create({
@@ -54,7 +60,7 @@ api.interceptors.request.use(
   (config: InternalAxiosRequestConfig) => {
     const token = useAuthStore.getState().token
     if (token) {
-      config.headers.Authorization = `Bearer ${token}`
+      setAccessToken(config, token)
     }
     return config
   },
@@ -78,11 +84,11 @@ api.interceptors.response.use(
     ) {
       if (isRefreshing) {
         // Queue requests while refreshing
-        return new Promise((resolve, reject) => {
+        return new Promise<string>((resolve, reject) => {
           failedQueue.push({ resolve, reject })
         })
           .then((token) => {
-            originalRequest.headers.Authorization = `Bearer ${token}`
+            setAccessToken(originalRequest, token)
             return api(originalRequest)
           })
           .catch((err) => Promise.reject(err))
@@ -101,7 +107,7 @@ api.interceptors.response.use(
         const accessToken = data.tokens.access.token
         useAuthStore.getState().login(data.user, accessToken)
         processQueue(null, accessToken)
-        originalRequest.headers.Authorization = `Bearer ${accessToken}`
+        setAccessToken(originalRequest, accessToken)
         return api(originalRequest)
       } catch (refreshError) {
         processQueue(refreshError, null)
