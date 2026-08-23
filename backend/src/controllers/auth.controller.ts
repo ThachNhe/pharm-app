@@ -1,15 +1,7 @@
 import httpStatus from 'http-status';
 import catchAsync from '../utils/catchAsync.js';
-import { authService, userService, tokenService, loginOtpService } from '../services/index.js';
+import { authService, tokenService, loginOtpService } from '../services/index.js';
 import { clearRefreshTokenCookie, getRefreshTokenFromRequest, setRefreshTokenCookie } from '../utils/cookies.js';
-
-const register = catchAsync(async (req, res) => {
-  const user = await userService.createUser(req.body);
-  res.status(httpStatus.CREATED).send({
-    user,
-    message: 'Đăng ký thành công. Hãy đăng nhập và xác minh OTP để tiếp tục.',
-  });
-});
 
 const login = catchAsync(async (req, res) => {
   const { email, password } = req.body;
@@ -36,4 +28,4 @@ const refreshTokens = catchAsync(async (req, res) => {
   res.send({ user: result.user, tokens: { access: result.tokens.access } });
 });
 
-export { register, login, verifyLoginOtp, logout, refreshTokens };
+export { login, verifyLoginOtp, logout, refreshTokens };

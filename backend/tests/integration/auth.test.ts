@@ -36,65 +36,8 @@ const getLoginOtpCode = (sendMailSpy) => {
 };
 
 describe('Auth routes', () => {
-  describe('POST /v1/auth/register', () => {
-    let newUser;
-    beforeEach(() => {
-      newUser = {
-        name: faker.name.findName(),
-        email: faker.internet.email().toLowerCase(),
-        password: 'password1',
-      };
-    });
-
-    test('should return 201 and successfully register user if request data is ok', async () => {
-      const res = await request(app).post('/v1/auth/register').send(newUser).expect(httpStatus.CREATED);
-
-      expect(res.body.user).not.toHaveProperty('password');
-      expect(res.body.user).toEqual({
-        id: expect.anything(),
-        name: newUser.name,
-        email: newUser.email,
-        role: 'user',
-      });
-
-      const dbUser = await prisma.user.findUnique({ where: { id: res.body.user.id } });
-      expect(dbUser).toBeDefined();
-      expect(dbUser.password).not.toBe(newUser.password);
-      expect(dbUser).toMatchObject({ name: newUser.name, email: newUser.email, role: 'user' });
-
-      expect(res.body).not.toHaveProperty('tokens');
-      expect(res.body.message).toBe('Đăng ký thành công. Hãy đăng nhập và xác minh OTP để tiếp tục.');
-      expectNoRefreshCookie(res);
-    });
-
-    test('should return 400 error if email is invalid', async () => {
-      newUser.email = 'invalidEmail';
-
-      await request(app).post('/v1/auth/register').send(newUser).expect(httpStatus.BAD_REQUEST);
-    });
-
-    test('should return 400 error if email is already used', async () => {
-      await insertUsers([userOne]);
-      newUser.email = userOne.email;
-
-      await request(app).post('/v1/auth/register').send(newUser).expect(httpStatus.BAD_REQUEST);
-    });
-
-    test('should return 400 error if password length is less than 8 characters', async () => {
-      newUser.password = 'passwo1';
-
-      await request(app).post('/v1/auth/register').send(newUser).expect(httpStatus.BAD_REQUEST);
-    });
-
-    test('should return 400 error if password does not contain both letters and numbers', async () => {
-      newUser.password = 'password';
-
-      await request(app).post('/v1/auth/register').send(newUser).expect(httpStatus.BAD_REQUEST);
-
-      newUser.password = '11111111';
-
-      await request(app).post('/v1/auth/register').send(newUser).expect(httpStatus.BAD_REQUEST);
-    });
+  test('should not expose public registration', async () => {
+    await request(app).post('/v1/auth/register').send({}).expect(httpStatus.NOT_FOUND);
   });
 
   describe('POST /v1/auth/login', () => {

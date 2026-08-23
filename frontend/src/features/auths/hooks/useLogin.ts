@@ -8,7 +8,6 @@ import { authService } from '../services/auth.service.ts'
 import type {
   LoginChallengeResponse,
   LoginFormValues,
-  RegisterFormValues,
   VerifyLoginOtpPayload,
 } from '../types/auth.types.ts'
 
@@ -60,30 +59,6 @@ export function useVerifyLoginOtp() {
     onError: (error) => {
       toast.error('Xác minh thất bại', {
         description: getErrorMessage(error, 'Mã xác minh không đúng hoặc đã hết hạn'),
-      })
-    },
-  })
-}
-
-// ─── useRegister ───────────────────────────────────────────────────────────
-
-export function useRegister() {
-  const router = useRouter()
-
-  return useMutation({
-    mutationFn: ({ name, email, password }: RegisterFormValues) =>
-      authService.register({ name, email, password }),
-
-    onSuccess: () => {
-      toast.success('Đăng ký thành công', {
-        description: 'Hãy đăng nhập để nhận mã OTP qua email.',
-      })
-      router.navigate({ to: ROUTES.LOGIN })
-    },
-
-    onError: (error) => {
-      toast.error('Đăng ký thất bại', {
-        description: getErrorMessage(error, 'Đã xảy ra lỗi, vui lòng thử lại'),
       })
     },
   })

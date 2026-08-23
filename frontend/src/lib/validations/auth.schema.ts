@@ -9,13 +9,6 @@ const emailField = z
   .toLowerCase()
   .trim()
 
-const passwordField = z
-  .string()
-  .min(8, 'Mật khẩu phải có ít nhất 8 ký tự')
-  .max(100, 'Mật khẩu không được quá 100 ký tự')
-  .regex(/[A-Z]/, 'Mật khẩu phải có ít nhất 1 chữ hoa')
-  .regex(/[0-9]/, 'Mật khẩu phải có ít nhất 1 số')
-
 // ─── Schemas ───────────────────────────────────────────────────────────────
 
 export const loginSchema = z.object({
@@ -30,24 +23,7 @@ export const loginOtpSchema = z.object({
     .regex(/^\d{6}$/, 'Mã xác minh gồm 6 chữ số'),
 })
 
-export const registerSchema = z
-  .object({
-    name: z
-      .string()
-      .min(2, 'Tên phải có ít nhất 2 ký tự')
-      .max(50, 'Tên không được quá 50 ký tự')
-      .trim(),
-    email: emailField,
-    password: passwordField,
-    confirmPassword: z.string().min(1, 'Vui lòng xác nhận mật khẩu'),
-  })
-  .refine((data) => data.password === data.confirmPassword, {
-    message: 'Mật khẩu xác nhận không khớp',
-    path: ['confirmPassword'],
-  })
-
 // ─── Inferred Types ────────────────────────────────────────────────────────
 
 export type LoginFormValues = z.infer<typeof loginSchema>
 export type LoginOtpFormValues = z.infer<typeof loginOtpSchema>
-export type RegisterFormValues = z.infer<typeof registerSchema>

@@ -1,10 +1,9 @@
 // ─── Components ───────────────────────────────────────────────────────────
 export { LoginForm } from './components/LoginForm'
 export { LoginPage } from './components/LoginPage'
-export { RegisterForm } from './components/RegisterForm'
 
 // ─── Hooks ────────────────────────────────────────────────────────────────
-export { useLogin, useRegister, useLogout, useMe } from './hooks/useLogin'
+export { useLogin, useLogout, useMe } from './hooks/useLogin'
 
 // ─── Service ──────────────────────────────────────────────────────────────
 export { authService } from './services/auth.service'
@@ -14,9 +13,6 @@ export type {
   AuthTokens,
   AuthSession,
   LoginFormValues,
-  RegisterFormValues,
   LoginPayload,
-  RegisterPayload,
   LoginApiResponse,
-  RegisterApiResponse,
 } from './types/auth.types'

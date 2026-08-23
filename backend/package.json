@@ -28,6 +28,7 @@
     "prisma:deploy": "prisma migrate deploy",
     "prisma:seed": "tsx prisma/seed.ts",
     "prisma:studio": "prisma studio",
+    "admin:create-system": "node dist/scripts/createSystemAdmin.js",
     "reference-products:import": "tsx src/scripts/importReferenceProducts.ts",
     "docker:prod": "docker-compose -f docker-compose.yml -f docker-compose.prod.yml up",
     "docker:dev": "docker-compose -f docker-compose.yml -f docker-compose.dev.yml up",

@@ -144,6 +144,7 @@ Backend phải kiểm tra quyền trong middleware và service. Không được 
 - Refresh token được giữ trong HttpOnly cookie.
 - Refresh endpoint chỉ cấp access token mới.
 - Admin đặt mật khẩu ban đầu và có thể đặt lại mật khẩu cho user trong phạm vi được quản lý.
+- Không có đăng ký công khai; System Admin được tạo bằng CLI vận hành, các tài khoản còn lại do admin có quyền tạo.
 
 Cần hoàn thiện trong MVP:
 

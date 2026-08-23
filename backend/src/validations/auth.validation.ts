@@ -1,13 +1,4 @@
 import Joi from 'joi';
-import { password } from './custom.validation.js';
-
-const register = {
-  body: Joi.object().keys({
-    email: Joi.string().required().email(),
-    password: Joi.string().required().custom(password),
-    name: Joi.string().required(),
-  }),
-};
 
 const login = {
   body: Joi.object().keys({
@@ -33,4 +24,4 @@ const refreshTokens = {
   body: Joi.object().max(0),
 };
 
-export { register, login, verifyLoginOtp, logout, refreshTokens };
+export { login, verifyLoginOtp, logout, refreshTokens };

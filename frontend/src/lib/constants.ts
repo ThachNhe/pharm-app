@@ -11,7 +11,6 @@ export const ROUTES = {
     // Public
     HOME: '/',
     LOGIN: '/login',
-    REGISTER: '/register',
 
     // Protected
     DASHBOARD: '/admin',

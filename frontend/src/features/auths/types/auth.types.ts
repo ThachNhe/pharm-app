@@ -25,13 +25,6 @@ export interface LoginOtpFormValues {
   code: string
 }
 
-export interface RegisterFormValues {
-  name: string
-  email: string
-  password: string
-  confirmPassword: string
-}
-
 // ─── API Payloads ──────────────────────────────────────────────────────────
 
 export type LoginPayload = Omit<LoginFormValues, 'rememberMe'>
@@ -39,8 +32,6 @@ export interface VerifyLoginOtpPayload {
   challengeId: string
   code: string
 }
-export type RegisterPayload = Omit<RegisterFormValues, 'confirmPassword'>
-
 // ─── API Responses ─────────────────────────────────────────────────────────
 
 export interface LoginApiResponse {
@@ -64,9 +55,4 @@ export interface BackendLoginApiResponse {
       expires: string
     }
   }
-}
-
-export interface RegisterApiResponse {
-  user: User
-  message: string
 }

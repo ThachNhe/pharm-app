@@ -3,11 +3,9 @@ import { API_ENDPOINTS } from '@/services/endpoints'
 import type {
   LoginPayload,
   VerifyLoginOtpPayload,
-  RegisterPayload,
   LoginApiResponse,
   LoginChallengeResponse,
   BackendLoginApiResponse,
-  RegisterApiResponse,
 } from '../types/auth.types'
 import type { User } from '@/types/common.types'
 import type { ApiResponse } from '@/types/api.types'
@@ -43,12 +41,6 @@ export const authService = {
       ),
     }
   },
-
-  /**
-   * Register a new account
-   */
-  register: (payload: RegisterPayload) =>
-    apiPost<RegisterApiResponse>(API_ENDPOINTS.AUTH.REGISTER, payload),
 
   /**
    * Logout - invalidate token on server
