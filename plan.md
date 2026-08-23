@@ -143,8 +143,7 @@ Backend phải kiểm tra quyền trong middleware và service. Không được 
 - Access token được giữ trong memory của frontend.
 - Refresh token được giữ trong HttpOnly cookie.
 - Refresh endpoint chỉ cấp access token mới.
-- Mời user qua email để thiết lập mật khẩu.
-- Reset mật khẩu bằng token dùng một lần.
+- Admin đặt mật khẩu ban đầu và có thể đặt lại mật khẩu cho user trong phạm vi được quản lý.
 
 Cần hoàn thiện trong MVP:
 
@@ -167,7 +166,7 @@ MVP chưa cần quản lý chuỗi nhà thuốc như một thực thể riêng.
 ### 3.3 Quản lý tài khoản
 
 - Danh sách user trong quầy.
-- Mời manager hoặc staff bằng email.
+- Tạo manager hoặc staff với mật khẩu ban đầu.
 - Thay đổi một role duy nhất của user trong quầy.
 - Khóa hoặc mở tài khoản.
 - Không cho phép tạo nhiều bản ghi role cho cùng một cặp `userId + storeId`.

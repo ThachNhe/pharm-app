@@ -92,6 +92,16 @@ const createAdminUserSchema = z.object({
     .email('Email không hợp lệ')
     .max(255, 'Email không được quá 255 ký tự'),
   phone: z.string().max(20, 'Số điện thoại không được quá 20 ký tự').optional(),
+  password: z
+    .union([
+      z.literal(''),
+      z
+        .string()
+        .min(8, 'Mật khẩu phải có ít nhất 8 ký tự')
+        .regex(/[a-zA-Z]/, 'Mật khẩu phải có ít nhất 1 chữ cái')
+        .regex(/\d/, 'Mật khẩu phải có ít nhất 1 chữ số'),
+    ])
+    .optional(),
 })
 
 type CreateAdminUserField = keyof z.infer<typeof createAdminUserSchema>
@@ -289,6 +299,7 @@ export function AdminPage() {
   const [createUserErrors, setCreateUserErrors] =
     useState<CreateAdminUserErrors>({})
   const [showOwnerPassword, setShowOwnerPassword] = useState(false)
+  const [showUserPassword, setShowUserPassword] = useState(false)
   const queryClient = useQueryClient()
   const router = useRouter()
   const { user, isAuthenticated, isHydrating, logout } = useAuthStore()
@@ -397,8 +408,8 @@ export function AdminPage() {
     onSuccess: async (result) => {
       setCreateUserErrors({})
       setMessage(
-        result.invitationEmailSent
-          ? 'Đã tạo tài khoản và gửi email thiết lập mật khẩu.'
+        result.existingAccount
+          ? 'Đã thêm tài khoản hiện có vào quầy.'
           : 'Đã tạo tài khoản.',
       )
       await invalidateAdmin()
@@ -472,6 +483,7 @@ export function AdminPage() {
       name: asString(form, 'name'),
       email: asString(form, 'email'),
       phone: asString(form, 'phone'),
+      password: asString(form, 'password'),
     }
     const result = createAdminUserSchema.safeParse(payload)
 
@@ -972,6 +984,33 @@ export function AdminPage() {
                       className={cn(createUserErrors.phone && formErrorClass)}
                     />
                     <FieldError message={createUserErrors.phone} />
+                    <div className="relative">
+                      <Input
+                        name="password"
+                        type={showUserPassword ? 'text' : 'password'}
+                        autoComplete="new-password"
+                        aria-label="Mật khẩu ban đầu"
+                        placeholder="Mật khẩu ban đầu (tài khoản mới)"
+                        aria-invalid={Boolean(createUserErrors.password)}
+                        className={cn(
+                          'pr-11',
+                          createUserErrors.password && formErrorClass,
+                        )}
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowUserPassword((show) => !show)}
+                        aria-label={showUserPassword ? 'Ẩn mật khẩu' : 'Hiện mật khẩu'}
+                        className="absolute right-2 top-1/2 grid size-8 -translate-y-1/2 place-items-center rounded-md text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground"
+                      >
+                        {showUserPassword ? (
+                          <EyeOff className="size-4" />
+                        ) : (
+                          <Eye className="size-4" />
+                        )}
+                      </button>
+                    </div>
+                    <FieldError message={createUserErrors.password} />
                     <Button className="w-full" disabled={createUserMutation.isPending}>
                       <Plus className="size-4" />
                       Tạo tài khoản

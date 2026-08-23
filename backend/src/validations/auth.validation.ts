@@ -33,25 +33,4 @@ const refreshTokens = {
   body: Joi.object().max(0),
 };
 
-const forgotPassword = {
-  body: Joi.object().keys({
-    email: Joi.string().email().required(),
-  }),
-};
-
-const resetPassword = {
-  query: Joi.object().keys({
-    token: Joi.string().required(),
-  }),
-  body: Joi.object().keys({
-    password: Joi.string().required().custom(password),
-  }),
-};
-
-const verifyEmail = {
-  query: Joi.object().keys({
-    token: Joi.string().required(),
-  }),
-};
-
-export { register, login, verifyLoginOtp, logout, refreshTokens, forgotPassword, resetPassword, verifyEmail };
+export { register, login, verifyLoginOtp, logout, refreshTokens };

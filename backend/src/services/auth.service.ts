@@ -73,43 +73,4 @@ const refreshAuth = async (refreshToken?: string) => {
   }
 };
 
-/**
- * Reset password
- * @param {string} resetPasswordToken
- * @param {string} newPassword
- * @returns {Promise}
- */
-const resetPassword = async (resetPasswordToken: string, newPassword: string) => {
-  try {
-    const resetPasswordTokenDoc = await tokenService.verifyToken(resetPasswordToken, tokenTypes.RESET_PASSWORD);
-    const user = await userService.getUserById(resetPasswordTokenDoc.userId);
-    if (!user) {
-      throw new Error();
-    }
-    await userService.updateUserById(user.id, { password: newPassword, isEmailVerified: true });
-    await prisma.token.deleteMany({ where: { userId: user.id, type: tokenTypes.RESET_PASSWORD } });
-  } catch (error) {
-    throw new ApiError(httpStatus.UNAUTHORIZED, 'Password reset failed');
-  }
-};
-
-/**
- * Verify email
- * @param {string} verifyEmailToken
- * @returns {Promise}
- */
-const verifyEmail = async (verifyEmailToken: string) => {
-  try {
-    const verifyEmailTokenDoc = await tokenService.verifyToken(verifyEmailToken, tokenTypes.VERIFY_EMAIL);
-    const user = await userService.getUserById(verifyEmailTokenDoc.userId);
-    if (!user) {
-      throw new Error();
-    }
-    await prisma.token.deleteMany({ where: { userId: user.id, type: tokenTypes.VERIFY_EMAIL } });
-    await userService.updateUserById(user.id, { isEmailVerified: true });
-  } catch (error) {
-    throw new ApiError(httpStatus.UNAUTHORIZED, 'Email verification failed');
-  }
-};
-
-export { loginUserWithEmailAndPassword, logout, refreshAuth, resetPassword, verifyEmail };
+export { loginUserWithEmailAndPassword, logout, refreshAuth };

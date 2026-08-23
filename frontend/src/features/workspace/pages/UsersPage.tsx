@@ -3,7 +3,7 @@ import { z } from 'zod';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useForm, useWatch } from 'react-hook-form';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Edit3, LoaderCircle, MailCheck, Plus } from 'lucide-react';
+import { Edit3, Eye, EyeOff, LoaderCircle, Plus } from 'lucide-react';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -41,6 +41,14 @@ const userSchema = z.object({
     phone: z.string().trim().max(20),
     storeRole: z.enum(['owner', 'manager', 'staff']),
     isActive: z.boolean(),
+    password: z.union([
+        z.literal(''),
+        z
+            .string()
+            .min(8, 'Mật khẩu phải có ít nhất 8 ký tự')
+            .regex(/[a-zA-Z]/, 'Mật khẩu phải có ít nhất 1 chữ cái')
+            .regex(/\d/, 'Mật khẩu phải có ít nhất 1 chữ số'),
+    ]),
 });
 
 type UserFormValues = z.infer<typeof userSchema>;
@@ -58,6 +66,7 @@ function UserDialog({
 }) {
     const { selectedStoreId } = useWorkspace();
     const queryClient = useQueryClient();
+    const [showPassword, setShowPassword] = useState(false);
     const currentMembership = user?.storeRoles.find(
         (item) => item.store.id === selectedStoreId
     );
@@ -70,6 +79,7 @@ function UserDialog({
             phone: '',
             storeRole: roleOptions[0] ?? 'staff',
             isActive: true,
+            password: '',
         },
     });
     const isActive = useWatch({ control: form.control, name: 'isActive' });
@@ -84,6 +94,7 @@ function UserDialog({
                       phone: user.phone ?? '',
                       storeRole: currentRole,
                       isActive: currentMembership?.isActive ?? true,
+                      password: '',
                   }
                 : {
                       name: '',
@@ -91,6 +102,7 @@ function UserDialog({
                       phone: '',
                       storeRole: roleOptions[0] ?? 'staff',
                       isActive: true,
+                      password: '',
                   }
         );
     }, [
@@ -121,6 +133,7 @@ function UserDialog({
                 email: values.email,
                 phone: values.phone || null,
                 storeRole: values.storeRole,
+                password: values.password || undefined,
             });
         },
         onSuccess: (result) => {
@@ -128,8 +141,8 @@ function UserDialog({
                 user
                     ? 'Đã cập nhật tài khoản'
                     : result?.existingAccount
-                      ? 'Đã thêm tài khoản hiện có vào quầy và gửi email thông báo'
-                      : 'Đã tạo tài khoản và gửi email thiết lập mật khẩu'
+                      ? 'Đã thêm tài khoản hiện có vào quầy'
+                      : 'Đã tạo tài khoản'
             );
             void queryClient.invalidateQueries({
                 queryKey: ['workspace', selectedStoreId, 'users'],
@@ -160,7 +173,7 @@ function UserDialog({
                     <DialogDescription>
                         {user
                             ? 'Quyền được áp dụng riêng trong quầy đang chọn.'
-                            : 'Email mới sẽ nhận liên kết đặt mật khẩu; tài khoản đã có sẽ dùng mật khẩu hiện tại.'}
+                            : 'Nhập mật khẩu ban đầu cho tài khoản mới. Tài khoản đã tồn tại sẽ giữ mật khẩu hiện tại.'}
                     </DialogDescription>
                 </DialogHeader>
                 <form
@@ -220,6 +233,41 @@ function UserDialog({
                             ))}
                         </select>
                     </Field>
+                    {!user ? (
+                        <Field
+                            label="Mật khẩu ban đầu"
+                            error={form.formState.errors.password?.message}
+                            className="sm:col-span-2"
+                        >
+                            <div className="relative">
+                                <Input
+                                    type={showPassword ? 'text' : 'password'}
+                                    autoComplete="new-password"
+                                    placeholder="Bắt buộc với tài khoản mới"
+                                    className="pr-11"
+                                    {...form.register('password')}
+                                />
+                                <button
+                                    type="button"
+                                    onClick={() =>
+                                        setShowPassword((show) => !show)
+                                    }
+                                    aria-label={
+                                        showPassword
+                                            ? 'Ẩn mật khẩu'
+                                            : 'Hiện mật khẩu'
+                                    }
+                                    className="text-muted-foreground hover:bg-secondary hover:text-foreground absolute right-1 top-1/2 grid size-8 -translate-y-1/2 place-items-center rounded-md transition-colors"
+                                >
+                                    {showPassword ? (
+                                        <EyeOff className="size-4" />
+                                    ) : (
+                                        <Eye className="size-4" />
+                                    )}
+                                </button>
+                            </div>
+                        </Field>
+                    ) : null}
                     {user ? (
                         <label className="flex cursor-pointer items-center gap-2 text-sm sm:col-span-2">
                             <Checkbox
@@ -236,15 +284,7 @@ function UserDialog({
                             />
                             Quyền truy cập quầy đang hoạt động
                         </label>
-                    ) : (
-                        <div className="flex items-start gap-3 rounded-lg border border-sky-200 bg-sky-50 p-3 text-sm text-sky-900 sm:col-span-2">
-                            <MailCheck className="mt-0.5 size-4 shrink-0" />
-                            <p>
-                                Email không chứa mật khẩu. Tài khoản mới tự đặt
-                                mật khẩu qua liên kết dùng một lần.
-                            </p>
-                        </div>
-                    )}
+                    ) : null}
                 </form>
                 <DialogFooter>
                     <Button
@@ -263,7 +303,7 @@ function UserDialog({
                         {mutation.isPending ? (
                             <LoaderCircle className="animate-spin" />
                         ) : null}
-                        {user ? 'Lưu thay đổi' : 'Thêm và gửi email'}
+                        {user ? 'Lưu thay đổi' : 'Thêm tài khoản'}
                     </Button>
                 </DialogFooter>
             </DialogContent>

@@ -121,8 +121,8 @@ function StoreDialog({
                         {store ? 'Cập nhật quầy thuốc' : 'Tạo quầy thuốc'}
                     </DialogTitle>
                     <DialogDescription>
-                        Sau khi tạo quầy, thêm Owner tại màn Tài khoản để gửi
-                        lời mời đặt mật khẩu.
+                        Sau khi tạo quầy, thêm Owner và mật khẩu ban đầu tại màn
+                        Tài khoản.
                     </DialogDescription>
                 </DialogHeader>
                 <form

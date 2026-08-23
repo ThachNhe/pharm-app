@@ -37,13 +37,12 @@ describe('User routes', () => {
         name: newUser.name,
         email: newUser.email,
         role: newUser.role,
-        isEmailVerified: false,
       });
 
       const dbUser = await prisma.user.findUnique({ where: { id: res.body.id } });
       expect(dbUser).toBeDefined();
       expect(dbUser.password).not.toBe(newUser.password);
-      expect(dbUser).toMatchObject({ name: newUser.name, email: newUser.email, role: newUser.role, isEmailVerified: false });
+      expect(dbUser).toMatchObject({ name: newUser.name, email: newUser.email, role: newUser.role });
     });
 
     test('should be able to create an admin as well', async () => {
@@ -163,7 +162,6 @@ describe('User routes', () => {
         name: userOne.name,
         email: userOne.email,
         role: userOne.role,
-        isEmailVerified: userOne.isEmailVerified,
       });
     });
 
@@ -366,7 +364,6 @@ describe('User routes', () => {
         email: userOne.email,
         name: userOne.name,
         role: userOne.role,
-        isEmailVerified: userOne.isEmailVerified,
       });
     });
 
@@ -499,7 +496,6 @@ describe('User routes', () => {
         name: updateBody.name,
         email: updateBody.email,
         role: 'user',
-        isEmailVerified: false,
       });
 
       const dbUser = await prisma.user.findUnique({ where: { id: userOne.id } });

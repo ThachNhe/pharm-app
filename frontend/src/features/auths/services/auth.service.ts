@@ -82,19 +82,4 @@ export const authService = {
    */
   getMe: () =>
     apiGet<User>(API_ENDPOINTS.AUTH.ME),
-
-  /**
-   * Send forgot password email
-   */
-  forgotPassword: (email: string) =>
-    apiPost<ApiResponse>(API_ENDPOINTS.AUTH.FORGOT_PASSWORD, { email }),
-
-  /**
-   * Reset password with token from email
-   */
-  resetPassword: (token: string, password: string) =>
-    apiPost<ApiResponse>(
-      `${API_ENDPOINTS.AUTH.RESET_PASSWORD}?token=${encodeURIComponent(token)}`,
-      { password },
-    ),
 }

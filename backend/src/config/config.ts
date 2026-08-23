@@ -14,19 +14,23 @@ const envVarsSchema = Joi.object()
     JWT_SECRET: Joi.string().required().description('JWT secret key'),
     JWT_ACCESS_EXPIRATION_MINUTES: Joi.number().default(30).description('minutes after which access tokens expire'),
     JWT_REFRESH_EXPIRATION_DAYS: Joi.number().default(30).description('days after which refresh tokens expire'),
-    JWT_RESET_PASSWORD_EXPIRATION_MINUTES: Joi.number()
-      .default(60)
-      .description('minutes after which reset password token expires'),
-    JWT_VERIFY_EMAIL_EXPIRATION_MINUTES: Joi.number()
-      .default(10)
-      .description('minutes after which verify email token expires'),
     OTP_EXPIRES_MINUTES: Joi.number().default(5).description('minutes after which code expires'),
     OTP_MAX_ATTEMPTS: Joi.number().default(5).description('max OTP attempts'),
-    SMTP_HOST: Joi.string().description('server that will send the emails'),
-    SMTP_PORT: Joi.number().description('port to connect to the email server'),
-    SMTP_USERNAME: Joi.string().description('username for email server'),
-    SMTP_PASSWORD: Joi.string().description('password for email server'),
-    EMAIL_FROM: Joi.string().description('the from field in the emails sent by the app'),
+    SMTP_HOST: Joi.string()
+      .when('NODE_ENV', { is: 'production', then: Joi.required() })
+      .description('server that will send login OTP emails'),
+    SMTP_PORT: Joi.number()
+      .when('NODE_ENV', { is: 'production', then: Joi.required() })
+      .description('port to connect to the email server'),
+    SMTP_USERNAME: Joi.string()
+      .when('NODE_ENV', { is: 'production', then: Joi.required() })
+      .description('username for email server'),
+    SMTP_PASSWORD: Joi.string()
+      .when('NODE_ENV', { is: 'production', then: Joi.required() })
+      .description('password for email server'),
+    EMAIL_FROM: Joi.string()
+      .when('NODE_ENV', { is: 'production', then: Joi.required() })
+      .description('the from field in login OTP emails'),
     FRONTEND_URL: Joi.string().uri().default('http://localhost:5173').description('front-end app URL'),
   })
   .unknown();
@@ -58,8 +62,6 @@ const config = {
     secret: envVars.JWT_SECRET,
     accessExpirationMinutes: envVars.JWT_ACCESS_EXPIRATION_MINUTES,
     refreshExpirationDays: envVars.JWT_REFRESH_EXPIRATION_DAYS,
-    resetPasswordExpirationMinutes: envVars.JWT_RESET_PASSWORD_EXPIRATION_MINUTES,
-    verifyEmailExpirationMinutes: envVars.JWT_VERIFY_EMAIL_EXPIRATION_MINUTES,
   },
   email: {
     smtp: {

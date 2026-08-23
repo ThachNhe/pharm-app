@@ -69,6 +69,7 @@ const createUser = {
     name: Joi.string().required().max(255),
     phone: Joi.string().allow('', null).max(20),
     email: Joi.string().required().email().max(255),
+    password: Joi.string().custom(password),
   }),
 };
 

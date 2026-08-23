@@ -1,19 +1,11 @@
-import crypto from 'node:crypto';
 import bcrypt from 'bcryptjs';
 import httpStatus from 'http-status';
 import type { Prisma, StoreRole } from '../generated/prisma/client.js';
 import { prisma } from '../config/database.js';
 import { defaultProductCategoryNames } from '../config/productCategories.js';
 import ApiError from '../utils/ApiError.js';
-import * as emailService from './email.service.js';
-import * as tokenService from './token.service.js';
 
 const STORE_ROLES: StoreRole[] = ['owner', 'manager', 'staff'];
-const STORE_ROLE_LABELS: Record<StoreRole, string> = {
-  owner: 'Chủ quầy',
-  manager: 'Quản lý',
-  staff: 'Nhân viên',
-};
 const adminUserSelect = {
   id: true,
   name: true,
@@ -292,7 +284,6 @@ const createStore = async (actor: Actor, body) => {
           email: body.owner.email,
           phone: body.owner.phone,
           password: await bcrypt.hash(body.owner.password, 8),
-          isEmailVerified: true,
         },
       });
 
@@ -397,7 +388,7 @@ const createAdminUser = async (actor: Actor, body) => {
 
   const store = await prisma.store.findUnique({
     where: { id: body.storeId },
-    select: { id: true, name: true },
+    select: { id: true },
   });
   if (!store) {
     throw new ApiError(httpStatus.NOT_FOUND, 'Store not found');
@@ -441,27 +432,6 @@ const createAdminUser = async (actor: Actor, body) => {
       });
     });
 
-    try {
-      await emailService.sendStoreAssignmentEmail({
-        to: existing.email,
-        name: existing.name,
-        storeName: store.name,
-        role: STORE_ROLE_LABELS[body.storeRole],
-      });
-    } catch (error) {
-      await prisma.userStoreRole
-        .delete({
-          where: {
-            userId_storeId: {
-              userId: existing.id,
-              storeId: body.storeId,
-            },
-          },
-        })
-        .catch(() => undefined);
-      throw new ApiError(httpStatus.INTERNAL_SERVER_ERROR, 'Tài khoản chưa được thêm vì không thể gửi email thông báo');
-    }
-
     await audit({
       actor,
       storeId: body.storeId,
@@ -471,18 +441,20 @@ const createAdminUser = async (actor: Actor, body) => {
       metadata: { storeRole: body.storeRole },
     });
 
-    return { user, invitationEmailSent: true, existingAccount: true };
+    return { user, existingAccount: true };
+  }
+
+  if (!body.password) {
+    throw new ApiError(httpStatus.BAD_REQUEST, 'Mật khẩu ban đầu là bắt buộc khi tạo tài khoản mới');
   }
 
   const user = await prisma.$transaction(async (tx) => {
-    const placeholderPassword = crypto.randomBytes(32).toString('base64url');
     const created = await tx.user.create({
       data: {
         name: body.name,
         email,
         phone: body.phone,
-        password: await bcrypt.hash(placeholderPassword, 8),
-        isEmailVerified: false,
+        password: await bcrypt.hash(body.password, 8),
       },
     });
 
@@ -500,23 +472,6 @@ const createAdminUser = async (actor: Actor, body) => {
     });
   });
 
-  const setupPasswordToken = await tokenService.generateResetPasswordToken(user.email);
-  try {
-    await emailService.sendStaffInvitationEmail({
-      to: user.email,
-      name: user.name,
-      storeName: store.name,
-      role: STORE_ROLE_LABELS[body.storeRole],
-      token: setupPasswordToken,
-    });
-  } catch (error) {
-    await prisma.user.delete({ where: { id: user.id } }).catch(() => undefined);
-    throw new ApiError(
-      httpStatus.INTERNAL_SERVER_ERROR,
-      'Account was not created because invitation email could not be sent',
-    );
-  }
-
   await audit({
     actor,
     storeId: body.storeId,
@@ -526,7 +481,7 @@ const createAdminUser = async (actor: Actor, body) => {
     metadata: { storeRole: body.storeRole },
   });
 
-  return { user, invitationEmailSent: true, existingAccount: false };
+  return { user, existingAccount: false };
 };
 
 const updateAdminUser = async (actor: Actor, userId: string, body) => {

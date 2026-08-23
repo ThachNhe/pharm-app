@@ -10,7 +10,6 @@ type CreateUserBody = {
   email: string;
   password: string;
   role?: Role;
-  isEmailVerified?: boolean;
 };
 
 type UpdateUserBody = Partial<CreateUserBody>;

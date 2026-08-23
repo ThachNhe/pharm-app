@@ -32,16 +32,6 @@ export interface RegisterFormValues {
   confirmPassword: string
 }
 
-export interface ForgotPasswordFormValues {
-  email: string
-}
-
-export interface ResetPasswordFormValues {
-  token: string
-  password: string
-  confirmPassword: string
-}
-
 // ─── API Payloads ──────────────────────────────────────────────────────────
 
 export type LoginPayload = Omit<LoginFormValues, 'rememberMe'>

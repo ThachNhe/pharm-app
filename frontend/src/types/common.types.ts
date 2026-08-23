@@ -8,7 +8,6 @@ export interface User {
   name: string
   avatar?: string
   role: UserRole
-  isEmailVerified?: boolean
   createdAt?: string
   updatedAt?: string
 }

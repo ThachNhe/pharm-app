@@ -1,12 +1,9 @@
 import crypto from 'node:crypto';
 import jwt, { type JwtPayload } from 'jsonwebtoken';
 import moment, { type Moment } from 'moment';
-import httpStatus from 'http-status';
 import type { Token, TokenType } from '../generated/prisma/client.js';
 import config from '../config/config.js';
-import * as userService from './user.service.js';
 import { prisma } from '../config/database.js';
-import ApiError from '../utils/ApiError.js';
 import { tokenTypes, type TokenTypeValue } from '../config/tokens.js';
 import type { PublicUser } from '../utils/user.js';
 
@@ -125,41 +122,4 @@ const generateAuthTokens = async (user: PublicUser) => {
   };
 };
 
-/**
- * Generate reset password token
- * @param {string} email
- * @returns {Promise<string>}
- */
-const generateResetPasswordToken = async (email: string) => {
-  const user = await userService.getUserByEmail(email);
-  if (!user) {
-    throw new ApiError(httpStatus.NOT_FOUND, 'No users found with this email');
-  }
-  const expires = moment().add(config.jwt.resetPasswordExpirationMinutes, 'minutes');
-  const resetPasswordToken = generateToken(user.id, expires, tokenTypes.RESET_PASSWORD);
-  await saveToken(resetPasswordToken, user.id, expires, tokenTypes.RESET_PASSWORD);
-  return resetPasswordToken;
-};
-
-/**
- * Generate verify email token
- * @param {User} user
- * @returns {Promise<string>}
- */
-const generateVerifyEmailToken = async (user: PublicUser) => {
-  const expires = moment().add(config.jwt.verifyEmailExpirationMinutes, 'minutes');
-  const verifyEmailToken = generateToken(user.id, expires, tokenTypes.VERIFY_EMAIL);
-  await saveToken(verifyEmailToken, user.id, expires, tokenTypes.VERIFY_EMAIL);
-  return verifyEmailToken;
-};
-
-export {
-  generateToken,
-  hashToken,
-  saveToken,
-  verifyToken,
-  generateAccessToken,
-  generateAuthTokens,
-  generateResetPasswordToken,
-  generateVerifyEmailToken,
-};
+export { generateToken, hashToken, saveToken, verifyToken, generateAccessToken, generateAuthTokens };

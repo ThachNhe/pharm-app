@@ -76,7 +76,7 @@ export function useRegister() {
 
     onSuccess: () => {
       toast.success('Đăng ký thành công', {
-        description: 'Vui lòng kiểm tra email để xác nhận tài khoản.',
+        description: 'Hãy đăng nhập để nhận mã OTP qua email.',
       })
       router.navigate({ to: ROUTES.LOGIN })
     },

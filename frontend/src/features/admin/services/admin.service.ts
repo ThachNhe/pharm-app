@@ -42,7 +42,6 @@ export const adminService = {
     createUser: (payload: unknown) =>
         apiPost<{
             user: AdminUser;
-            invitationEmailSent: boolean;
             existingAccount: boolean;
         }>(API_ENDPOINTS.ADMIN.USERS, payload),
     updateUser: (id: string, payload: unknown) =>

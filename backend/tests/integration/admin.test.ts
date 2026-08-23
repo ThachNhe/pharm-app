@@ -7,7 +7,6 @@ import config from '../../src/config/config.js';
 import { prisma } from '../../src/config/database.js';
 import { tokenTypes } from '../../src/config/tokens.js';
 import * as tokenService from '../../src/services/token.service.js';
-import * as emailService from '../../src/services/email.service.js';
 import setupTestDB from '../utils/setupTestDB.js';
 import { admin, userOne, userTwo, insertUsers } from '../fixtures/user.fixture.js';
 
@@ -98,10 +97,6 @@ describe('Admin routes', () => {
   });
 
   describe('POST /v1/admin/users', () => {
-    beforeEach(() => {
-      vi.spyOn(emailService.transport, 'sendMail').mockResolvedValue({} as never);
-    });
-
     test('should prevent owner from creating users outside owned stores', async () => {
       await insertUsers([userOne]);
       const ownedStore = await prisma.store.create({ data: { name: 'Owned store' } });
@@ -144,23 +139,15 @@ describe('Admin routes', () => {
           storeRole: 'staff',
           name: 'Allowed Staff',
           email: faker.internet.email().toLowerCase(),
+          password: 'password1',
         })
         .expect(httpStatus.CREATED);
 
       expect(res.body).toMatchObject({
         user: { name: 'Allowed Staff', isActive: true },
-        invitationEmailSent: true,
+        existingAccount: false,
       });
-      expect(emailService.transport.sendMail).toHaveBeenCalledWith(
-        expect.objectContaining({
-          to: res.body.user.email,
-          subject: 'Thiết lập tài khoản Pharm App',
-        }),
-      );
-      const setupToken = await prisma.token.findFirst({
-        where: { userId: res.body.user.id, type: tokenTypes.RESET_PASSWORD, blacklisted: false },
-      });
-      expect(setupToken).toBeDefined();
+      expect(await prisma.token.count({ where: { userId: res.body.user.id } })).toBe(0);
     });
 
     test('should allow owner to create manager for owned store', async () => {
@@ -176,6 +163,7 @@ describe('Admin routes', () => {
           storeRole: 'manager',
           name: 'Allowed Manager',
           email: faker.internet.email().toLowerCase(),
+          password: 'password1',
         })
         .expect(httpStatus.CREATED);
 
@@ -209,17 +197,27 @@ describe('Admin routes', () => {
 
       expect(res.body).toMatchObject({
         user: { id: userTwo.id },
-        invitationEmailSent: true,
         existingAccount: true,
       });
       expect(await prisma.userStoreRole.count({ where: { userId: userTwo.id } })).toBe(2);
-      expect(await prisma.token.count({ where: { userId: userTwo.id, type: tokenTypes.RESET_PASSWORD } })).toBe(0);
-      expect(emailService.transport.sendMail).toHaveBeenCalledWith(
-        expect.objectContaining({
-          to: userTwo.email,
-          subject: 'Bạn đã được thêm vào một quầy thuốc',
-        }),
-      );
+      expect(await prisma.token.count({ where: { userId: userTwo.id } })).toBe(0);
+    });
+
+    test('should require an initial password for a new account', async () => {
+      await insertUsers([userTwo]);
+      const store = await prisma.store.create({ data: { name: 'Owner store' } });
+      await prisma.userStoreRole.create({ data: { userId: userTwo.id, storeId: store.id, role: 'owner' } });
+
+      await request(app)
+        .post('/v1/admin/users')
+        .set('Authorization', `Bearer ${createAccessToken(userTwo.id)}`)
+        .send({
+          storeId: store.id,
+          storeRole: 'staff',
+          name: 'Staff without password',
+          email: faker.internet.email().toLowerCase(),
+        })
+        .expect(httpStatus.BAD_REQUEST);
     });
 
     test('should disable access only in the selected store', async () => {

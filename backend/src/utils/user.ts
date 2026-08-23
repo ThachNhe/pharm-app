@@ -1,6 +1,6 @@
 import type { User } from '../generated/prisma/client.js';
 
-type PublicUser = Pick<User, 'id' | 'name' | 'email' | 'role' | 'isEmailVerified'>;
+type PublicUser = Pick<User, 'id' | 'name' | 'email' | 'role'>;
 type AuthenticatedUser = PublicUser & Pick<User, 'isSystemAdmin' | 'isActive'>;
 
 const publicUserSelect = {
@@ -8,7 +8,6 @@ const publicUserSelect = {
   name: true,
   email: true,
   role: true,
-  isEmailVerified: true,
 };
 
 const authenticatedUserSelect = {
@@ -23,7 +22,6 @@ const toPublicUser = (user: User): PublicUser => {
     name: user.name,
     email: user.email,
     role: user.role,
-    isEmailVerified: user.isEmailVerified,
   };
 };
 

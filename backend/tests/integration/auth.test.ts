@@ -3,7 +3,6 @@ import faker from 'faker';
 import httpStatus from 'http-status';
 import httpMocks from 'node-mocks-http';
 import moment from 'moment';
-import bcrypt from 'bcryptjs';
 import app from '../../src/app.js';
 import config from '../../src/config/config.js';
 import auth from '../../src/middlewares/auth.js';
@@ -56,13 +55,12 @@ describe('Auth routes', () => {
         name: newUser.name,
         email: newUser.email,
         role: 'user',
-        isEmailVerified: false,
       });
 
       const dbUser = await prisma.user.findUnique({ where: { id: res.body.user.id } });
       expect(dbUser).toBeDefined();
       expect(dbUser.password).not.toBe(newUser.password);
-      expect(dbUser).toMatchObject({ name: newUser.name, email: newUser.email, role: 'user', isEmailVerified: false });
+      expect(dbUser).toMatchObject({ name: newUser.name, email: newUser.email, role: 'user' });
 
       expect(res.body).not.toHaveProperty('tokens');
       expect(res.body.message).toBe('Đăng ký thành công. Hãy đăng nhập và xác minh OTP để tiếp tục.');
@@ -186,7 +184,6 @@ describe('Auth routes', () => {
           name: userOne.name,
           email: userOne.email,
           role: userOne.role,
-          isEmailVerified: userOne.isEmailVerified,
         },
         tokens: {
           access: { token: expect.anything(), expires: expect.anything() },
@@ -327,7 +324,6 @@ describe('Auth routes', () => {
           name: userOne.name,
           email: userOne.email,
           role: userOne.role,
-          isEmailVerified: userOne.isEmailVerified,
         },
         tokens: {
           access: { token: expect.anything(), expires: expect.anything() },
@@ -416,237 +412,13 @@ describe('Auth routes', () => {
     });
   });
 
-  describe('POST /v1/auth/forgot-password', () => {
-    beforeEach(() => {
-      vi.spyOn(emailService.transport, 'sendMail').mockResolvedValue({} as never);
-    });
-
-    test('should return 204 and send reset password email to the user', async () => {
-      await insertUsers([userOne]);
-      const sendResetPasswordEmailSpy = vi.spyOn(emailService, 'sendResetPasswordEmail');
-
-      await request(app).post('/v1/auth/forgot-password').send({ email: userOne.email }).expect(httpStatus.NO_CONTENT);
-
-      expect(sendResetPasswordEmailSpy).toHaveBeenCalledWith(userOne.email, expect.any(String));
-      const resetPasswordToken = sendResetPasswordEmailSpy.mock.calls[0][1];
-      const dbResetPasswordTokenDoc = await prisma.token.findFirst({
-        where: { token: tokenService.hashToken(resetPasswordToken), userId: userOne.id },
-      });
-      expect(dbResetPasswordTokenDoc).toBeDefined();
-      expect(dbResetPasswordTokenDoc?.token).not.toBe(resetPasswordToken);
-    });
-
-    test('should return 400 if email is missing', async () => {
-      await insertUsers([userOne]);
-
-      await request(app).post('/v1/auth/forgot-password').send().expect(httpStatus.BAD_REQUEST);
-    });
-
-    test('should not reveal whether an email belongs to a user', async () => {
-      await request(app).post('/v1/auth/forgot-password').send({ email: userOne.email }).expect(httpStatus.NO_CONTENT);
-      expect(emailService.transport.sendMail).not.toHaveBeenCalled();
-    });
-  });
-
-  describe('POST /v1/auth/reset-password', () => {
-    test('should return 204 and reset the password', async () => {
-      await insertUsers([userOne]);
-      const expires = moment().add(config.jwt.resetPasswordExpirationMinutes, 'minutes');
-      const resetPasswordToken = tokenService.generateToken(userOne.id, expires, tokenTypes.RESET_PASSWORD);
-      await tokenService.saveToken(resetPasswordToken, userOne.id, expires, tokenTypes.RESET_PASSWORD);
-
-      await request(app)
-        .post('/v1/auth/reset-password')
-        .query({ token: resetPasswordToken })
-        .send({ password: 'password2' })
-        .expect(httpStatus.NO_CONTENT);
-
-      const dbUser = await prisma.user.findUnique({ where: { id: userOne.id } });
-      const isPasswordMatch = await bcrypt.compare('password2', dbUser.password);
-      expect(isPasswordMatch).toBe(true);
-
-      const dbResetPasswordTokenCount = await prisma.token.count({
-        where: { userId: userOne.id, type: tokenTypes.RESET_PASSWORD },
-      });
-      expect(dbResetPasswordTokenCount).toBe(0);
-    });
-
-    test('should return 400 if reset password token is missing', async () => {
-      await insertUsers([userOne]);
-
-      await request(app).post('/v1/auth/reset-password').send({ password: 'password2' }).expect(httpStatus.BAD_REQUEST);
-    });
-
-    test('should return 401 if reset password token is blacklisted', async () => {
-      await insertUsers([userOne]);
-      const expires = moment().add(config.jwt.resetPasswordExpirationMinutes, 'minutes');
-      const resetPasswordToken = tokenService.generateToken(userOne.id, expires, tokenTypes.RESET_PASSWORD);
-      await tokenService.saveToken(resetPasswordToken, userOne.id, expires, tokenTypes.RESET_PASSWORD, true);
-
-      await request(app)
-        .post('/v1/auth/reset-password')
-        .query({ token: resetPasswordToken })
-        .send({ password: 'password2' })
-        .expect(httpStatus.UNAUTHORIZED);
-    });
-
-    test('should return 401 if reset password token is expired', async () => {
-      await insertUsers([userOne]);
-      const expires = moment().subtract(1, 'minutes');
-      const resetPasswordToken = tokenService.generateToken(userOne.id, expires, tokenTypes.RESET_PASSWORD);
-      await tokenService.saveToken(resetPasswordToken, userOne.id, expires, tokenTypes.RESET_PASSWORD);
-
-      await request(app)
-        .post('/v1/auth/reset-password')
-        .query({ token: resetPasswordToken })
-        .send({ password: 'password2' })
-        .expect(httpStatus.UNAUTHORIZED);
-    });
-
-    test('should return 401 if user is not found', async () => {
-      await insertUsers([userOne]);
-      const expires = moment().add(config.jwt.resetPasswordExpirationMinutes, 'minutes');
-      const resetPasswordToken = tokenService.generateToken(userOne.id, expires, tokenTypes.RESET_PASSWORD);
-      await tokenService.saveToken(resetPasswordToken, userOne.id, expires, tokenTypes.RESET_PASSWORD);
-      await prisma.user.delete({ where: { id: userOne.id } });
-
-      await request(app)
-        .post('/v1/auth/reset-password')
-        .query({ token: resetPasswordToken })
-        .send({ password: 'password2' })
-        .expect(httpStatus.UNAUTHORIZED);
-    });
-
-    test('should return 400 if password is missing or invalid', async () => {
-      await insertUsers([userOne]);
-      const expires = moment().add(config.jwt.resetPasswordExpirationMinutes, 'minutes');
-      const resetPasswordToken = tokenService.generateToken(userOne.id, expires, tokenTypes.RESET_PASSWORD);
-      await tokenService.saveToken(resetPasswordToken, userOne.id, expires, tokenTypes.RESET_PASSWORD);
-
-      await request(app).post('/v1/auth/reset-password').query({ token: resetPasswordToken }).expect(httpStatus.BAD_REQUEST);
-
-      await request(app)
-        .post('/v1/auth/reset-password')
-        .query({ token: resetPasswordToken })
-        .send({ password: 'short1' })
-        .expect(httpStatus.BAD_REQUEST);
-
-      await request(app)
-        .post('/v1/auth/reset-password')
-        .query({ token: resetPasswordToken })
-        .send({ password: 'password' })
-        .expect(httpStatus.BAD_REQUEST);
-
-      await request(app)
-        .post('/v1/auth/reset-password')
-        .query({ token: resetPasswordToken })
-        .send({ password: '11111111' })
-        .expect(httpStatus.BAD_REQUEST);
-    });
-  });
-
-  describe('POST /v1/auth/send-verification-email', () => {
-    beforeEach(() => {
-      vi.spyOn(emailService.transport, 'sendMail').mockResolvedValue({} as never);
-    });
-
-    test('should return 204 and send verification email to the user', async () => {
-      await insertUsers([userOne]);
-      const sendVerificationEmailSpy = vi.spyOn(emailService, 'sendVerificationEmail');
-
-      await request(app)
-        .post('/v1/auth/send-verification-email')
-        .set('Authorization', `Bearer ${userOneAccessToken}`)
-        .expect(httpStatus.NO_CONTENT);
-
-      expect(sendVerificationEmailSpy).toHaveBeenCalledWith(userOne.email, expect.any(String));
-      const verifyEmailToken = sendVerificationEmailSpy.mock.calls[0][1];
-      const dbVerifyEmailToken = await prisma.token.findFirst({
-        where: { token: tokenService.hashToken(verifyEmailToken), userId: userOne.id },
-      });
-
-      expect(dbVerifyEmailToken).toBeDefined();
-      expect(dbVerifyEmailToken?.token).not.toBe(verifyEmailToken);
-    });
-
-    test('should return 401 error if access token is missing', async () => {
-      await insertUsers([userOne]);
-
-      await request(app).post('/v1/auth/send-verification-email').send().expect(httpStatus.UNAUTHORIZED);
-    });
-  });
-
-  describe('POST /v1/auth/verify-email', () => {
-    test('should return 204 and verify the email', async () => {
-      await insertUsers([userOne]);
-      const expires = moment().add(config.jwt.verifyEmailExpirationMinutes, 'minutes');
-      const verifyEmailToken = tokenService.generateToken(userOne.id, expires);
-      await tokenService.saveToken(verifyEmailToken, userOne.id, expires, tokenTypes.VERIFY_EMAIL);
-
-      await request(app)
-        .post('/v1/auth/verify-email')
-        .query({ token: verifyEmailToken })
-        .send()
-        .expect(httpStatus.NO_CONTENT);
-
-      const dbUser = await prisma.user.findUnique({ where: { id: userOne.id } });
-
-      expect(dbUser.isEmailVerified).toBe(true);
-
-      const dbVerifyEmailToken = await prisma.token.count({
-        where: {
-          userId: userOne.id,
-          type: tokenTypes.VERIFY_EMAIL,
-        },
-      });
-      expect(dbVerifyEmailToken).toBe(0);
-    });
-
-    test('should return 400 if verify email token is missing', async () => {
-      await insertUsers([userOne]);
-
-      await request(app).post('/v1/auth/verify-email').send().expect(httpStatus.BAD_REQUEST);
-    });
-
-    test('should return 401 if verify email token is blacklisted', async () => {
-      await insertUsers([userOne]);
-      const expires = moment().add(config.jwt.verifyEmailExpirationMinutes, 'minutes');
-      const verifyEmailToken = tokenService.generateToken(userOne.id, expires);
-      await tokenService.saveToken(verifyEmailToken, userOne.id, expires, tokenTypes.VERIFY_EMAIL, true);
-
-      await request(app)
-        .post('/v1/auth/verify-email')
-        .query({ token: verifyEmailToken })
-        .send()
-        .expect(httpStatus.UNAUTHORIZED);
-    });
-
-    test('should return 401 if verify email token is expired', async () => {
-      await insertUsers([userOne]);
-      const expires = moment().subtract(1, 'minutes');
-      const verifyEmailToken = tokenService.generateToken(userOne.id, expires);
-      await tokenService.saveToken(verifyEmailToken, userOne.id, expires, tokenTypes.VERIFY_EMAIL);
-
-      await request(app)
-        .post('/v1/auth/verify-email')
-        .query({ token: verifyEmailToken })
-        .send()
-        .expect(httpStatus.UNAUTHORIZED);
-    });
-
-    test('should return 401 if user is not found', async () => {
-      await insertUsers([userOne]);
-      const expires = moment().add(config.jwt.verifyEmailExpirationMinutes, 'minutes');
-      const verifyEmailToken = tokenService.generateToken(userOne.id, expires);
-      await tokenService.saveToken(verifyEmailToken, userOne.id, expires, tokenTypes.VERIFY_EMAIL);
-      await prisma.user.delete({ where: { id: userOne.id } });
-
-      await request(app)
-        .post('/v1/auth/verify-email')
-        .query({ token: verifyEmailToken })
-        .send()
-        .expect(httpStatus.UNAUTHORIZED);
-    });
+  test.each([
+    '/v1/auth/forgot-password',
+    '/v1/auth/reset-password',
+    '/v1/auth/send-verification-email',
+    '/v1/auth/verify-email',
+  ])('should not expose removed email endpoint %s', async (endpoint) => {
+    await request(app).post(endpoint).send({}).expect(httpStatus.NOT_FOUND);
   });
 });
 
