@@ -85,7 +85,7 @@ test('system admin can use the workspace across desktop and mobile', async ({
     const routes = [
         ['Bán hàng', 'Bán hàng'],
         ['Tồn kho', 'Tồn kho'],
-        ['Danh mục thuốc', 'Danh mục thuốc'],
+        ['Danh mục sản phẩm', 'Danh mục sản phẩm'],
         ['Thư viện thuốc', 'Thư viện thuốc'],
         ['Nhóm sản phẩm', 'Nhóm sản phẩm'],
         ['Nhập hàng', 'Nhập hàng'],
@@ -143,7 +143,16 @@ test('system admin can use the workspace across desktop and mobile', async ({
         path: '/tmp/pharm-medicines-desktop.png',
         fullPage: true,
     });
-    await page.getByRole('button', { name: 'Thêm thuốc', exact: true }).click();
+    await page.route(/\/v1\/stores\/[^/]+\/medicines\/next-code$/, (route) =>
+        route.fulfill({
+            status: 200,
+            contentType: 'application/json',
+            body: JSON.stringify({ code: 'SP000338' }),
+        })
+    );
+    await page
+        .getByRole('button', { name: 'Thêm sản phẩm', exact: true })
+        .click();
     const medicineDialog = page.getByRole('dialog');
     await expect(
         medicineDialog.getByRole('button', {
@@ -160,12 +169,14 @@ test('system admin can use the workspace across desktop and mobile', async ({
     await medicineDialog
         .getByRole('button', { name: /Acyclovir 800Mg\/ Stada/ })
         .click();
-    await expect(medicineDialog.getByLabel('Tên thuốc')).toHaveValue(
+    await expect(medicineDialog.getByLabel('Tên sản phẩm')).toHaveValue(
         'Acyclovir 800Mg/ Stada'
     );
     await expect(medicineDialog.getByLabel('Mã hàng hóa')).toHaveValue(
-        'HH02726'
+        'SP000338'
     );
+    await expect(medicineDialog.getByLabel('Mã hàng hóa')).toBeEditable();
+    await medicineDialog.getByLabel('Mã hàng hóa').fill('SP000339');
     await expect(
         medicineDialog.getByRole('combobox', {
             name: 'Chọn nhóm hàng hóa',
@@ -190,13 +201,13 @@ test('system admin can use the workspace across desktop and mobile', async ({
     });
     await medicineDialog.getByLabel('Giá bán').fill('25000');
     await medicineDialog
-        .getByRole('button', { name: 'Thêm thuốc', exact: true })
+        .getByRole('button', { name: 'Thêm sản phẩm', exact: true })
         .click();
     await expect.poll(() => createPayload).not.toBeNull();
     expect(createPayload).toMatchObject({
         referenceProductId: 'fffe7ae2-015e-4861-b4ce-501ef47ad5b7',
         categoryId: expect.any(String),
-        code: 'HH02726',
+        code: 'SP000339',
         name: 'Acyclovir 800Mg/ Stada',
         sellingPrice: 25000,
         units: expect.arrayContaining([
@@ -209,11 +220,15 @@ test('system admin can use the workspace across desktop and mobile', async ({
     });
     await expect(medicineDialog).toBeHidden();
 
-    await page.getByRole('button', { name: 'Thêm thuốc', exact: true }).click();
+    await page
+        .getByRole('button', { name: 'Thêm sản phẩm', exact: true })
+        .click();
     await page
         .getByRole('button', { name: 'Nhập thủ công', exact: true })
         .click();
-    await expect(page.getByLabel('Tên thuốc')).toBeVisible();
+    await expect(page.getByLabel('Tên sản phẩm')).toBeVisible();
+    await expect(page.getByLabel('Mã hàng hóa')).toHaveValue('SP000338');
+    await expect(page.getByLabel('Mã hàng hóa')).toBeEditable();
     await page.getByRole('button', { name: 'Thêm đơn vị tính' }).click();
     await page.getByLabel('Tên đơn vị').fill('Bình');
     await page
@@ -233,6 +248,41 @@ test('system admin can use the workspace across desktop and mobile', async ({
     ).toBeVisible();
     await page.getByRole('button', { name: 'Hủy', exact: true }).last().click();
     await page.getByRole('button', { name: 'Hủy', exact: true }).click();
+
+    await page.goto('/admin/imports');
+    await page
+        .getByRole('button', { name: 'Lập phiếu nhập', exact: true })
+        .first()
+        .click();
+    const importDialog = page.getByRole('dialog');
+    await importDialog
+        .getByRole('button', { name: 'Lưu phiếu nháp', exact: true })
+        .click();
+    await importDialog.getByLabel('Sản phẩm').selectOption({ index: 1 });
+    const inputTops = await Promise.all(
+        [
+            'medicineId',
+            'unitId',
+            'batchNumber',
+            'quantity',
+            'importPrice',
+            'expiryDate',
+        ].map((name) =>
+            importDialog
+                .locator(`[name="items.0.${name}"]`)
+                .evaluate((element) => element.getBoundingClientRect().top)
+        )
+    );
+    expect(Math.max(...inputTops) - Math.min(...inputTops)).toBeLessThanOrEqual(
+        1
+    );
+    await page.screenshot({
+        path: '/tmp/pharm-import-dialog-desktop.png',
+        fullPage: true,
+    });
+    await importDialog
+        .getByRole('button', { name: 'Hủy', exact: true })
+        .click();
 
     await page.goto('/admin/inventory?alert=low');
     await expect(
@@ -284,7 +334,7 @@ test('system admin can use the workspace across desktop and mobile', async ({
 
     await page.getByRole('button', { name: 'Mở menu' }).click();
     await page
-        .getByRole('link', { name: 'Danh mục thuốc', exact: true })
+        .getByRole('link', { name: 'Danh mục sản phẩm', exact: true })
         .last()
         .click();
     await expect
@@ -341,7 +391,7 @@ test('owner sees store management features but not system store administration',
     for (const linkName of [
         'Bán hàng',
         'Tồn kho',
-        'Danh mục thuốc',
+        'Danh mục sản phẩm',
         'Thư viện thuốc',
         'Nhóm sản phẩm',
         'Nhập hàng',
@@ -401,7 +451,7 @@ test('staff navigation and direct routes remain permission scoped', async ({
         'Tổng quan',
         'Bán hàng',
         'Tồn kho',
-        'Danh mục thuốc',
+        'Danh mục sản phẩm',
         'Thư viện thuốc',
     ]) {
         await expect(

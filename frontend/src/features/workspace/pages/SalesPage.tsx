@@ -405,7 +405,7 @@ function PointOfSale({ onCreated }: { onCreated: (sale: Sale) => void }) {
 
     const submitSale = () => {
         if (!cart.length) {
-            toast.error('Hãy thêm ít nhất một thuốc vào đơn');
+            toast.error('Hãy thêm ít nhất một sản phẩm vào đơn');
             return;
         }
         if (discount < 0 || discount > subtotal) {
@@ -425,9 +425,9 @@ function PointOfSale({ onCreated }: { onCreated: (sale: Sale) => void }) {
                             autoFocus
                             value={search}
                             onChange={(event) => setSearch(event.target.value)}
-                            placeholder="Quét mã vạch hoặc tìm tên thuốc"
+                            placeholder="Quét mã vạch hoặc tìm tên sản phẩm"
                             className="h-11 pl-10"
-                            aria-label="Tìm thuốc để bán"
+                            aria-label="Tìm sản phẩm để bán"
                         />
                     </div>
                 </div>
@@ -438,8 +438,8 @@ function PointOfSale({ onCreated }: { onCreated: (sale: Sale) => void }) {
                     <ErrorState onRetry={() => void medicinesQuery.refetch()} />
                 ) : !availableMedicines.length ? (
                     <EmptyState
-                        title="Không tìm thấy thuốc"
-                        description="Kiểm tra từ khóa hoặc bổ sung thuốc vào danh mục quầy."
+                        title="Không tìm thấy sản phẩm"
+                        description="Kiểm tra từ khóa hoặc bổ sung sản phẩm vào danh mục quầy."
                     />
                 ) : (
                     <div className="divide-border max-h-[70vh] divide-y overflow-y-auto">
@@ -524,7 +524,7 @@ function PointOfSale({ onCreated }: { onCreated: (sale: Sale) => void }) {
                     {!cart.length ? (
                         <EmptyState
                             title="Giỏ hàng đang trống"
-                            description="Chọn thuốc ở danh sách để thêm vào đơn."
+                            description="Chọn sản phẩm ở danh sách để thêm vào đơn."
                         />
                     ) : (
                         <div className="divide-border divide-y">

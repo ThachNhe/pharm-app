@@ -54,6 +54,8 @@ export const API_ENDPOINTS = {
         PRODUCT_CATEGORY: (storeId: string, categoryId: string) =>
             `/stores/${storeId}/product-categories/${categoryId}`,
         MEDICINES: (storeId: string) => `/stores/${storeId}/medicines`,
+        NEXT_MEDICINE_CODE: (storeId: string) =>
+            `/stores/${storeId}/medicines/next-code`,
         MEDICINE: (storeId: string, medicineId: string) =>
             `/stores/${storeId}/medicines/${medicineId}`,
         REFERENCE_PRODUCTS: (storeId: string) =>

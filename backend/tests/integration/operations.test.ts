@@ -56,7 +56,6 @@ describe('Store operations flow', () => {
       .set('Authorization', `Bearer ${ownerToken}`)
       .send({
         categoryId: categoryRes.body.id,
-        code: 'SP-PARA-001',
         positionName: 'Kệ A1',
         name: 'Paracetamol 500mg',
         baseUnitName: 'Viên',
@@ -78,7 +77,7 @@ describe('Store operations flow', () => {
       .expect(httpStatus.CREATED);
 
     expect(medicineRes.body).toMatchObject({
-      code: 'SP-PARA-001',
+      code: 'SP000001',
       positionName: 'Kệ A1',
       countryOfOrigin: 'Việt Nam',
       importerName: 'Công ty nhập khẩu kiểm thử',
@@ -149,7 +148,7 @@ describe('Store operations flow', () => {
       .set('Authorization', `Bearer ${staffToken}`)
       .expect(httpStatus.OK);
     expect(staffMedicinesRes.body.results[0]).toMatchObject({
-      code: 'SP-PARA-001',
+      code: medicineRes.body.code,
       availableStock: 100,
       nearestExpiry: expect.any(String),
       batches: [
@@ -395,6 +394,60 @@ describe('Store operations flow', () => {
     await request(app)
       .get(`/v1/stores/${otherStore.id}/product-categories`)
       .set('Authorization', `Bearer ${staffToken}`)
+      .expect(httpStatus.FORBIDDEN);
+  });
+
+  test('should generate the next store-scoped product code for managers', async () => {
+    await insertUsers([userOne, userTwo]);
+    const [managedStore, otherStore] = await Promise.all([
+      prisma.store.create({ data: { name: 'Managed code store' } }),
+      prisma.store.create({ data: { name: 'Other code store' } }),
+    ]);
+    await prisma.userStoreRole.createMany({
+      data: [
+        { userId: userOne.id, storeId: managedStore.id, role: 'owner' },
+        { userId: userTwo.id, storeId: managedStore.id, role: 'staff' },
+      ],
+    });
+    const [managedCategory, otherCategory, managedProduct, otherProduct] = await Promise.all([
+      prisma.productCategory.create({ data: { storeId: managedStore.id, name: 'Hàng hóa' } }),
+      prisma.productCategory.create({ data: { storeId: otherStore.id, name: 'Hàng hóa' } }),
+      prisma.medicine.create({ data: { name: 'Sản phẩm đang có', baseUnitName: 'Cái' } }),
+      prisma.medicine.create({ data: { name: 'Sản phẩm quầy khác', baseUnitName: 'Cái' } }),
+    ]);
+    await prisma.storeMedicine.createMany({
+      data: [
+        {
+          storeId: managedStore.id,
+          medicineId: managedProduct.id,
+          categoryId: managedCategory.id,
+          code: 'SP000337',
+        },
+        {
+          storeId: otherStore.id,
+          medicineId: otherProduct.id,
+          categoryId: otherCategory.id,
+          code: 'SP999999',
+        },
+      ],
+    });
+
+    const ownerToken = accessToken(userOne.id);
+    const staffToken = accessToken(userTwo.id);
+    const response = await request(app)
+      .get(`/v1/stores/${managedStore.id}/medicines/next-code`)
+      .set('Authorization', `Bearer ${ownerToken}`)
+      .expect(httpStatus.OK);
+
+    expect(response.body).toEqual({ code: 'SP000338' });
+
+    await request(app)
+      .get(`/v1/stores/${managedStore.id}/medicines/next-code`)
+      .set('Authorization', `Bearer ${staffToken}`)
+      .expect(httpStatus.FORBIDDEN);
+    await request(app)
+      .get(`/v1/stores/${otherStore.id}/medicines/next-code`)
+      .set('Authorization', `Bearer ${ownerToken}`)
       .expect(httpStatus.FORBIDDEN);
   });
 

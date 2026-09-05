@@ -77,6 +77,10 @@ export const workspaceService = {
         ),
     createMedicine: (storeId: string, payload: MedicinePayload) =>
         apiPost<Medicine>(API_ENDPOINTS.OPERATIONS.MEDICINES(storeId), payload),
+    generateMedicineCode: (storeId: string) =>
+        apiGet<{ code: string }>(
+            API_ENDPOINTS.OPERATIONS.NEXT_MEDICINE_CODE(storeId)
+        ),
     updateMedicine: (
         storeId: string,
         medicineId: string,

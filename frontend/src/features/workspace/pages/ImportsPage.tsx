@@ -62,7 +62,7 @@ const importSchema = z.object({
     items: z
         .array(
             z.object({
-                medicineId: z.string().min(1, 'Chọn thuốc'),
+                medicineId: z.string().min(1, 'Chọn sản phẩm'),
                 unitId: z.string().min(1, 'Chọn đơn vị'),
                 batchNumber: z.string().trim().min(1, 'Nhập số lô').max(100),
                 quantity: z
@@ -80,7 +80,7 @@ const importSchema = z.object({
                     ),
             })
         )
-        .min(1, 'Phiếu nhập cần ít nhất một dòng thuốc'),
+        .min(1, 'Phiếu nhập cần ít nhất một dòng sản phẩm'),
 });
 
 type ImportFormValues = z.infer<typeof importSchema>;
@@ -238,7 +238,7 @@ function CreateImportDialog({
                                     Chi tiết lô hàng
                                 </h3>
                                 <p className="text-muted-foreground text-xs">
-                                    Mỗi thuốc và số lô chỉ xuất hiện một lần.
+                                    Mỗi sản phẩm và số lô chỉ xuất hiện một lần.
                                 </p>
                             </div>
                             <Button
@@ -264,10 +264,10 @@ function CreateImportDialog({
                                 return (
                                     <div
                                         key={field.id}
-                                        className="grid gap-3 p-4 lg:grid-cols-[minmax(180px,1.6fr)_100px_minmax(120px,1fr)_110px_140px_155px_36px]"
+                                        className="grid items-start gap-3 p-4 lg:grid-cols-[minmax(180px,1.6fr)_100px_minmax(120px,1fr)_110px_140px_155px_36px]"
                                     >
                                         <Field
-                                            label="Thuốc"
+                                            label="Sản phẩm"
                                             required
                                             error={
                                                 itemErrors?.medicineId?.message
@@ -303,7 +303,7 @@ function CreateImportDialog({
                                                 )}
                                             >
                                                 <option value="">
-                                                    Chọn thuốc
+                                                    Chọn sản phẩm
                                                 </option>
                                                 {medicinesQuery.data?.results.map(
                                                     (medicine) => (
@@ -362,7 +362,7 @@ function CreateImportDialog({
                                             />
                                         </Field>
                                         <Field
-                                            label={`Số lượng${selectedMedicine ? ` (${selectedMedicine.units.find((unit) => unit.id === items[index]?.unitId)?.name ?? selectedMedicine.baseUnitName})` : ''}`}
+                                            label="Số lượng"
                                             required
                                             error={
                                                 itemErrors?.quantity?.message
@@ -416,7 +416,7 @@ function CreateImportDialog({
                                                 )}
                                             />
                                         </Field>
-                                        <div className="flex items-end">
+                                        <div className="flex items-start pt-[1.625rem]">
                                             <Button
                                                 type="button"
                                                 size="icon"
@@ -592,7 +592,9 @@ function ImportDetailDialog({
                     <table className="w-full min-w-[680px] text-left text-sm">
                         <thead className="bg-muted/55 text-muted-foreground text-xs uppercase">
                             <tr>
-                                <th className="px-4 py-3 font-medium">Thuốc</th>
+                                <th className="px-4 py-3 font-medium">
+                                    Sản phẩm
+                                </th>
                                 <th className="px-4 py-3 font-medium">Số lô</th>
                                 <th className="px-4 py-3 font-medium">
                                     Hạn dùng

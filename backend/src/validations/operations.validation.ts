@@ -144,8 +144,13 @@ const createMedicine = {
   params: Joi.object().keys(storeParams),
   body: Joi.object().keys({
     ...medicineBody,
+    code: Joi.string().trim().max(50),
     referenceProductId: Joi.string().allow(null).custom(objectId),
   }),
+};
+
+const generateMedicineCode = {
+  params: Joi.object().keys(storeParams),
 };
 
 const updateMedicine = {
@@ -159,7 +164,7 @@ const updateMedicine = {
       name: Joi.string().trim().max(255),
       baseUnitName: Joi.string().trim().max(50),
       categoryId: Joi.string().custom(objectId),
-      code: Joi.string().trim().max(50),
+      code: Joi.string().trim().min(1).max(50),
       sellingPrice: Joi.number().min(0),
     })
     .min(1),
@@ -265,6 +270,7 @@ export {
   getInventory,
   getInventoryMovements,
   getMedicines,
+  generateMedicineCode,
   getProductCategories,
   getProfitReport,
   getReferenceProducts,

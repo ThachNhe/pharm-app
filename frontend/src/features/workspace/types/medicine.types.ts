@@ -69,7 +69,7 @@ export interface ReferenceProduct {
 export interface MedicinePayload {
     referenceProductId?: string;
     categoryId: string;
-    code: string;
+    code?: string;
     positionName?: string;
     name: string;
     baseUnitName: string;

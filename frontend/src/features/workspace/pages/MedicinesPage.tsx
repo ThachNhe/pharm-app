@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { z } from 'zod';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useFieldArray, useForm, useWatch } from 'react-hook-form';
@@ -68,7 +68,7 @@ const medicineSchema = z
         categoryId: z.string().min(1, 'Chọn nhóm hàng hóa'),
         code: z.string().trim().min(1, 'Nhập mã hàng hóa').max(50),
         positionName: z.string().trim().max(255),
-        name: z.string().trim().min(1, 'Nhập tên thuốc').max(255),
+        name: z.string().trim().min(1, 'Nhập tên sản phẩm').max(255),
         baseUnitName: z.string().trim().min(1, 'Nhập đơn vị cơ bản').max(50),
         barcode: z.string().trim().max(100),
         secondaryBarcode: z.string().trim().max(100),
@@ -102,7 +102,7 @@ const medicineSchema = z
                 })
             )
             .min(1)
-            .max(10, 'Mỗi thuốc có tối đa 10 đơn vị tính'),
+            .max(10, 'Mỗi sản phẩm có tối đa 10 đơn vị tính'),
     })
     .refine(
         (values) =>
@@ -239,6 +239,7 @@ function MedicineDialog({
         control: form.control,
         name: 'requiresPrescription',
     });
+    const code = useWatch({ control: form.control, name: 'code' });
     const isActive = useWatch({ control: form.control, name: 'isActive' });
     const categoryId = useWatch({ control: form.control, name: 'categoryId' });
     const baseUnitName = useWatch({
@@ -268,6 +269,13 @@ function MedicineDialog({
             }),
         enabled: open && Boolean(selectedStoreId),
     });
+    const generatedCodeQuery = useQuery({
+        queryKey: ['workspace', selectedStoreId, 'medicines', 'next-code'],
+        queryFn: () => workspaceService.generateMedicineCode(selectedStoreId),
+        enabled: open && !medicine && Boolean(selectedStoreId),
+        gcTime: 0,
+        retry: 1,
+    });
     const libraryQuery = useQuery({
         queryKey: [
             'workspace',
@@ -289,11 +297,22 @@ function MedicineDialog({
             debouncedLibrarySearch.trim().length >= 2,
     });
 
+    useEffect(() => {
+        if (!medicine && generatedCodeQuery.data?.code) {
+            form.setValue('code', generatedCodeQuery.data.code, {
+                shouldValidate: true,
+            });
+        }
+    }, [form, generatedCodeQuery.data?.code, medicine]);
+
     const chooseSourceMode = (mode: 'manual' | 'library') => {
         setSourceMode(mode);
         setLibrarySearch('');
         setSelectedReferenceProduct(null);
-        form.reset(emptyValues);
+        form.reset({
+            ...emptyValues,
+            code: form.getValues('code'),
+        });
     };
 
     const chooseReferenceProduct = (product: ReferenceProduct) => {
@@ -311,7 +330,7 @@ function MedicineDialog({
         form.reset({
             ...emptyValues,
             categoryId: matchingCategory?.id ?? '',
-            code: product.code ?? '',
+            code: form.getValues('code'),
             positionName: product.positionName ?? '',
             name: product.name,
             baseUnitName: selectedBaseUnitName,
@@ -393,6 +412,7 @@ function MedicineDialog({
             }
             const payload = {
                 ...values,
+                code: values.code || undefined,
                 referenceProductId: selectedReferenceProduct?.id,
                 barcode: values.barcode || undefined,
                 secondaryBarcode: values.secondaryBarcode || undefined,
@@ -417,7 +437,7 @@ function MedicineDialog({
         },
         onSuccess: () => {
             toast.success(
-                medicine ? 'Đã cập nhật thuốc' : 'Đã thêm thuốc vào quầy'
+                medicine ? 'Đã cập nhật sản phẩm' : 'Đã thêm sản phẩm vào quầy'
             );
             void queryClient.invalidateQueries({
                 queryKey: ['workspace', selectedStoreId, 'medicines'],
@@ -432,19 +452,23 @@ function MedicineDialog({
             setSelectedReferenceProduct(null);
             onOpenChange(false);
         },
-        onError: (error) =>
-            toast.error(
-                getApiErrorMessage(
-                    error,
-                    'Không thể lưu thuốc. Vui lòng kiểm tra lại.'
-                )
-            ),
+        onError: (error) => {
+            const message = getApiErrorMessage(
+                error,
+                'Không thể lưu sản phẩm. Vui lòng kiểm tra lại.'
+            );
+            if (message.includes('Mã hàng hóa')) {
+                form.setError('code', { message });
+            }
+            toast.error(message);
+        },
     });
 
     const errors = form.formState.errors;
     const sharedDetailsLocked = Boolean(medicine?.referenceProductId);
     const referenceDetailsLocked =
         sharedDetailsLocked || Boolean(selectedReferenceProduct);
+    const isGeneratingCode = !medicine && generatedCodeQuery.isPending;
     const showForm =
         Boolean(medicine) ||
         sourceMode === 'manual' ||
@@ -463,19 +487,19 @@ function MedicineDialog({
             <DialogContent className="max-h-[92vh] overflow-y-auto sm:max-w-3xl">
                 <DialogHeader>
                     <DialogTitle>
-                        {medicine ? 'Cập nhật thuốc' : 'Thêm thuốc mới'}
+                        {medicine ? 'Cập nhật sản phẩm' : 'Thêm sản phẩm mới'}
                     </DialogTitle>
                     <DialogDescription>
                         {sharedDetailsLocked
                             ? 'Thông tin thuốc từ thư viện được dùng chung; mã hàng hóa, nhóm, vị trí, giá và tồn tối thiểu được cấu hình riêng cho quầy.'
-                            : 'Mã hàng hóa, vị trí, giá và định mức tồn được áp dụng riêng cho quầy đang chọn.'}
+                            : 'Mã hàng hóa được gợi ý tự động và có thể chỉnh sửa; vị trí, giá và định mức tồn được áp dụng riêng cho quầy đang chọn.'}
                     </DialogDescription>
                 </DialogHeader>
                 {!medicine ? (
                     <div
                         className="bg-muted/50 grid grid-cols-2 gap-1 rounded-lg p-1"
                         role="group"
-                        aria-label="Cách thêm thuốc"
+                        aria-label="Cách thêm sản phẩm"
                     >
                         <Button
                             type="button"
@@ -627,7 +651,10 @@ function MedicineDialog({
                                     variant="outline"
                                     onClick={() => {
                                         setSelectedReferenceProduct(null);
-                                        form.reset(emptyValues);
+                                        form.reset({
+                                            ...emptyValues,
+                                            code: form.getValues('code'),
+                                        });
                                     }}
                                 >
                                     Đổi sản phẩm
@@ -637,16 +664,27 @@ function MedicineDialog({
                         <Field
                             label="Mã hàng hóa"
                             required
-                            error={errors.code?.message}
+                            error={
+                                errors.code?.message ??
+                                (generatedCodeQuery.isError && !code
+                                    ? 'Không thể tạo mã tự động. Hãy nhập mã thủ công.'
+                                    : undefined)
+                            }
                         >
                             <Input
                                 autoFocus
-                                placeholder="SP000042"
+                                readOnly={isGeneratingCode}
+                                required
+                                placeholder={
+                                    isGeneratingCode
+                                        ? 'Đang tạo mã...'
+                                        : 'SP000338'
+                                }
                                 {...form.register('code')}
                             />
                         </Field>
                         <Field
-                            label="Tên thuốc"
+                            label="Tên sản phẩm"
                             required
                             error={errors.name?.message}
                         >
@@ -1106,12 +1144,12 @@ function MedicineDialog({
                         <Button
                             form="medicine-form"
                             type="submit"
-                            disabled={mutation.isPending}
+                            disabled={mutation.isPending || isGeneratingCode}
                         >
                             {mutation.isPending ? (
                                 <LoaderCircle className="animate-spin" />
                             ) : null}
-                            {medicine ? 'Lưu thay đổi' : 'Thêm thuốc'}
+                            {medicine ? 'Lưu thay đổi' : 'Thêm sản phẩm'}
                         </Button>
                     ) : null}
                 </DialogFooter>
@@ -1216,13 +1254,13 @@ export function MedicinesPage() {
     return (
         <div className="space-y-5">
             <PageHeader
-                title="Danh mục thuốc"
+                title="Danh mục sản phẩm"
                 description="Tra cứu thông tin bán hàng, lô FEFO, giá và tồn kho của quầy."
                 actions={
                     canManage ? (
                         <Button onClick={openCreate}>
                             <Plus />
-                            Thêm thuốc
+                            Thêm sản phẩm
                         </Button>
                     ) : undefined
                 }
@@ -1253,19 +1291,19 @@ export function MedicinesPage() {
                     <EmptyState
                         title={
                             search
-                                ? 'Không tìm thấy thuốc phù hợp'
-                                : 'Chưa có thuốc trong quầy'
+                                ? 'Không tìm thấy sản phẩm phù hợp'
+                                : 'Chưa có sản phẩm trong quầy'
                         }
                         description={
                             canManage
-                                ? 'Thêm thuốc đầu tiên để bắt đầu nhập hàng và bán.'
-                                : 'Liên hệ quản lý để bổ sung danh mục thuốc.'
+                                ? 'Thêm sản phẩm đầu tiên để bắt đầu nhập hàng và bán.'
+                                : 'Liên hệ quản lý để bổ sung danh mục sản phẩm.'
                         }
                         action={
                             canManage && !search ? (
                                 <Button onClick={openCreate}>
                                     <Plus />
-                                    Thêm thuốc
+                                    Thêm sản phẩm
                                 </Button>
                             ) : undefined
                         }
@@ -1528,7 +1566,7 @@ export function MedicinesPage() {
                                                                     )
                                                                 }
                                                                 aria-label={`Sửa ${medicine.name}`}
-                                                                title="Sửa thuốc"
+                                                                title="Sửa sản phẩm"
                                                             >
                                                                 <Edit3 />
                                                             </Button>

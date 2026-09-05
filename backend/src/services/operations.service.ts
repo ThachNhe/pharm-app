@@ -27,7 +27,7 @@ type MedicineUnitPayload = {
 type MedicinePayload = {
   referenceProductId?: string | null;
   categoryId: string;
-  code: string;
+  code?: string;
   positionName?: string | null;
   name: string;
   baseUnitName: string;
@@ -90,6 +90,17 @@ const asOptionalString = (value?: string | null) => {
 };
 
 const normalizeProductCode = (value: string) => value.trim().toUpperCase();
+
+// ponytail: Codes are suggestions; the store unique constraint rejects concurrent duplicate saves.
+const getNextProductCode = async (storeId: string) => {
+  const [result] = await prisma.$queryRaw<Array<{ nextNumber: bigint }>>(PrismaRuntime.sql`
+    SELECT COALESCE(MAX(SUBSTRING("code" FROM 3)::bigint), 0) + 1 AS "nextNumber"
+    FROM "store_medicines"
+    WHERE "store_id" = ${storeId}::uuid
+      AND "code" ~ '^SP[0-9]{6,}$'
+  `);
+  return `SP${(result?.nextNumber ?? 1n).toString().padStart(6, '0')}`;
+};
 
 const toDecimal = (value: number | string | Prisma.Decimal) => new PrismaRuntime.Decimal(value);
 
@@ -769,6 +780,7 @@ const queryReferenceProducts = async (actor: Actor, storeId: string, query: Page
 
 const createMedicine = async (actor: Actor, storeId: string, body: MedicinePayload) => {
   await getStoreAccess(actor, storeId, 'manager');
+  const code = body.code ? normalizeProductCode(body.code) : await getNextProductCode(storeId);
 
   return prisma.$transaction(async (tx) => {
     const productCategory = await tx.productCategory.findFirst({
@@ -778,7 +790,6 @@ const createMedicine = async (actor: Actor, storeId: string, body: MedicinePaylo
       throw new ApiError(httpStatus.BAD_REQUEST, 'Nhóm sản phẩm không hợp lệ hoặc đã ngừng hoạt động');
     }
 
-    const code = normalizeProductCode(body.code);
     const duplicateCode = await tx.storeMedicine.findFirst({
       where: { storeId, code: { equals: code, mode: 'insensitive' } },
       select: { id: true },
@@ -822,7 +833,7 @@ const createMedicine = async (actor: Actor, storeId: string, body: MedicinePaylo
         },
       });
       if (!referenceProduct) {
-        throw new ApiError(httpStatus.NOT_FOUND, 'Không tìm thấy sản phẩm trong thư viện thuốc');
+        throw new ApiError(httpStatus.NOT_FOUND, 'Không tìm thấy sản phẩm trong thư viện');
       }
     }
 
@@ -852,7 +863,7 @@ const createMedicine = async (actor: Actor, storeId: string, body: MedicinePaylo
         where: { OR: [{ barcode: { in: manualBarcodes } }, { secondaryBarcode: { in: manualBarcodes } }] },
         select: { id: true },
       });
-      if (barcodeConflict) throw new ApiError(httpStatus.CONFLICT, 'Mã vạch đã được sử dụng cho thuốc khác');
+      if (barcodeConflict) throw new ApiError(httpStatus.CONFLICT, 'Mã vạch đã được sử dụng cho sản phẩm khác');
     }
 
     const baseUnitName = referenceProduct?.unitName?.trim() || body.baseUnitName.trim();
@@ -898,7 +909,7 @@ const createMedicine = async (actor: Actor, storeId: string, body: MedicinePaylo
       select: { id: true },
     });
     if (existingAssignment) {
-      throw new ApiError(httpStatus.CONFLICT, 'Thuốc này đã có trong danh mục của quầy');
+      throw new ApiError(httpStatus.CONFLICT, 'Sản phẩm này đã có trong danh mục của quầy');
     }
 
     const storeMedicine = await tx.storeMedicine.create({
@@ -926,6 +937,11 @@ const createMedicine = async (actor: Actor, storeId: string, body: MedicinePaylo
     });
     return serializeMedicine(storeMedicine);
   });
+};
+
+const generateMedicineCode = async (actor: Actor, storeId: string) => {
+  await getStoreAccess(actor, storeId, 'manager');
+  return { code: await getNextProductCode(storeId) };
 };
 
 const updateMedicine = async (
@@ -1026,7 +1042,7 @@ const updateMedicine = async (
           },
           select: { id: true },
         });
-        if (barcodeConflict) throw new ApiError(httpStatus.CONFLICT, 'Mã vạch đã được sử dụng cho thuốc khác');
+        if (barcodeConflict) throw new ApiError(httpStatus.CONFLICT, 'Mã vạch đã được sử dụng cho sản phẩm khác');
       }
       await tx.medicine.update({
         where: { id: medicineId },
@@ -1755,6 +1771,7 @@ export {
   getImportReceipt,
   getProfitReport,
   getSale,
+  generateMedicineCode,
   queryImportReceipts,
   queryInventory,
   queryInventoryMovements,

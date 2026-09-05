@@ -329,7 +329,7 @@ export function ReportsPage() {
                     <Panel className="overflow-hidden">
                         <div className="border-border border-b px-4 py-4 sm:px-5">
                             <h2 className="font-semibold">
-                                Thuốc đóng góp lãi cao
+                                Sản phẩm đóng góp lãi cao
                             </h2>
                             <p className="text-muted-foreground mt-1 text-sm">
                                 Xếp theo lãi gộp trong khoảng thời gian đã chọn.

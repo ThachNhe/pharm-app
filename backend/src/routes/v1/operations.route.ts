@@ -23,6 +23,12 @@ router.patch(
   operationsController.updateSupplier,
 );
 
+router.get(
+  '/:storeId/medicines/next-code',
+  validate(operationsValidation.generateMedicineCode),
+  operationsController.generateMedicineCode,
+);
+
 router
   .route('/:storeId/product-categories')
   .get(validate(operationsValidation.getProductCategories), operationsController.getProductCategories)

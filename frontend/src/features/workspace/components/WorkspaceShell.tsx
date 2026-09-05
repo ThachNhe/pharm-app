@@ -75,7 +75,7 @@ const navItems: NavItem[] = [
         minimumRole: 'staff',
     },
     {
-        label: 'Danh mục thuốc',
+        label: 'Danh mục sản phẩm',
         to: '/admin/medicines',
         icon: Pill,
         minimumRole: 'staff',

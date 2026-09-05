@@ -44,6 +44,10 @@ const getMedicines = catchAsync(async (req, res) => {
   res.send(await operationsService.queryMedicines(req.user, param(req, 'storeId'), req.query));
 });
 
+const generateMedicineCode = catchAsync(async (req, res) => {
+  res.send(await operationsService.generateMedicineCode(req.user, param(req, 'storeId')));
+});
+
 const getReferenceProducts = catchAsync(async (req, res) => {
   res.send(await operationsService.queryReferenceProducts(req.user, param(req, 'storeId'), req.query));
 });
@@ -118,6 +122,7 @@ export {
   getInventory,
   getInventoryMovements,
   getMedicines,
+  generateMedicineCode,
   getProductCategories,
   getProfitReport,
   getReferenceProducts,
