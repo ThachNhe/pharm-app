@@ -14,12 +14,6 @@ export const ROUTES = {
 
     // Protected
     DASHBOARD: '/admin',
-    PROFILE: '/profile',
-    SETTINGS: '/settings',
-
-    // Users
-    USERS: '/users',
-    USER_DETAIL: (id: string) => `/users/${id}`,
 } as const;
 
 // ─── Pagination ────────────────────────────────────────────────────────────

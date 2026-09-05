@@ -1,19 +1,8 @@
 import { useEffect, useState } from 'react';
 import {
-    BarChart3,
-    Boxes,
-    Building2,
-    LayoutDashboard,
-    Library,
     LogOut,
     Menu,
-    PackagePlus,
-    Pill,
     RefreshCw,
-    ShoppingCart,
-    Tags,
-    Truck,
-    UserRoundCog,
     X,
 } from 'lucide-react';
 import {
@@ -33,96 +22,8 @@ import { useAuthStore } from '@/stores/useAuthStore';
 import { STORE_ROLE_LABELS } from '../constants/workspace.constants';
 import { WorkspaceProvider } from '../context/WorkspaceProvider';
 import { useWorkspace } from '../hooks/useWorkspace';
-import type { StoreRole } from '../types';
-import { ErrorState, LoadingState, Panel, StatusBadge } from './shared';
-
-type NavItem = {
-    label: string;
-    to:
-        | '/admin'
-        | '/admin/stores'
-        | '/admin/users'
-        | '/admin/medicines'
-        | '/admin/medicine-library'
-        | '/admin/product-categories'
-        | '/admin/suppliers'
-        | '/admin/imports'
-        | '/admin/inventory'
-        | '/admin/sales'
-        | '/admin/reports';
-    icon: typeof LayoutDashboard;
-    minimumRole?: StoreRole;
-    systemOnly?: boolean;
-};
-
-const navItems: NavItem[] = [
-    {
-        label: 'Tổng quan',
-        to: '/admin',
-        icon: LayoutDashboard,
-        minimumRole: 'staff',
-    },
-    {
-        label: 'Bán hàng',
-        to: '/admin/sales',
-        icon: ShoppingCart,
-        minimumRole: 'staff',
-    },
-    {
-        label: 'Tồn kho',
-        to: '/admin/inventory',
-        icon: Boxes,
-        minimumRole: 'staff',
-    },
-    {
-        label: 'Danh mục sản phẩm',
-        to: '/admin/medicines',
-        icon: Pill,
-        minimumRole: 'staff',
-    },
-    {
-        label: 'Thư viện thuốc',
-        to: '/admin/medicine-library',
-        icon: Library,
-        minimumRole: 'staff',
-    },
-    {
-        label: 'Nhóm sản phẩm',
-        to: '/admin/product-categories',
-        icon: Tags,
-        minimumRole: 'manager',
-    },
-    {
-        label: 'Nhập hàng',
-        to: '/admin/imports',
-        icon: PackagePlus,
-        minimumRole: 'manager',
-    },
-    {
-        label: 'Nhà cung cấp',
-        to: '/admin/suppliers',
-        icon: Truck,
-        minimumRole: 'manager',
-    },
-    {
-        label: 'Tài khoản',
-        to: '/admin/users',
-        icon: UserRoundCog,
-        minimumRole: 'manager',
-    },
-    {
-        label: 'Báo cáo',
-        to: '/admin/reports',
-        icon: BarChart3,
-        minimumRole: 'manager',
-    },
-    {
-        label: 'Quầy thuốc',
-        to: '/admin/stores',
-        icon: Building2,
-        systemOnly: true,
-    },
-];
+import { workspaceRoutes } from '../constants/routes';
+import { ErrorState, LoadingState, Panel, PermissionDenied, StatusBadge } from './shared';
 
 function WorkspaceShellContent() {
     const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
@@ -181,10 +82,13 @@ function WorkspaceShellContent() {
         );
     }
 
-    const visibleItems = navItems.filter((item) => {
+    const visibleItems = workspaceRoutes.filter((item) => {
         if (item.systemOnly) return isSystemAdmin;
         return item.minimumRole ? hasRole(item.minimumRole) : true;
     });
+
+    const currentPath = pathname.replace(/\/$/, '') || '/';
+    const routeAllowed = visibleItems.some((item) => item.to === currentPath);
 
     const handleLogout = async () => {
         try {
@@ -353,8 +257,8 @@ function WorkspaceShellContent() {
                 </header>
 
                 <main className="mx-auto w-full max-w-[1600px] space-y-6 p-4 lg:p-6">
-                    {contextQuery.data.stores.length === 0 ? (
-                        isSystemAdmin && pathname === '/admin/stores' ? (
+                    {!routeAllowed ? <PermissionDenied /> : contextQuery.data.stores.length === 0 ? (
+                        isSystemAdmin && ['/admin/stores', '/admin/users'].includes(currentPath) ? (
                             <Outlet key={selectedStoreId || 'no-store'} />
                         ) : (
                             <Panel>

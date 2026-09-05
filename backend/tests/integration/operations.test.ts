@@ -18,12 +18,12 @@ const accessToken = (userId: string) =>
 const futureDate = (days: number) => moment().add(days, 'days').format('YYYY-MM-DD');
 
 describe('Store operations flow', () => {
-  test('should complete import, sell FEFO, update inventory, and report gross profit', async () => {
+  test.each(['owner', 'manager'] as const)('should complete import, sell FEFO, update inventory, and report gross profit as %s', async (role) => {
     await insertUsers([userOne, userTwo]);
     const store = await prisma.store.create({ data: { name: 'Flow store' } });
     await prisma.userStoreRole.createMany({
       data: [
-        { userId: userOne.id, storeId: store.id, role: 'owner' },
+        { userId: userOne.id, storeId: store.id, role },
         { userId: userTwo.id, storeId: store.id, role: 'staff' },
       ],
     });

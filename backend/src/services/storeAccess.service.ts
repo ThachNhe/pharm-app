@@ -113,4 +113,12 @@ const getStoreContext = async (actor: Actor) => {
   };
 };
 
-export { getActiveActor, getStoreAccess, getStoreContext, ROLE_RANK };
+const getStoreOperationAccess = async (actor: Actor, storeId: string, minimumRole: StoreRole) => {
+  const access = await getStoreAccess(actor, storeId, minimumRole);
+  if (access.user.isSystemAdmin) {
+    throw new ApiError(httpStatus.FORBIDDEN, 'System Admin chỉ được xem hoạt động nhập hàng và bán hàng');
+  }
+  return access;
+};
+
+export { getActiveActor, getStoreAccess, getStoreOperationAccess, getStoreContext, ROLE_RANK };

@@ -121,7 +121,7 @@ Staff không được quản lý tài khoản, nhập hàng, thay đổi giá ho
 | Chức năng | System Admin | Owner | Manager | Staff |
 | --- | --- | --- | --- | --- |
 | Quản lý quầy | Toàn hệ thống | Quầy của mình | Xem | Xem cơ bản |
-| Quản lý tài khoản | Toàn hệ thống | Owner/Manager/Staff | Staff | Không |
+| Quản lý tài khoản | Toàn hệ thống | Manager/Staff | Staff | Không |
 | Quản lý thuốc và giá | Toàn hệ thống | Có | Có | Chỉ xem |
 | Quản lý nhà cung cấp | Toàn hệ thống | Có | Có | Chỉ xem |
 | Nhập hàng | Xem | Có | Có | Không |

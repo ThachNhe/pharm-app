@@ -3,7 +3,7 @@ import type { PaymentMethod, Prisma, StoreRole } from '../generated/prisma/clien
 import { Prisma as PrismaRuntime } from '../generated/prisma/client.js';
 import { prisma } from '../config/database.js';
 import ApiError from '../utils/ApiError.js';
-import { getStoreAccess, getStoreContext } from './storeAccess.service.js';
+import { getStoreAccess, getStoreOperationAccess, getStoreContext } from './storeAccess.service.js';
 
 type Actor = Express.User;
 
@@ -1183,7 +1183,7 @@ const getImportTotal = (items: ImportItemPayload[]) =>
   );
 
 const createImportReceipt = async (actor: Actor, storeId: string, body: ImportPayload) => {
-  await getStoreAccess(actor, storeId, 'manager');
+  await getStoreOperationAccess(actor, storeId, 'manager');
   const resolvedItems = await validateImportReferences(storeId, body.supplierId, body.items);
   const supplier = body.supplierId ? await prisma.supplier.findFirst({ where: { id: body.supplierId, storeId } }) : null;
   const totalAmount = getImportTotal(body.items);
@@ -1285,7 +1285,7 @@ const getImportReceipt = async (actor: Actor, storeId: string, receiptId: string
 };
 
 const completeImportReceipt = async (actor: Actor, storeId: string, receiptId: string) => {
-  await getStoreAccess(actor, storeId, 'manager');
+  await getStoreOperationAccess(actor, storeId, 'manager');
 
   try {
     const receipt = await prisma.$transaction(
@@ -1370,7 +1370,7 @@ const completeImportReceipt = async (actor: Actor, storeId: string, receiptId: s
 };
 
 const cancelImportReceipt = async (actor: Actor, storeId: string, receiptId: string) => {
-  await getStoreAccess(actor, storeId, 'manager');
+  await getStoreOperationAccess(actor, storeId, 'manager');
   return prisma.$transaction(async (tx) => {
     const changed = await tx.importReceipt.updateMany({
       where: { id: receiptId, storeId, status: 'draft' },
@@ -1493,7 +1493,7 @@ const getSale = async (actor: Actor, storeId: string, saleId: string) => {
 };
 
 const createSale = async (actor: Actor, storeId: string, body: SalePayload) => {
-  const access = await getStoreAccess(actor, storeId, 'staff');
+  const access = await getStoreOperationAccess(actor, storeId, 'staff');
   const canViewCosts = access.user.isSystemAdmin || access.role === 'owner' || access.role === 'manager';
   const medicineIds = body.items.map((item) => item.medicineId);
   if (new Set(medicineIds).size !== medicineIds.length) {

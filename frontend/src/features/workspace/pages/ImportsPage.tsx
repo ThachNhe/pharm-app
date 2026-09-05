@@ -506,7 +506,7 @@ function ImportDetailDialog({
     receipt: ImportReceipt | null;
     onClose: () => void;
 }) {
-    const { selectedStoreId } = useWorkspace();
+    const { selectedStoreId, canImport } = useWorkspace();
     const queryClient = useQueryClient();
 
     const invalidate = () => {
@@ -656,7 +656,7 @@ function ImportDetailDialog({
                     </p>
                 ) : null}
 
-                {receipt.status === 'draft' ? (
+                {receipt.status === 'draft' && canImport ? (
                     <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
                         Hoàn tất phiếu sẽ tạo lô và tăng tồn kho. Thao tác này
                         không thể sửa trực tiếp sau khi xác nhận.
@@ -664,7 +664,7 @@ function ImportDetailDialog({
                 ) : null}
 
                 <DialogFooter>
-                    {receipt.status === 'draft' ? (
+                    {receipt.status === 'draft' && canImport ? (
                         <>
                             <Button
                                 variant="outline"
@@ -713,7 +713,7 @@ export function ImportsPage() {
     const [createOpen, setCreateOpen] = useState(false);
     const [selectedReceipt, setSelectedReceipt] =
         useState<ImportReceipt | null>(null);
-    const { selectedStoreId, hasRole } = useWorkspace();
+    const { selectedStoreId, hasRole, canImport } = useWorkspace();
 
     const importsQuery = useQuery({
         queryKey: ['workspace', selectedStoreId, 'imports', status, page],
@@ -733,12 +733,12 @@ export function ImportsPage() {
             <PageHeader
                 title="Nhập hàng"
                 description="Lập phiếu nháp, kiểm tra lô và xác nhận nhập kho theo từng quầy."
-                actions={
+                actions={canImport ? (
                     <Button onClick={() => setCreateOpen(true)}>
                         <Plus />
                         Lập phiếu nhập
                     </Button>
-                }
+                ) : undefined}
             />
 
             <Panel className="overflow-hidden">
@@ -780,7 +780,7 @@ export function ImportsPage() {
                         title="Chưa có phiếu nhập phù hợp"
                         description="Lập phiếu nhập đầu tiên để tiếp nhận lô hàng vào kho."
                         action={
-                            !status ? (
+                            canImport && !status ? (
                                 <Button onClick={() => setCreateOpen(true)}>
                                     <Plus />
                                     Lập phiếu nhập
@@ -901,10 +901,10 @@ export function ImportsPage() {
                 )}
             </Panel>
 
-            <CreateImportDialog
+            {canImport && <CreateImportDialog
                 open={createOpen}
                 onOpenChange={setCreateOpen}
-            />
+            />}
             <ImportDetailDialog
                 receipt={selectedReceipt}
                 onClose={() => setSelectedReceipt(null)}

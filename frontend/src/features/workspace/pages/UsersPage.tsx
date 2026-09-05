@@ -58,11 +58,13 @@ function UserDialog({
     onOpenChange,
     user,
     roleOptions,
+    globalScope,
 }: {
     open: boolean;
     onOpenChange: (open: boolean) => void;
     user: AdminUser | null;
     roleOptions: StoreRole[];
+    globalScope: boolean;
 }) {
     const { selectedStoreId } = useWorkspace();
     const queryClient = useQueryClient();
@@ -93,7 +95,7 @@ function UserDialog({
                       email: user.email,
                       phone: user.phone ?? '',
                       storeRole: currentRole,
-                      isActive: currentMembership?.isActive ?? true,
+                      isActive: globalScope ? user.isActive : currentMembership?.isActive ?? true,
                       password: '',
                   }
                 : {
@@ -106,6 +108,7 @@ function UserDialog({
                   }
         );
     }, [
+        globalScope,
         currentMembership?.isActive,
         currentRole,
         form,
@@ -118,11 +121,10 @@ function UserDialog({
         mutationFn: async (values: UserFormValues) => {
             if (user) {
                 await adminService.updateUser(user.id, {
-                    storeId: selectedStoreId,
+                    ...(globalScope ? {} : { storeId: selectedStoreId, storeRole: values.storeRole }),
                     name: values.name,
                     email: values.email,
                     phone: values.phone || null,
-                    storeRole: values.storeRole,
                     isActive: values.isActive,
                 });
                 return;
@@ -145,7 +147,7 @@ function UserDialog({
                       : 'Đã tạo tài khoản'
             );
             void queryClient.invalidateQueries({
-                queryKey: ['workspace', selectedStoreId, 'users'],
+                queryKey: ['workspace', 'users'],
             });
             form.reset();
             onOpenChange(false);
@@ -172,7 +174,7 @@ function UserDialog({
                     </DialogTitle>
                     <DialogDescription>
                         {user
-                            ? 'Quyền được áp dụng riêng trong quầy đang chọn.'
+                            ? globalScope ? 'Thông tin và trạng thái tài khoản được áp dụng toàn hệ thống.' : 'Quyền được áp dụng riêng trong quầy đang chọn.'
                             : 'Nhập mật khẩu ban đầu cho tài khoản mới. Tài khoản đã tồn tại sẽ giữ mật khẩu hiện tại.'}
                     </DialogDescription>
                 </DialogHeader>
@@ -216,7 +218,7 @@ function UserDialog({
                             {...form.register('phone')}
                         />
                     </Field>
-                    <Field
+                    {!globalScope && <Field
                         label="Vai trò tại quầy"
                         required
                         error={form.formState.errors.storeRole?.message}
@@ -232,7 +234,7 @@ function UserDialog({
                                 </option>
                             ))}
                         </select>
-                    </Field>
+                    </Field>}
                     {!user ? (
                         <Field
                             label="Mật khẩu ban đầu"
@@ -282,7 +284,7 @@ function UserDialog({
                                     )
                                 }
                             />
-                            Quyền truy cập quầy đang hoạt động
+                            {globalScope ? 'Tài khoản đang hoạt động toàn hệ thống' : 'Quyền truy cập quầy đang hoạt động'}
                         </label>
                     ) : null}
                 </form>
@@ -314,6 +316,7 @@ function UserDialog({
 export function UsersPage() {
     const { search, setSearch, debouncedSearch, page, setPage } =
         usePaginatedSearch();
+    const [scope, setScope] = useState<'store' | 'all'>('store');
     const [dialogOpen, setDialogOpen] = useState(false);
     const [editingUser, setEditingUser] = useState<AdminUser | null>(null);
     const {
@@ -324,6 +327,8 @@ export function UsersPage() {
         contextQuery,
     } = useWorkspace();
 
+    const globalScope = isSystemAdmin && (scope === 'all' || !selectedStoreId);
+
     const roleOptions = useMemo<StoreRole[]>(() => {
         if (isSystemAdmin) return ['owner', 'manager', 'staff'];
         if (selectedStore?.role === 'owner') return ['manager', 'staff'];
@@ -333,19 +338,19 @@ export function UsersPage() {
     const usersQuery = useQuery({
         queryKey: [
             'workspace',
-            selectedStoreId,
             'users',
+            globalScope ? 'all' : selectedStoreId,
             debouncedSearch,
             page,
         ],
         queryFn: () =>
             adminService.getUsers({
-                storeId: selectedStoreId,
+                storeId: globalScope ? undefined : selectedStoreId,
                 search: debouncedSearch,
                 page,
                 limit: 20,
             }),
-        enabled: Boolean(selectedStoreId) && hasRole('manager'),
+        enabled: globalScope || (Boolean(selectedStoreId) && hasRole('manager')),
     });
 
     if (!hasRole('manager')) return <PermissionDenied />;
@@ -374,18 +379,28 @@ export function UsersPage() {
     return (
         <div className="space-y-5">
             <PageHeader
-                title="Tài khoản nhân sự"
-                description="Mỗi tài khoản có đúng một vai trò trong quầy; vai trò cao tự bao gồm quyền thấp hơn."
-                actions={
+                title={globalScope ? 'Tài khoản toàn hệ thống' : 'Tài khoản nhân sự'}
+                description={globalScope ? 'Quản lý thông tin và trạng thái tài khoản, kể cả tài khoản chưa được gán quầy.' : 'Mỗi tài khoản có đúng một vai trò trong quầy; vai trò cao tự bao gồm quyền thấp hơn.'}
+                actions={!globalScope ? (
                     <Button onClick={openCreate}>
                         <Plus />
                         Thêm tài khoản
                     </Button>
-                }
+                ) : undefined}
             />
 
             <Panel className="overflow-hidden">
-                <div className="border-border border-b p-4">
+                <div className="border-border flex flex-col gap-3 border-b p-4 sm:flex-row sm:items-end">
+                    {isSystemAdmin && <Field label="Phạm vi tài khoản">
+                        <select className="border-input bg-background h-9 rounded-md border px-3 text-sm focus-visible:outline-2 focus-visible:outline-ring" value={globalScope ? 'all' : 'store'} onChange={(event) => {
+                            setScope(event.target.value === 'all' ? 'all' : 'store');
+                            setPage(1);
+                            setDialogOpen(false);
+                        }}>
+                            <option value="store" disabled={!selectedStoreId}>Quầy đang chọn</option>
+                            <option value="all">Toàn hệ thống</option>
+                        </select>
+                    </Field>}
                     <SearchInput
                         value={search}
                         onChange={setSearch}
@@ -401,7 +416,7 @@ export function UsersPage() {
                         title="Chưa có tài khoản phù hợp"
                         description="Thêm nhân sự mới hoặc gán tài khoản hiện có vào quầy."
                         action={
-                            !search ? (
+                            !globalScope && !search ? (
                                 <Button onClick={openCreate}>
                                     <Plus />
                                     Thêm tài khoản
@@ -438,7 +453,7 @@ export function UsersPage() {
                                         const role = membership?.role;
                                         const isActive =
                                             user.isActive &&
-                                            Boolean(membership?.isActive);
+                                            (globalScope || Boolean(membership?.isActive));
                                         const manageable = canManageUser(user);
                                         return (
                                             <tr
@@ -466,7 +481,7 @@ export function UsersPage() {
                                                     >
                                                         {user.isSystemAdmin
                                                             ? 'System Admin'
-                                                            : role
+                                                            : globalScope ? user.storeRoles.map((item) => `${item.store.name}: ${STORE_ROLE_LABELS[item.role]}`).join(', ') || 'Chưa gán quầy' : role
                                                               ? STORE_ROLE_LABELS[
                                                                     role
                                                                 ]
@@ -528,6 +543,7 @@ export function UsersPage() {
                 onOpenChange={setDialogOpen}
                 user={editingUser}
                 roleOptions={roleOptions}
+                globalScope={globalScope}
             />
         </div>
     );

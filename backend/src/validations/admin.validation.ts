@@ -87,6 +87,7 @@ const updateUser = {
       password: Joi.string().custom(password),
       isActive: Joi.boolean(),
     })
+    .with('storeRole', 'storeId')
     .min(1),
 };
 

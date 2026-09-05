@@ -29,7 +29,6 @@ import {
     PageHeader,
     Pager,
     Panel,
-    PermissionDenied,
     SearchInput,
     StatusBadge,
 } from '../components/shared';
@@ -255,6 +254,7 @@ export function SuppliersPage() {
         null
     );
     const { selectedStoreId, hasRole } = useWorkspace();
+    const canManage = hasRole('manager');
 
     const suppliersQuery = useQuery({
         queryKey: [
@@ -270,10 +270,9 @@ export function SuppliersPage() {
                 page,
                 limit: 20,
             }),
-        enabled: Boolean(selectedStoreId) && hasRole('manager'),
+        enabled: Boolean(selectedStoreId),
     });
 
-    if (!hasRole('manager')) return <PermissionDenied />;
 
     const openCreate = () => {
         setEditingSupplier(null);
@@ -290,12 +289,12 @@ export function SuppliersPage() {
             <PageHeader
                 title="Nhà cung cấp"
                 description="Quản lý đối tác giao hàng và thông tin liên hệ theo từng quầy."
-                actions={
+                actions={canManage ? (
                     <Button onClick={openCreate}>
                         <Plus />
                         Thêm nhà cung cấp
                     </Button>
-                }
+                ) : undefined}
             />
 
             <Panel className="overflow-hidden">
@@ -319,7 +318,7 @@ export function SuppliersPage() {
                         }
                         description="Thêm nhà cung cấp trước khi lập phiếu nhập để lưu đúng nguồn hàng."
                         action={
-                            !search ? (
+                            canManage && !search ? (
                                 <Button onClick={openCreate}>
                                     <Plus />
                                     Thêm nhà cung cấp
@@ -395,7 +394,7 @@ export function SuppliersPage() {
                                                     </StatusBadge>
                                                 </td>
                                                 <td className="px-4 py-3 text-right">
-                                                    <Button
+                                                    {canManage ? <Button
                                                         size="icon-sm"
                                                         variant="ghost"
                                                         onClick={() =>
@@ -405,7 +404,7 @@ export function SuppliersPage() {
                                                         title="Sửa nhà cung cấp"
                                                     >
                                                         <Edit3 />
-                                                    </Button>
+                                                    </Button> : null}
                                                 </td>
                                             </tr>
                                         )
@@ -423,11 +422,11 @@ export function SuppliersPage() {
                 )}
             </Panel>
 
-            <SupplierDialog
+            {canManage && <SupplierDialog
                 open={dialogOpen}
                 onOpenChange={setDialogOpen}
                 supplier={editingSupplier}
-            />
+            />}
         </div>
     );
 }

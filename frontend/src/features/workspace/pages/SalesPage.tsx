@@ -845,6 +845,7 @@ function SalesHistory({ onOpenSale }: { onOpenSale: (sale: Sale) => void }) {
 }
 
 export function SalesPage() {
+    const { canSell } = useWorkspace();
     const [view, setView] = useState<'pos' | 'history'>('pos');
     const [receipt, setReceipt] = useState<Sale | null>(null);
 
@@ -852,20 +853,20 @@ export function SalesPage() {
         <div className="space-y-5">
             <PageHeader
                 title="Bán hàng"
-                description="Tạo đơn và trừ tồn theo lô có hạn sử dụng gần nhất."
+                description={canSell ? 'Tạo đơn và trừ tồn theo lô có hạn sử dụng gần nhất.' : 'Tra cứu lịch sử và chi tiết đơn bán tại quầy.'}
                 actions={
                     <div className="border-border bg-card flex rounded-md border p-1">
-                        <Button
+                        {canSell && <Button
                             size="sm"
                             variant={view === 'pos' ? 'secondary' : 'ghost'}
                             onClick={() => setView('pos')}
                         >
                             <ShoppingCart />
                             Tạo đơn
-                        </Button>
+                        </Button>}
                         <Button
                             size="sm"
-                            variant={view === 'history' ? 'secondary' : 'ghost'}
+                            variant={(!canSell || view === 'history') ? 'secondary' : 'ghost'}
                             onClick={() => setView('history')}
                         >
                             <ReceiptText />
@@ -875,7 +876,7 @@ export function SalesPage() {
                 }
             />
 
-            {view === 'pos' ? (
+            {canSell && view === 'pos' ? (
                 <PointOfSale onCreated={setReceipt} />
             ) : (
                 <SalesHistory onOpenSale={setReceipt} />

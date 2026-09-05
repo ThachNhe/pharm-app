@@ -312,7 +312,10 @@ const createStore = async (actor: Actor, body) => {
 };
 
 const updateStore = async (actor: Actor, storeId: string, body) => {
-  await assertSystemAdmin(actor);
+  const user = await assertCanManageStore(actor, storeId, ['owner']);
+  if (!user.isSystemAdmin && body.isActive !== undefined) {
+    throw new ApiError(httpStatus.FORBIDDEN, 'Chỉ System Admin được khóa hoặc mở quầy');
+  }
   const store = await prisma.store.update({
     where: { id: storeId },
     data: {
@@ -501,8 +504,8 @@ const updateAdminUser = async (actor: Actor, userId: string, body) => {
       throw new ApiError(httpStatus.NOT_FOUND, 'User is not assigned to this store');
     }
     await assertCanAssignRole(actor, body.storeId, targetMembership.role);
-  } else if (!actor.isSystemAdmin) {
-    throw new ApiError(httpStatus.BAD_REQUEST, 'storeId is required');
+  } else {
+    await assertSystemAdmin(actor);
   }
 
   if (body.storeRole) {
@@ -545,7 +548,7 @@ const updateAdminUser = async (actor: Actor, userId: string, body) => {
   await audit({
     actor,
     storeId: body.storeId,
-    action: body.isActive === false ? 'user.disable_store_access' : 'user.update',
+    action: body.isActive === false ? (body.storeId ? 'user.disable_store_access' : 'user.disable') : 'user.update',
     targetType: 'user',
     targetId: userId,
     metadata: { storeRole: body.storeRole ?? null },

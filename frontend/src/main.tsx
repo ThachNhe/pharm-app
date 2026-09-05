@@ -5,6 +5,7 @@ import { routeTree } from './routeTree.gen'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { ReactQueryDevtools } from '@tanstack/react-query-devtools'
 import { createRouter, RouterProvider } from '@tanstack/react-router'
+import { useAuthStore } from '@/stores/useAuthStore'
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -16,6 +17,12 @@ const queryClient = new QueryClient({
 })
 
 const router = createRouter({ routeTree })
+// Clear private data before a different session can render the workspace.
+useAuthStore.subscribe((state, previous) => {
+  if (state.user?.id !== previous.user?.id || state.isAuthenticated !== previous.isAuthenticated) {
+    queryClient.clear()
+  }
+})
 const showDevtools =
   import.meta.env.DEV && import.meta.env.VITE_ENABLE_DEVTOOLS === 'true'
 

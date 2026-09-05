@@ -8,6 +8,8 @@ export interface WorkspaceValue {
     selectedStoreId: string;
     setSelectedStoreId: (storeId: string) => void;
     isSystemAdmin: boolean;
+    canSell: boolean;
+    canImport: boolean;
     hasRole: (minimumRole: StoreRole) => boolean;
 }
 
