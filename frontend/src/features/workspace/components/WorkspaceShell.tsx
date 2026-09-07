@@ -1,10 +1,5 @@
 import { useEffect, useState } from 'react';
-import {
-    LogOut,
-    Menu,
-    RefreshCw,
-    X,
-} from 'lucide-react';
+import { LogOut, Menu, RefreshCw, X } from 'lucide-react';
 import {
     Link,
     Outlet,
@@ -23,7 +18,13 @@ import { STORE_ROLE_LABELS } from '../constants/workspace.constants';
 import { WorkspaceProvider } from '../context/WorkspaceProvider';
 import { useWorkspace } from '../hooks/useWorkspace';
 import { workspaceRoutes } from '../constants/routes';
-import { ErrorState, LoadingState, Panel, PermissionDenied, StatusBadge } from './shared';
+import {
+    ErrorState,
+    LoadingState,
+    Panel,
+    PermissionDenied,
+    StatusBadge,
+} from './shared';
 
 function WorkspaceShellContent() {
     const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
@@ -83,7 +84,8 @@ function WorkspaceShellContent() {
     }
 
     const visibleItems = workspaceRoutes.filter((item) => {
-        if (item.systemOnly) return isSystemAdmin;
+        if (isSystemAdmin) return item.systemOnly || item.systemAccess;
+        if (item.systemOnly) return false;
         return item.minimumRole ? hasRole(item.minimumRole) : true;
     });
 
@@ -257,8 +259,13 @@ function WorkspaceShellContent() {
                 </header>
 
                 <main className="mx-auto w-full max-w-[1600px] space-y-6 p-4 lg:p-6">
-                    {!routeAllowed ? <PermissionDenied /> : contextQuery.data.stores.length === 0 ? (
-                        isSystemAdmin && ['/admin/stores', '/admin/users'].includes(currentPath) ? (
+                    {!routeAllowed ? (
+                        <PermissionDenied />
+                    ) : contextQuery.data.stores.length === 0 ? (
+                        isSystemAdmin &&
+                        ['/admin', '/admin/stores', '/admin/users'].includes(
+                            currentPath
+                        ) ? (
                             <Outlet key={selectedStoreId || 'no-store'} />
                         ) : (
                             <Panel>

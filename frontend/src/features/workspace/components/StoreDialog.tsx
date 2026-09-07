@@ -110,7 +110,9 @@ export function StoreDialog({
                         {store ? 'Cập nhật quầy thuốc' : 'Tạo quầy thuốc'}
                     </DialogTitle>
                     <DialogDescription>
-                        {store ? 'Cập nhật thông tin liên hệ của quầy thuốc.' : 'Sau khi tạo quầy, thêm Owner tại màn Tài khoản.'}
+                        {store
+                            ? 'Cập nhật thông tin liên hệ của quầy thuốc.'
+                            : 'Sau khi tạo quầy, thêm Owner tại màn Tài khoản.'}
                     </DialogDescription>
                 </DialogHeader>
                 <form

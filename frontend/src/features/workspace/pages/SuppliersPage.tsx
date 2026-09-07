@@ -273,7 +273,6 @@ export function SuppliersPage() {
         enabled: Boolean(selectedStoreId),
     });
 
-
     const openCreate = () => {
         setEditingSupplier(null);
         setDialogOpen(true);
@@ -289,12 +288,14 @@ export function SuppliersPage() {
             <PageHeader
                 title="Nhà cung cấp"
                 description="Quản lý đối tác giao hàng và thông tin liên hệ theo từng quầy."
-                actions={canManage ? (
-                    <Button onClick={openCreate}>
-                        <Plus />
-                        Thêm nhà cung cấp
-                    </Button>
-                ) : undefined}
+                actions={
+                    canManage ? (
+                        <Button onClick={openCreate}>
+                            <Plus />
+                            Thêm nhà cung cấp
+                        </Button>
+                    ) : undefined
+                }
             />
 
             <Panel className="overflow-hidden">
@@ -394,17 +395,21 @@ export function SuppliersPage() {
                                                     </StatusBadge>
                                                 </td>
                                                 <td className="px-4 py-3 text-right">
-                                                    {canManage ? <Button
-                                                        size="icon-sm"
-                                                        variant="ghost"
-                                                        onClick={() =>
-                                                            openEdit(supplier)
-                                                        }
-                                                        aria-label={`Sửa ${supplier.name}`}
-                                                        title="Sửa nhà cung cấp"
-                                                    >
-                                                        <Edit3 />
-                                                    </Button> : null}
+                                                    {canManage ? (
+                                                        <Button
+                                                            size="icon-sm"
+                                                            variant="ghost"
+                                                            onClick={() =>
+                                                                openEdit(
+                                                                    supplier
+                                                                )
+                                                            }
+                                                            aria-label={`Sửa ${supplier.name}`}
+                                                            title="Sửa nhà cung cấp"
+                                                        >
+                                                            <Edit3 />
+                                                        </Button>
+                                                    ) : null}
                                                 </td>
                                             </tr>
                                         )
@@ -422,11 +427,13 @@ export function SuppliersPage() {
                 )}
             </Panel>
 
-            {canManage && <SupplierDialog
-                open={dialogOpen}
-                onOpenChange={setDialogOpen}
-                supplier={editingSupplier}
-            />}
+            {canManage && (
+                <SupplierDialog
+                    open={dialogOpen}
+                    onOpenChange={setDialogOpen}
+                    supplier={editingSupplier}
+                />
+            )}
         </div>
     );
 }

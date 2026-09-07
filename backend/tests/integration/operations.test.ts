@@ -18,293 +18,296 @@ const accessToken = (userId: string) =>
 const futureDate = (days: number) => moment().add(days, 'days').format('YYYY-MM-DD');
 
 describe('Store operations flow', () => {
-  test.each(['owner', 'manager'] as const)('should complete import, sell FEFO, update inventory, and report gross profit as %s', async (role) => {
-    await insertUsers([userOne, userTwo]);
-    const store = await prisma.store.create({ data: { name: 'Flow store' } });
-    await prisma.userStoreRole.createMany({
-      data: [
-        { userId: userOne.id, storeId: store.id, role },
-        { userId: userTwo.id, storeId: store.id, role: 'staff' },
-      ],
-    });
+  test.each(['owner', 'manager'] as const)(
+    'should complete import, sell FEFO, update inventory, and report gross profit as %s',
+    async (role) => {
+      await insertUsers([userOne, userTwo]);
+      const store = await prisma.store.create({ data: { name: 'Flow store' } });
+      await prisma.userStoreRole.createMany({
+        data: [
+          { userId: userOne.id, storeId: store.id, role },
+          { userId: userTwo.id, storeId: store.id, role: 'staff' },
+        ],
+      });
 
-    const ownerToken = accessToken(userOne.id);
-    const staffToken = accessToken(userTwo.id);
-    const importedAt = moment().subtract(2, 'days').format('YYYY-MM-DD');
+      const ownerToken = accessToken(userOne.id);
+      const staffToken = accessToken(userTwo.id);
+      const importedAt = moment().subtract(2, 'days').format('YYYY-MM-DD');
 
-    const categoryRes = await request(app)
-      .post(`/v1/stores/${store.id}/product-categories`)
-      .set('Authorization', `Bearer ${ownerToken}`)
-      .send({ name: 'Dược phẩm', description: 'Thuốc và dược phẩm' })
-      .expect(httpStatus.CREATED);
+      const categoryRes = await request(app)
+        .post(`/v1/stores/${store.id}/product-categories`)
+        .set('Authorization', `Bearer ${ownerToken}`)
+        .send({ name: 'Dược phẩm', description: 'Thuốc và dược phẩm' })
+        .expect(httpStatus.CREATED);
 
-    const supplierRes = await request(app)
-      .post(`/v1/stores/${store.id}/suppliers`)
-      .set('Authorization', `Bearer ${ownerToken}`)
-      .send({
-        code: 'NCC-01',
-        name: 'Nhà cung cấp kiểm thử',
-        phone: '0900000000',
-        isActive: true,
-      })
-      .expect(httpStatus.CREATED);
+      const supplierRes = await request(app)
+        .post(`/v1/stores/${store.id}/suppliers`)
+        .set('Authorization', `Bearer ${ownerToken}`)
+        .send({
+          code: 'NCC-01',
+          name: 'Nhà cung cấp kiểm thử',
+          phone: '0900000000',
+          isActive: true,
+        })
+        .expect(httpStatus.CREATED);
 
-    expect(supplierRes.body.isActive).toBe(true);
+      expect(supplierRes.body.isActive).toBe(true);
 
-    const medicineRes = await request(app)
-      .post(`/v1/stores/${store.id}/medicines`)
-      .set('Authorization', `Bearer ${ownerToken}`)
-      .send({
-        categoryId: categoryRes.body.id,
+      const medicineRes = await request(app)
+        .post(`/v1/stores/${store.id}/medicines`)
+        .set('Authorization', `Bearer ${ownerToken}`)
+        .send({
+          categoryId: categoryRes.body.id,
+          positionName: 'Kệ A1',
+          name: 'Paracetamol 500mg',
+          baseUnitName: 'Viên',
+          barcode: faker.random.alphaNumeric(12),
+          secondaryBarcode: faker.random.alphaNumeric(12),
+          activeIngredient: 'Paracetamol',
+          countryOfOrigin: 'Việt Nam',
+          importerName: 'Công ty nhập khẩu kiểm thử',
+          specification: 'Hộp 10 vỉ x 10 viên',
+          usageInstructions: 'Uống sau ăn',
+          sellingPrice: 2000,
+          minStock: 20,
+          isActive: true,
+          units: [
+            { name: 'Viên', conversionRate: 1, isBaseUnit: true },
+            { name: 'Vỉ', conversionRate: 10, isBaseUnit: false },
+          ],
+        })
+        .expect(httpStatus.CREATED);
+
+      expect(medicineRes.body).toMatchObject({
+        code: 'SP000001',
         positionName: 'Kệ A1',
-        name: 'Paracetamol 500mg',
-        baseUnitName: 'Viên',
-        barcode: faker.random.alphaNumeric(12),
-        secondaryBarcode: faker.random.alphaNumeric(12),
-        activeIngredient: 'Paracetamol',
         countryOfOrigin: 'Việt Nam',
         importerName: 'Công ty nhập khẩu kiểm thử',
         specification: 'Hộp 10 vỉ x 10 viên',
         usageInstructions: 'Uống sau ăn',
-        sellingPrice: 2000,
-        minStock: 20,
         isActive: true,
-        units: [
-          { name: 'Viên', conversionRate: 1, isBaseUnit: true },
-          { name: 'Vỉ', conversionRate: 10, isBaseUnit: false },
-        ],
-      })
-      .expect(httpStatus.CREATED);
+      });
+      expect(medicineRes.body.units).toEqual([
+        expect.objectContaining({ name: 'Viên', conversionRate: 1, isBaseUnit: true }),
+        expect.objectContaining({ name: 'Vỉ', conversionRate: 10, isBaseUnit: false }),
+      ]);
+      const baseUnitId = medicineRes.body.units.find((unit) => unit.isBaseUnit).id;
+      const blisterUnitId = medicineRes.body.units.find((unit) => unit.name === 'Vỉ').id;
 
-    expect(medicineRes.body).toMatchObject({
-      code: 'SP000001',
-      positionName: 'Kệ A1',
-      countryOfOrigin: 'Việt Nam',
-      importerName: 'Công ty nhập khẩu kiểm thử',
-      specification: 'Hộp 10 vỉ x 10 viên',
-      usageInstructions: 'Uống sau ăn',
-      isActive: true,
-    });
-    expect(medicineRes.body.units).toEqual([
-      expect.objectContaining({ name: 'Viên', conversionRate: 1, isBaseUnit: true }),
-      expect.objectContaining({ name: 'Vỉ', conversionRate: 10, isBaseUnit: false }),
-    ]);
-    const baseUnitId = medicineRes.body.units.find((unit) => unit.isBaseUnit).id;
-    const blisterUnitId = medicineRes.body.units.find((unit) => unit.name === 'Vỉ').id;
+      const importRes = await request(app)
+        .post(`/v1/stores/${store.id}/imports`)
+        .set('Authorization', `Bearer ${ownerToken}`)
+        .send({
+          supplierId: supplierRes.body.id,
+          importedAt,
+          items: [
+            {
+              medicineId: medicineRes.body.id,
+              batchNumber: 'LO-GAN',
+              quantity: 3,
+              importPrice: 8000,
+              unitId: blisterUnitId,
+              expiryDate: futureDate(60),
+            },
+            {
+              medicineId: medicineRes.body.id,
+              batchNumber: 'LO-XA',
+              quantity: 70,
+              importPrice: 1000,
+              unitId: baseUnitId,
+              expiryDate: futureDate(365),
+            },
+          ],
+        })
+        .expect(httpStatus.CREATED);
 
-    const importRes = await request(app)
-      .post(`/v1/stores/${store.id}/imports`)
-      .set('Authorization', `Bearer ${ownerToken}`)
-      .send({
-        supplierId: supplierRes.body.id,
-        importedAt,
-        items: [
-          {
-            medicineId: medicineRes.body.id,
+      expect(importRes.body).toMatchObject({
+        status: 'draft',
+        totalAmount: 94000,
+      });
+      expect(importRes.body.details[0]).toMatchObject({
+        quantity: 3,
+        importPrice: 8000,
+        baseQuantity: 30,
+        baseImportPrice: 800,
+        unitName: 'Vỉ',
+        conversionRate: 10,
+      });
+      expect(await prisma.stockBatch.count()).toBe(0);
+
+      const completedRes = await request(app)
+        .post(`/v1/stores/${store.id}/imports/${importRes.body.id}/complete`)
+        .set('Authorization', `Bearer ${ownerToken}`)
+        .expect(httpStatus.OK);
+
+      expect(completedRes.body.status).toBe('completed');
+      expect(completedRes.body.importedAt.slice(0, 10)).toBe(importedAt);
+      expect(await prisma.stockBatch.count()).toBe(2);
+      expect(await prisma.inventoryMovement.count({ where: { type: 'import' } })).toBe(2);
+
+      const staffMedicinesRes = await request(app)
+        .get(`/v1/stores/${store.id}/medicines`)
+        .set('Authorization', `Bearer ${staffToken}`)
+        .expect(httpStatus.OK);
+      expect(staffMedicinesRes.body.results[0]).toMatchObject({
+        code: medicineRes.body.code,
+        availableStock: 100,
+        nearestExpiry: expect.any(String),
+        batches: [
+          expect.objectContaining({
             batchNumber: 'LO-GAN',
-            quantity: 3,
-            importPrice: 8000,
-            unitId: blisterUnitId,
-            expiryDate: futureDate(60),
-          },
-          {
-            medicineId: medicineRes.body.id,
+            quantityRemaining: 30,
+          }),
+          expect.objectContaining({
             batchNumber: 'LO-XA',
-            quantity: 70,
-            importPrice: 1000,
-            unitId: baseUnitId,
-            expiryDate: futureDate(365),
-          },
+            quantityRemaining: 70,
+          }),
         ],
-      })
-      .expect(httpStatus.CREATED);
+      });
+      expect(staffMedicinesRes.body.results[0]).not.toHaveProperty('inventoryValue');
+      expect(staffMedicinesRes.body.results[0].batches[0]).not.toHaveProperty('importPrice');
 
-    expect(importRes.body).toMatchObject({
-      status: 'draft',
-      totalAmount: 94000,
-    });
-    expect(importRes.body.details[0]).toMatchObject({
-      quantity: 3,
-      importPrice: 8000,
-      baseQuantity: 30,
-      baseImportPrice: 800,
-      unitName: 'Vỉ',
-      conversionRate: 10,
-    });
-    expect(await prisma.stockBatch.count()).toBe(0);
+      const ownerMedicinesRes = await request(app)
+        .get(`/v1/stores/${store.id}/medicines`)
+        .set('Authorization', `Bearer ${ownerToken}`)
+        .expect(httpStatus.OK);
+      expect(ownerMedicinesRes.body.results[0].inventoryValue).toBe(94000);
+      expect(ownerMedicinesRes.body.results[0].batches[0]).toMatchObject({
+        batchNumber: 'LO-GAN',
+        importPrice: 800,
+      });
 
-    const completedRes = await request(app)
-      .post(`/v1/stores/${store.id}/imports/${importRes.body.id}/complete`)
-      .set('Authorization', `Bearer ${ownerToken}`)
-      .expect(httpStatus.OK);
+      await request(app)
+        .post(`/v1/stores/${store.id}/imports/${importRes.body.id}/complete`)
+        .set('Authorization', `Bearer ${ownerToken}`)
+        .expect(httpStatus.CONFLICT);
 
-    expect(completedRes.body.status).toBe('completed');
-    expect(completedRes.body.importedAt.slice(0, 10)).toBe(importedAt);
-    expect(await prisma.stockBatch.count()).toBe(2);
-    expect(await prisma.inventoryMovement.count({ where: { type: 'import' } })).toBe(2);
+      const inventoryBeforeSale = await request(app)
+        .get(`/v1/stores/${store.id}/inventory`)
+        .set('Authorization', `Bearer ${staffToken}`)
+        .expect(httpStatus.OK);
 
-    const staffMedicinesRes = await request(app)
-      .get(`/v1/stores/${store.id}/medicines`)
-      .set('Authorization', `Bearer ${staffToken}`)
-      .expect(httpStatus.OK);
-    expect(staffMedicinesRes.body.results[0]).toMatchObject({
-      code: medicineRes.body.code,
-      availableStock: 100,
-      nearestExpiry: expect.any(String),
-      batches: [
-        expect.objectContaining({
-          batchNumber: 'LO-GAN',
-          quantityRemaining: 30,
-        }),
-        expect.objectContaining({
-          batchNumber: 'LO-XA',
-          quantityRemaining: 70,
-        }),
-      ],
-    });
-    expect(staffMedicinesRes.body.results[0]).not.toHaveProperty('inventoryValue');
-    expect(staffMedicinesRes.body.results[0].batches[0]).not.toHaveProperty('importPrice');
+      expect(inventoryBeforeSale.body.results[0]).toMatchObject({
+        id: medicineRes.body.id,
+        totalStock: 100,
+        availableStock: 100,
+      });
+      expect(inventoryBeforeSale.body.results[0]).not.toHaveProperty('inventoryValue');
+      expect(inventoryBeforeSale.body.results[0].batches[0]).not.toHaveProperty('importPrice');
 
-    const ownerMedicinesRes = await request(app)
-      .get(`/v1/stores/${store.id}/medicines`)
-      .set('Authorization', `Bearer ${ownerToken}`)
-      .expect(httpStatus.OK);
-    expect(ownerMedicinesRes.body.results[0].inventoryValue).toBe(94000);
-    expect(ownerMedicinesRes.body.results[0].batches[0]).toMatchObject({
-      batchNumber: 'LO-GAN',
-      importPrice: 800,
-    });
+      const staffDashboard = await request(app)
+        .get(`/v1/stores/${store.id}/dashboard`)
+        .set('Authorization', `Bearer ${staffToken}`)
+        .expect(httpStatus.OK);
 
-    await request(app)
-      .post(`/v1/stores/${store.id}/imports/${importRes.body.id}/complete`)
-      .set('Authorization', `Bearer ${ownerToken}`)
-      .expect(httpStatus.CONFLICT);
+      expect(staffDashboard.body.today).not.toHaveProperty('cost');
+      expect(staffDashboard.body.today).not.toHaveProperty('grossProfit');
+      expect(staffDashboard.body.inventory).not.toHaveProperty('value');
 
-    const inventoryBeforeSale = await request(app)
-      .get(`/v1/stores/${store.id}/inventory`)
-      .set('Authorization', `Bearer ${staffToken}`)
-      .expect(httpStatus.OK);
+      const saleRes = await request(app)
+        .post(`/v1/stores/${store.id}/sales`)
+        .set('Authorization', `Bearer ${staffToken}`)
+        .send({
+          paymentMethod: 'cash',
+          discountAmount: 10000,
+          items: [{ medicineId: medicineRes.body.id, quantity: 4, unitId: blisterUnitId }],
+        })
+        .expect(httpStatus.CREATED);
 
-    expect(inventoryBeforeSale.body.results[0]).toMatchObject({
-      id: medicineRes.body.id,
-      totalStock: 100,
-      availableStock: 100,
-    });
-    expect(inventoryBeforeSale.body.results[0]).not.toHaveProperty('inventoryValue');
-    expect(inventoryBeforeSale.body.results[0].batches[0]).not.toHaveProperty('importPrice');
-
-    const staffDashboard = await request(app)
-      .get(`/v1/stores/${store.id}/dashboard`)
-      .set('Authorization', `Bearer ${staffToken}`)
-      .expect(httpStatus.OK);
-
-    expect(staffDashboard.body.today).not.toHaveProperty('cost');
-    expect(staffDashboard.body.today).not.toHaveProperty('grossProfit');
-    expect(staffDashboard.body.inventory).not.toHaveProperty('value');
-
-    const saleRes = await request(app)
-      .post(`/v1/stores/${store.id}/sales`)
-      .set('Authorization', `Bearer ${staffToken}`)
-      .send({
-        paymentMethod: 'cash',
+      expect(saleRes.body).toMatchObject({
+        totalAmount: 70000,
         discountAmount: 10000,
-        items: [{ medicineId: medicineRes.body.id, quantity: 4, unitId: blisterUnitId }],
-      })
-      .expect(httpStatus.CREATED);
+        status: 'completed',
+      });
+      expect(saleRes.body.details).toHaveLength(2);
+      expect(saleRes.body.details[0]).toMatchObject({
+        quantity: 30,
+        displayQuantity: 3,
+        displaySalePrice: 20000,
+        unitName: 'Vỉ',
+        conversionRate: 10,
+      });
+      expect(saleRes.body.details[1]).toMatchObject({
+        quantity: 10,
+        displayQuantity: 1,
+        displaySalePrice: 20000,
+        unitName: 'Vỉ',
+        conversionRate: 10,
+      });
+      expect(saleRes.body.details[0]).not.toHaveProperty('costPrice');
+      expect(saleRes.body.details[1]).not.toHaveProperty('costPrice');
 
-    expect(saleRes.body).toMatchObject({
-      totalAmount: 70000,
-      discountAmount: 10000,
-      status: 'completed',
-    });
-    expect(saleRes.body.details).toHaveLength(2);
-    expect(saleRes.body.details[0]).toMatchObject({
-      quantity: 30,
-      displayQuantity: 3,
-      displaySalePrice: 20000,
-      unitName: 'Vỉ',
-      conversionRate: 10,
-    });
-    expect(saleRes.body.details[1]).toMatchObject({
-      quantity: 10,
-      displayQuantity: 1,
-      displaySalePrice: 20000,
-      unitName: 'Vỉ',
-      conversionRate: 10,
-    });
-    expect(saleRes.body.details[0]).not.toHaveProperty('costPrice');
-    expect(saleRes.body.details[1]).not.toHaveProperty('costPrice');
+      const ownerSaleRes = await request(app)
+        .get(`/v1/stores/${store.id}/sales/${saleRes.body.id}`)
+        .set('Authorization', `Bearer ${ownerToken}`)
+        .expect(httpStatus.OK);
+      expect(ownerSaleRes.body.details[0]).toMatchObject({
+        quantity: 30,
+        costPrice: 800,
+      });
+      expect(ownerSaleRes.body.details[1]).toMatchObject({
+        quantity: 10,
+        costPrice: 1000,
+      });
 
-    const ownerSaleRes = await request(app)
-      .get(`/v1/stores/${store.id}/sales/${saleRes.body.id}`)
-      .set('Authorization', `Bearer ${ownerToken}`)
-      .expect(httpStatus.OK);
-    expect(ownerSaleRes.body.details[0]).toMatchObject({
-      quantity: 30,
-      costPrice: 800,
-    });
-    expect(ownerSaleRes.body.details[1]).toMatchObject({
-      quantity: 10,
-      costPrice: 1000,
-    });
+      const inventoryAfterSale = await request(app)
+        .get(`/v1/stores/${store.id}/inventory`)
+        .set('Authorization', `Bearer ${staffToken}`)
+        .expect(httpStatus.OK);
 
-    const inventoryAfterSale = await request(app)
-      .get(`/v1/stores/${store.id}/inventory`)
-      .set('Authorization', `Bearer ${staffToken}`)
-      .expect(httpStatus.OK);
+      expect(inventoryAfterSale.body.results[0]).toMatchObject({
+        totalStock: 60,
+        availableStock: 60,
+      });
 
-    expect(inventoryAfterSale.body.results[0]).toMatchObject({
-      totalStock: 60,
-      availableStock: 60,
-    });
+      const reportRes = await request(app)
+        .get(`/v1/stores/${store.id}/reports/profit`)
+        .query({
+          from: moment().subtract(1, 'day').format('YYYY-MM-DD'),
+          to: moment().add(1, 'day').format('YYYY-MM-DD'),
+        })
+        .set('Authorization', `Bearer ${ownerToken}`)
+        .expect(httpStatus.OK);
 
-    const reportRes = await request(app)
-      .get(`/v1/stores/${store.id}/reports/profit`)
-      .query({
-        from: moment().subtract(1, 'day').format('YYYY-MM-DD'),
-        to: moment().add(1, 'day').format('YYYY-MM-DD'),
-      })
-      .set('Authorization', `Bearer ${ownerToken}`)
-      .expect(httpStatus.OK);
+      expect(reportRes.body.totals).toMatchObject({
+        revenue: 70000,
+        cost: 34000,
+        grossProfit: 36000,
+        orders: 1,
+      });
+      expect(reportRes.body.topMedicines[0]).toMatchObject({
+        id: medicineRes.body.id,
+        quantity: 40,
+        grossProfit: 36000,
+      });
 
-    expect(reportRes.body.totals).toMatchObject({
-      revenue: 70000,
-      cost: 34000,
-      grossProfit: 36000,
-      orders: 1,
-    });
-    expect(reportRes.body.topMedicines[0]).toMatchObject({
-      id: medicineRes.body.id,
-      quantity: 40,
-      grossProfit: 36000,
-    });
+      await request(app)
+        .patch(`/v1/stores/${store.id}/medicines/${medicineRes.body.id}`)
+        .set('Authorization', `Bearer ${ownerToken}`)
+        .send({
+          baseUnitName: 'Gói',
+          units: [{ name: 'Gói', conversionRate: 1, isBaseUnit: true }],
+        })
+        .expect(httpStatus.CONFLICT);
 
-    await request(app)
-      .patch(`/v1/stores/${store.id}/medicines/${medicineRes.body.id}`)
-      .set('Authorization', `Bearer ${ownerToken}`)
-      .send({
-        baseUnitName: 'Gói',
-        units: [{ name: 'Gói', conversionRate: 1, isBaseUnit: true }],
-      })
-      .expect(httpStatus.CONFLICT);
+      const saleCount = await prisma.sale.count();
+      await request(app)
+        .post(`/v1/stores/${store.id}/sales`)
+        .set('Authorization', `Bearer ${staffToken}`)
+        .send({
+          paymentMethod: 'cash',
+          items: [{ medicineId: medicineRes.body.id, quantity: 100 }],
+        })
+        .expect(httpStatus.CONFLICT);
 
-    const saleCount = await prisma.sale.count();
-    await request(app)
-      .post(`/v1/stores/${store.id}/sales`)
-      .set('Authorization', `Bearer ${staffToken}`)
-      .send({
-        paymentMethod: 'cash',
-        items: [{ medicineId: medicineRes.body.id, quantity: 100 }],
-      })
-      .expect(httpStatus.CONFLICT);
-
-    expect(await prisma.sale.count()).toBe(saleCount);
-    const remaining = await prisma.stockBatch.aggregate({
-      where: { storeId: store.id, medicineId: medicineRes.body.id },
-      _sum: { quantityRemaining: true },
-    });
-    expect(Number(remaining._sum.quantityRemaining)).toBe(60);
-  });
+      expect(await prisma.sale.count()).toBe(saleCount);
+      const remaining = await prisma.stockBatch.aggregate({
+        where: { storeId: store.id, medicineId: medicineRes.body.id },
+        _sum: { quantityRemaining: true },
+      });
+      expect(Number(remaining._sum.quantityRemaining)).toBe(60);
+    },
+  );
 
   test('should enforce store role and cross-store boundaries', async () => {
     await insertUsers([userOne, userTwo]);

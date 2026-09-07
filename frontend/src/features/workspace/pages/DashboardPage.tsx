@@ -22,7 +22,8 @@ import {
 } from '../components/shared';
 
 export function DashboardPage() {
-    const { selectedStoreId, selectedStore, hasRole, canSell, canImport } = useWorkspace();
+    const { selectedStoreId, selectedStore, hasRole, canSell, canImport } =
+        useWorkspace();
     const dashboardQuery = useQuery({
         queryKey: ['workspace', selectedStoreId, 'dashboard'],
         queryFn: () => workspaceService.getDashboard(selectedStoreId),
@@ -162,14 +163,16 @@ export function DashboardPage() {
                 <Panel className="p-4 sm:p-5">
                     <h2 className="font-semibold">Thao tác nhanh</h2>
                     <div className="mt-4 grid gap-2">
-                        {canSell && <Link
-                            to="/admin/sales"
-                            className="bg-primary text-primary-foreground hover:bg-primary/90 flex h-11 items-center gap-3 rounded-md px-3 text-sm font-medium transition-colors"
-                        >
-                            <ShoppingCart className="size-4" />
-                            Tạo đơn bán
-                            <ArrowRight className="ml-auto size-4" />
-                        </Link>}
+                        {canSell && (
+                            <Link
+                                to="/admin/sales"
+                                className="bg-primary text-primary-foreground hover:bg-primary/90 flex h-11 items-center gap-3 rounded-md px-3 text-sm font-medium transition-colors"
+                            >
+                                <ShoppingCart className="size-4" />
+                                Tạo đơn bán
+                                <ArrowRight className="ml-auto size-4" />
+                            </Link>
+                        )}
                         {canImport ? (
                             <Link
                                 to="/admin/imports"

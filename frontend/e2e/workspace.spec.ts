@@ -58,7 +58,7 @@ async function loginWithOtp(
     ).toBeVisible();
 }
 
-test('system admin can use the workspace across desktop and mobile', async ({
+test('owner can use the operational workspace across desktop and mobile', async ({
     page,
     request,
 }) => {
@@ -80,7 +80,7 @@ test('system admin can use the workspace across desktop and mobile', async ({
     });
 
     await page.setViewportSize({ width: 1440, height: 1000 });
-    await loginWithOtp(page, request, 'admin@gmail.com');
+    await loginWithOtp(page, request, 'owner@gmail.com');
 
     const routes = [
         ['Bán hàng', 'Bán hàng'],
@@ -90,9 +90,9 @@ test('system admin can use the workspace across desktop and mobile', async ({
         ['Nhóm sản phẩm', 'Nhóm sản phẩm'],
         ['Nhập hàng', 'Nhập hàng'],
         ['Nhà cung cấp', 'Nhà cung cấp'],
-        ['Tài khoản', 'Tài khoản nhân sự'],
+        ['Tài khoản', /^Nhân sự — /],
         ['Báo cáo', 'Báo cáo kinh doanh'],
-        ['Quầy thuốc', 'Quầy thuốc'],
+        ['Thông tin quầy', 'Thông tin quầy'],
     ] as const;
 
     for (const [linkName, heading] of routes) {
@@ -453,6 +453,8 @@ test('staff navigation and direct routes remain permission scoped', async ({
         'Tồn kho',
         'Danh mục sản phẩm',
         'Thư viện thuốc',
+        'Nhà cung cấp',
+        'Thông tin quầy',
     ]) {
         await expect(
             page.getByRole('link', { name: linkName, exact: true })
@@ -460,7 +462,6 @@ test('staff navigation and direct routes remain permission scoped', async ({
     }
     for (const linkName of [
         'Nhập hàng',
-        'Nhà cung cấp',
         'Tài khoản',
         'Báo cáo',
         'Nhóm sản phẩm',

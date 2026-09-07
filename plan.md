@@ -79,7 +79,7 @@ System Admin vận hành toàn hệ thống:
 - Xem và quản lý user toàn hệ thống.
 - Xem dữ liệu toàn hệ thống khi cần hỗ trợ.
 
-System Admin không tham gia bán hàng hằng ngày.
+System Admin không tham gia bán hàng hằng ngày. UI của System Admin chỉ gồm Tổng quan hệ thống, Quầy thuốc, Tài khoản và Báo cáo; không hiển thị các màn tác nghiệp nhập hàng, bán hàng hoặc quản lý danh mục theo quầy. API nhập/bán chỉ cho System Admin đọc dữ liệu để hỗ trợ và thống kê, không cho tạo hoặc thay đổi chứng từ.
 
 ### 2.4 Owner
 

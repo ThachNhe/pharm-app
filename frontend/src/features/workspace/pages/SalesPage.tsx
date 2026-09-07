@@ -853,20 +853,30 @@ export function SalesPage() {
         <div className="space-y-5">
             <PageHeader
                 title="Bán hàng"
-                description={canSell ? 'Tạo đơn và trừ tồn theo lô có hạn sử dụng gần nhất.' : 'Tra cứu lịch sử và chi tiết đơn bán tại quầy.'}
+                description={
+                    canSell
+                        ? 'Tạo đơn và trừ tồn theo lô có hạn sử dụng gần nhất.'
+                        : 'Tra cứu lịch sử và chi tiết đơn bán tại quầy.'
+                }
                 actions={
                     <div className="border-border bg-card flex rounded-md border p-1">
-                        {canSell && <Button
-                            size="sm"
-                            variant={view === 'pos' ? 'secondary' : 'ghost'}
-                            onClick={() => setView('pos')}
-                        >
-                            <ShoppingCart />
-                            Tạo đơn
-                        </Button>}
+                        {canSell && (
+                            <Button
+                                size="sm"
+                                variant={view === 'pos' ? 'secondary' : 'ghost'}
+                                onClick={() => setView('pos')}
+                            >
+                                <ShoppingCart />
+                                Tạo đơn
+                            </Button>
+                        )}
                         <Button
                             size="sm"
-                            variant={(!canSell || view === 'history') ? 'secondary' : 'ghost'}
+                            variant={
+                                !canSell || view === 'history'
+                                    ? 'secondary'
+                                    : 'ghost'
+                            }
                             onClick={() => setView('history')}
                         >
                             <ReceiptText />

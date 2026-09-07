@@ -733,12 +733,14 @@ export function ImportsPage() {
             <PageHeader
                 title="Nhập hàng"
                 description="Lập phiếu nháp, kiểm tra lô và xác nhận nhập kho theo từng quầy."
-                actions={canImport ? (
-                    <Button onClick={() => setCreateOpen(true)}>
-                        <Plus />
-                        Lập phiếu nhập
-                    </Button>
-                ) : undefined}
+                actions={
+                    canImport ? (
+                        <Button onClick={() => setCreateOpen(true)}>
+                            <Plus />
+                            Lập phiếu nhập
+                        </Button>
+                    ) : undefined
+                }
             />
 
             <Panel className="overflow-hidden">
@@ -901,10 +903,12 @@ export function ImportsPage() {
                 )}
             </Panel>
 
-            {canImport && <CreateImportDialog
-                open={createOpen}
-                onOpenChange={setCreateOpen}
-            />}
+            {canImport && (
+                <CreateImportDialog
+                    open={createOpen}
+                    onOpenChange={setCreateOpen}
+                />
+            )}
             <ImportDetailDialog
                 receipt={selectedReceipt}
                 onClose={() => setSelectedReceipt(null)}

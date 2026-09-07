@@ -41,7 +41,13 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
             setSelectedStoreId,
             isSystemAdmin,
             canSell: !isSystemAdmin && Boolean(selectedStore?.role),
-            canImport: !isSystemAdmin && Boolean(selectedStore?.role && STORE_ROLE_RANK[selectedStore.role] >= STORE_ROLE_RANK.manager),
+            canImport:
+                !isSystemAdmin &&
+                Boolean(
+                    selectedStore?.role &&
+                    STORE_ROLE_RANK[selectedStore.role] >=
+                        STORE_ROLE_RANK.manager
+                ),
             hasRole: (minimumRole) =>
                 isSystemAdmin ||
                 Boolean(

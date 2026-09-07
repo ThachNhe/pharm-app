@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
+import { Link } from '@tanstack/react-router';
 import { Edit3, Plus, Users } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { adminService } from '@/features/admin/services/admin.service';
@@ -7,7 +8,17 @@ import type { Store } from '@/features/admin/types';
 import { usePaginatedSearch } from '../hooks/usePaginatedSearch';
 import { useWorkspace } from '../hooks/useWorkspace';
 import { StoreDialog } from '../components/StoreDialog';
-import { EmptyState, ErrorState, LoadingState, PageHeader, Pager, Panel, PermissionDenied, SearchInput, StatusBadge } from '../components/shared';
+import {
+    EmptyState,
+    ErrorState,
+    LoadingState,
+    PageHeader,
+    Pager,
+    Panel,
+    PermissionDenied,
+    SearchInput,
+    StatusBadge,
+} from '../components/shared';
 
 export function StoresPage() {
     const { search, setSearch, debouncedSearch, page, setPage } =
@@ -123,10 +134,24 @@ export function StoresPage() {
                                                 {store.phone || '—'}
                                             </td>
                                             <td className="px-4 py-3 text-right">
-                                                <span className="inline-flex items-center gap-1.5">
-                                                    <Users className="text-muted-foreground size-4" />
-                                                    {store._count?.roles ?? 0}
-                                                </span>
+                                                <Button
+                                                    asChild
+                                                    size="sm"
+                                                    variant="ghost"
+                                                >
+                                                    <Link
+                                                        to="/admin/users"
+                                                        search={{
+                                                            storeId: store.id,
+                                                        }}
+                                                        aria-label={`Xem ${store._count?.roles ?? 0} nhân sự của ${store.name}`}
+                                                    >
+                                                        <Users />
+                                                        {store._count?.roles ??
+                                                            0}{' '}
+                                                        nhân sự
+                                                    </Link>
+                                                </Button>
                                             </td>
                                             <td className="px-4 py-3">
                                                 <StatusBadge

@@ -59,18 +59,19 @@ function UserDialog({
     user,
     roleOptions,
     globalScope,
+    storeId,
 }: {
     open: boolean;
     onOpenChange: (open: boolean) => void;
     user: AdminUser | null;
     roleOptions: StoreRole[];
     globalScope: boolean;
+    storeId: string;
 }) {
-    const { selectedStoreId } = useWorkspace();
     const queryClient = useQueryClient();
     const [showPassword, setShowPassword] = useState(false);
     const currentMembership = user?.storeRoles.find(
-        (item) => item.store.id === selectedStoreId
+        (item) => item.store.id === storeId
     );
     const currentRole = currentMembership?.role ?? roleOptions[0] ?? 'staff';
     const form = useForm<UserFormValues>({
@@ -95,7 +96,9 @@ function UserDialog({
                       email: user.email,
                       phone: user.phone ?? '',
                       storeRole: currentRole,
-                      isActive: globalScope ? user.isActive : currentMembership?.isActive ?? true,
+                      isActive: globalScope
+                          ? user.isActive
+                          : (currentMembership?.isActive ?? true),
                       password: '',
                   }
                 : {
@@ -121,7 +124,12 @@ function UserDialog({
         mutationFn: async (values: UserFormValues) => {
             if (user) {
                 await adminService.updateUser(user.id, {
-                    ...(globalScope ? {} : { storeId: selectedStoreId, storeRole: values.storeRole }),
+                    ...(globalScope
+                        ? {}
+                        : {
+                              storeId,
+                              storeRole: values.storeRole,
+                          }),
                     name: values.name,
                     email: values.email,
                     phone: values.phone || null,
@@ -130,7 +138,7 @@ function UserDialog({
                 return;
             }
             return adminService.createUser({
-                storeId: selectedStoreId,
+                storeId,
                 name: values.name,
                 email: values.email,
                 phone: values.phone || null,
@@ -174,7 +182,9 @@ function UserDialog({
                     </DialogTitle>
                     <DialogDescription>
                         {user
-                            ? globalScope ? 'Thông tin và trạng thái tài khoản được áp dụng toàn hệ thống.' : 'Quyền được áp dụng riêng trong quầy đang chọn.'
+                            ? globalScope
+                                ? 'Thông tin và trạng thái tài khoản được áp dụng toàn hệ thống.'
+                                : 'Quyền được áp dụng riêng trong quầy đang chọn.'
                             : 'Nhập mật khẩu ban đầu cho tài khoản mới. Tài khoản đã tồn tại sẽ giữ mật khẩu hiện tại.'}
                     </DialogDescription>
                 </DialogHeader>
@@ -218,23 +228,25 @@ function UserDialog({
                             {...form.register('phone')}
                         />
                     </Field>
-                    {!globalScope && <Field
-                        label="Vai trò tại quầy"
-                        required
-                        error={form.formState.errors.storeRole?.message}
-                        className="sm:col-span-2"
-                    >
-                        <select
-                            className="border-input bg-input-background focus:border-ring focus:ring-ring/20 h-9 rounded-md border px-3 text-sm outline-none focus:ring-3"
-                            {...form.register('storeRole')}
+                    {!globalScope && (
+                        <Field
+                            label="Vai trò tại quầy"
+                            required
+                            error={form.formState.errors.storeRole?.message}
+                            className="sm:col-span-2"
                         >
-                            {roleOptions.map((role) => (
-                                <option key={role} value={role}>
-                                    {STORE_ROLE_LABELS[role]}
-                                </option>
-                            ))}
-                        </select>
-                    </Field>}
+                            <select
+                                className="border-input bg-input-background focus:border-ring focus:ring-ring/20 h-9 rounded-md border px-3 text-sm outline-none focus:ring-3"
+                                {...form.register('storeRole')}
+                            >
+                                {roleOptions.map((role) => (
+                                    <option key={role} value={role}>
+                                        {STORE_ROLE_LABELS[role]}
+                                    </option>
+                                ))}
+                            </select>
+                        </Field>
+                    )}
                     {!user ? (
                         <Field
                             label="Mật khẩu ban đầu"
@@ -259,7 +271,7 @@ function UserDialog({
                                             ? 'Ẩn mật khẩu'
                                             : 'Hiện mật khẩu'
                                     }
-                                    className="text-muted-foreground hover:bg-secondary hover:text-foreground absolute right-1 top-1/2 grid size-8 -translate-y-1/2 place-items-center rounded-md transition-colors"
+                                    className="text-muted-foreground hover:bg-secondary hover:text-foreground absolute top-1/2 right-1 grid size-8 -translate-y-1/2 place-items-center rounded-md transition-colors"
                                 >
                                     {showPassword ? (
                                         <EyeOff className="size-4" />
@@ -284,7 +296,9 @@ function UserDialog({
                                     )
                                 }
                             />
-                            {globalScope ? 'Tài khoản đang hoạt động toàn hệ thống' : 'Quyền truy cập quầy đang hoạt động'}
+                            {globalScope
+                                ? 'Tài khoản đang hoạt động toàn hệ thống'
+                                : 'Quyền truy cập quầy đang hoạt động'}
                         </label>
                     ) : null}
                 </form>
@@ -313,10 +327,15 @@ function UserDialog({
     );
 }
 
-export function UsersPage() {
+export function UsersPage({
+    storeId,
+    onStoreChange,
+}: {
+    storeId?: string;
+    onStoreChange?: (storeId?: string) => void;
+}) {
     const { search, setSearch, debouncedSearch, page, setPage } =
         usePaginatedSearch();
-    const [scope, setScope] = useState<'store' | 'all'>('store');
     const [dialogOpen, setDialogOpen] = useState(false);
     const [editingUser, setEditingUser] = useState<AdminUser | null>(null);
     const {
@@ -327,7 +346,13 @@ export function UsersPage() {
         contextQuery,
     } = useWorkspace();
 
-    const globalScope = isSystemAdmin && (scope === 'all' || !selectedStoreId);
+    const requestedStore = isSystemAdmin
+        ? contextQuery.data?.stores.find((store) => store.id === storeId)
+        : undefined;
+    const invalidStore = isSystemAdmin && Boolean(storeId) && !requestedStore;
+    const globalScope = isSystemAdmin && !storeId;
+    const scopeStore = isSystemAdmin ? requestedStore : selectedStore;
+    const scopeStoreId = scopeStore?.id ?? selectedStoreId;
 
     const roleOptions = useMemo<StoreRole[]>(() => {
         if (isSystemAdmin) return ['owner', 'manager', 'staff'];
@@ -339,21 +364,33 @@ export function UsersPage() {
         queryKey: [
             'workspace',
             'users',
-            globalScope ? 'all' : selectedStoreId,
+            globalScope ? 'all' : scopeStoreId,
             debouncedSearch,
             page,
         ],
         queryFn: () =>
             adminService.getUsers({
-                storeId: globalScope ? undefined : selectedStoreId,
+                storeId: globalScope ? undefined : scopeStoreId,
                 search: debouncedSearch,
                 page,
                 limit: 20,
             }),
-        enabled: globalScope || (Boolean(selectedStoreId) && hasRole('manager')),
+        enabled:
+            !invalidStore &&
+            (globalScope || (Boolean(scopeStoreId) && hasRole('manager'))),
     });
 
     if (!hasRole('manager')) return <PermissionDenied />;
+    if (invalidStore) {
+        return (
+            <Panel>
+                <ErrorState
+                    title="Không tìm thấy quầy thuốc"
+                    description="Quầy thuốc trong đường dẫn không tồn tại hoặc đã bị xóa."
+                />
+            </Panel>
+        );
+    }
 
     const canManageUser = (user: AdminUser) => {
         if (user.id === contextQuery.data?.user.id || user.isSystemAdmin)
@@ -379,28 +416,52 @@ export function UsersPage() {
     return (
         <div className="space-y-5">
             <PageHeader
-                title={globalScope ? 'Tài khoản toàn hệ thống' : 'Tài khoản nhân sự'}
-                description={globalScope ? 'Quản lý thông tin và trạng thái tài khoản, kể cả tài khoản chưa được gán quầy.' : 'Mỗi tài khoản có đúng một vai trò trong quầy; vai trò cao tự bao gồm quyền thấp hơn.'}
-                actions={!globalScope ? (
-                    <Button onClick={openCreate}>
-                        <Plus />
-                        Thêm tài khoản
-                    </Button>
-                ) : undefined}
+                title={
+                    globalScope
+                        ? 'Tài khoản toàn hệ thống'
+                        : `Nhân sự — ${scopeStore?.name ?? 'Chưa chọn quầy'}`
+                }
+                description={
+                    globalScope
+                        ? 'Quản lý thông tin và trạng thái tài khoản, kể cả tài khoản chưa được gán quầy.'
+                        : `Đang hiển thị các tài khoản thuộc ${scopeStore?.name ?? 'quầy thuốc đang chọn'}.`
+                }
+                actions={
+                    !globalScope ? (
+                        <Button onClick={openCreate}>
+                            <Plus />
+                            Thêm tài khoản
+                        </Button>
+                    ) : undefined
+                }
             />
 
             <Panel className="overflow-hidden">
                 <div className="border-border flex flex-col gap-3 border-b p-4 sm:flex-row sm:items-end">
-                    {isSystemAdmin && <Field label="Phạm vi tài khoản">
-                        <select className="border-input bg-background h-9 rounded-md border px-3 text-sm focus-visible:outline-2 focus-visible:outline-ring" value={globalScope ? 'all' : 'store'} onChange={(event) => {
-                            setScope(event.target.value === 'all' ? 'all' : 'store');
-                            setPage(1);
-                            setDialogOpen(false);
-                        }}>
-                            <option value="store" disabled={!selectedStoreId}>Quầy đang chọn</option>
-                            <option value="all">Toàn hệ thống</option>
-                        </select>
-                    </Field>}
+                    {isSystemAdmin && (
+                        <Field label="Phạm vi tài khoản">
+                            <select
+                                className="border-input bg-background focus-visible:outline-ring h-9 rounded-md border px-3 text-sm focus-visible:outline-2"
+                                value={globalScope ? 'all' : scopeStoreId}
+                                onChange={(event) => {
+                                    onStoreChange?.(
+                                        event.target.value === 'all'
+                                            ? undefined
+                                            : event.target.value
+                                    );
+                                    setPage(1);
+                                    setDialogOpen(false);
+                                }}
+                            >
+                                <option value="all">Toàn hệ thống</option>
+                                {contextQuery.data?.stores.map((store) => (
+                                    <option key={store.id} value={store.id}>
+                                        {store.name}
+                                    </option>
+                                ))}
+                            </select>
+                        </Field>
+                    )}
                     <SearchInput
                         value={search}
                         onChange={setSearch}
@@ -427,7 +488,7 @@ export function UsersPage() {
                 ) : (
                     <>
                         <div className="overflow-x-auto">
-                            <table className="w-full min-w-[760px] text-left text-sm">
+                            <table className="w-full min-w-[900px] text-left text-sm">
                                 <thead className="bg-muted/55 text-muted-foreground text-xs uppercase">
                                     <tr>
                                         <th className="px-4 py-3 font-medium">
@@ -437,7 +498,7 @@ export function UsersPage() {
                                             Liên hệ
                                         </th>
                                         <th className="px-4 py-3 font-medium">
-                                            Vai trò
+                                            Quầy thuốc và vai trò
                                         </th>
                                         <th className="px-4 py-3 font-medium">
                                             Trạng thái
@@ -449,11 +510,18 @@ export function UsersPage() {
                                 </thead>
                                 <tbody className="divide-border divide-y">
                                     {usersQuery.data.results.map((user) => {
-                                        const membership = user.storeRoles[0];
-                                        const role = membership?.role;
+                                        const memberships = globalScope
+                                            ? user.storeRoles
+                                            : user.storeRoles.filter(
+                                                  (item) =>
+                                                      item.store.id ===
+                                                      scopeStoreId
+                                              );
+                                        const membership = memberships[0];
                                         const isActive =
                                             user.isActive &&
-                                            (globalScope || Boolean(membership?.isActive));
+                                            (globalScope ||
+                                                Boolean(membership?.isActive));
                                         const manageable = canManageUser(user);
                                         return (
                                             <tr
@@ -472,21 +540,46 @@ export function UsersPage() {
                                                     {user.phone || '—'}
                                                 </td>
                                                 <td className="px-4 py-3">
-                                                    <StatusBadge
-                                                        tone={
-                                                            user.isSystemAdmin
-                                                                ? 'info'
-                                                                : 'neutral'
-                                                        }
-                                                    >
-                                                        {user.isSystemAdmin
-                                                            ? 'System Admin'
-                                                            : globalScope ? user.storeRoles.map((item) => `${item.store.name}: ${STORE_ROLE_LABELS[item.role]}`).join(', ') || 'Chưa gán quầy' : role
-                                                              ? STORE_ROLE_LABELS[
-                                                                    role
-                                                                ]
-                                                              : 'Chưa phân quyền'}
-                                                    </StatusBadge>
+                                                    {user.isSystemAdmin ? (
+                                                        <StatusBadge tone="info">
+                                                            System Admin
+                                                        </StatusBadge>
+                                                    ) : memberships.length ? (
+                                                        <div className="space-y-2">
+                                                            {memberships.map(
+                                                                (item) => (
+                                                                    <div
+                                                                        key={
+                                                                            item
+                                                                                .store
+                                                                                .id
+                                                                        }
+                                                                        className="flex flex-wrap items-center gap-2"
+                                                                    >
+                                                                        <span className="font-medium">
+                                                                            {
+                                                                                item
+                                                                                    .store
+                                                                                    .name
+                                                                            }
+                                                                        </span>
+                                                                        <StatusBadge tone="neutral">
+                                                                            {
+                                                                                STORE_ROLE_LABELS[
+                                                                                    item
+                                                                                        .role
+                                                                                ]
+                                                                            }
+                                                                        </StatusBadge>
+                                                                    </div>
+                                                                )
+                                                            )}
+                                                        </div>
+                                                    ) : (
+                                                        <span className="text-muted-foreground">
+                                                            Chưa gán quầy
+                                                        </span>
+                                                    )}
                                                 </td>
                                                 <td className="px-4 py-3">
                                                     <StatusBadge
@@ -544,6 +637,7 @@ export function UsersPage() {
                 user={editingUser}
                 roleOptions={roleOptions}
                 globalScope={globalScope}
+                storeId={scopeStoreId}
             />
         </div>
     );

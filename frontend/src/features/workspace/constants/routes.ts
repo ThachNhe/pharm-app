@@ -1,4 +1,16 @@
-import { BarChart3, Boxes, Building2, LayoutDashboard, Library, PackagePlus, Pill, ShoppingCart, Tags, Truck, UserRoundCog } from 'lucide-react';
+import {
+    BarChart3,
+    Boxes,
+    Building2,
+    LayoutDashboard,
+    Library,
+    PackagePlus,
+    Pill,
+    ShoppingCart,
+    Tags,
+    Truck,
+    UserRoundCog,
+} from 'lucide-react';
 import type { StoreRole } from '../types';
 
 type NavItem = {
@@ -19,12 +31,14 @@ type NavItem = {
     icon: typeof LayoutDashboard;
     minimumRole?: StoreRole;
     systemOnly?: boolean;
+    systemAccess?: boolean;
 };
 
 export const workspaceRoutes: NavItem[] = [
     {
         label: 'Tổng quan',
         to: '/admin',
+        systemAccess: true,
         icon: LayoutDashboard,
         minimumRole: 'staff',
     },
@@ -73,12 +87,14 @@ export const workspaceRoutes: NavItem[] = [
     {
         label: 'Tài khoản',
         to: '/admin/users',
+        systemAccess: true,
         icon: UserRoundCog,
         minimumRole: 'manager',
     },
     {
         label: 'Báo cáo',
         to: '/admin/reports',
+        systemAccess: true,
         icon: BarChart3,
         minimumRole: 'manager',
     },
@@ -95,4 +111,3 @@ export const workspaceRoutes: NavItem[] = [
         systemOnly: true,
     },
 ];
-
