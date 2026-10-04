@@ -146,6 +146,12 @@ const createMedicine = {
     ...medicineBody,
     code: Joi.string().trim().max(50),
     referenceProductId: Joi.string().allow(null).custom(objectId),
+    initialImport: Joi.object().keys({
+      quantity: Joi.number().positive().precision(2).required(),
+      importPrice: Joi.number().min(0).required(),
+      batchNumber: Joi.string().trim().required().max(100),
+      expiryDate: Joi.date().iso().required(),
+    }),
   }),
 };
 

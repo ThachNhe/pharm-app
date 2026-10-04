@@ -1,7 +1,14 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { z } from 'zod';
 import { zodResolver } from '@hookform/resolvers/zod';
-import { useFieldArray, useForm, useWatch } from 'react-hook-form';
+import {
+    Controller,
+    useFieldArray,
+    useForm,
+    useWatch,
+    type Control,
+    type DefaultValues,
+} from 'react-hook-form';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
     CheckCircle2,
@@ -23,8 +30,14 @@ import {
     DialogTitle,
 } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
+import { NumberInput } from '@/components/ui/number-input';
 import { useDebounce } from '@/hooks/useDebounce';
-import { formatCurrency, formatDate, formatNumber } from '@/lib/utils';
+import {
+    formatCurrency,
+    formatDate,
+    formatNumber,
+    toDateInputValue,
+} from '@/lib/utils';
 import { getApiErrorMessage } from '../utils/api-error';
 import { usePaginatedSearch } from '../hooks/usePaginatedSearch';
 import { workspaceService } from '../services/workspace.service';
@@ -57,6 +70,18 @@ const COMMON_UNIT_NAMES = [
     'Kit',
 ];
 
+const DEFAULT_BASE_UNIT_NAME = 'Viên';
+
+const todayDate = new Date();
+const today = toDateInputValue(todayDate);
+const tomorrow = toDateInputValue(
+    new Date(
+        todayDate.getFullYear(),
+        todayDate.getMonth(),
+        todayDate.getDate() + 1
+    )
+);
+
 const baseUnit = (name: string) => ({
     name,
     conversionRate: 1,
@@ -79,14 +104,17 @@ const medicineSchema = z
         manufacturer: z.string().trim().max(255),
         countryOfOrigin: z.string().trim().max(100),
         importerName: z.string().trim().max(255),
-        specification: z.string().trim().max(2000),
         usageInstructions: z.string().trim().max(2000),
         sellingPrice: z
-            .number({ error: 'Nhập giá bán hợp lệ' })
+            .number({ error: 'Nhập giá bán' })
             .min(0, 'Giá bán không được âm'),
         minStock: z
-            .number({ error: 'Nhập tồn tối thiểu hợp lệ' })
+            .number({ error: 'Nhập tồn tối thiểu' })
             .min(0, 'Tồn tối thiểu không được âm'),
+        importPrice: z.number().min(0, 'Giá nhập không được âm').optional(),
+        quantity: z.number().positive('Số lượng phải lớn hơn 0').optional(),
+        batchNumber: z.string().trim().max(100),
+        expiryDate: z.string(),
         requiresPrescription: z.boolean(),
         description: z.string().trim().max(2000),
         isActive: z.boolean(),
@@ -148,14 +176,47 @@ const medicineSchema = z
         });
     });
 
+// New products created by an importer are received into stock in the same request.
+// `when` keeps these checks running while other fields are invalid, so every missing field shows at once.
+const createMedicineSchema = (requireInitialImport: boolean) => {
+    if (!requireInitialImport) return medicineSchema;
+    const always = () => true;
+    return medicineSchema
+        .refine((values) => values.importPrice !== undefined, {
+            path: ['importPrice'],
+            message: 'Nhập giá nhập',
+            when: always,
+        })
+        .refine((values) => values.quantity !== undefined, {
+            path: ['quantity'],
+            message: 'Nhập số lượng',
+            when: always,
+        })
+        .refine((values) => Boolean(values.batchNumber?.trim()), {
+            path: ['batchNumber'],
+            message: 'Nhập số lô',
+            when: always,
+        })
+        .refine((values) => Boolean(values.expiryDate), {
+            path: ['expiryDate'],
+            message: 'Chọn hạn dùng',
+            when: always,
+        })
+        .refine((values) => !values.expiryDate || values.expiryDate > today, {
+            path: ['expiryDate'],
+            message: 'Hạn dùng phải sau hôm nay',
+            when: always,
+        });
+};
+
 type MedicineFormValues = z.infer<typeof medicineSchema>;
 
-const emptyValues: MedicineFormValues = {
+const emptyValues: DefaultValues<MedicineFormValues> = {
     categoryId: '',
     code: '',
     positionName: '',
     name: '',
-    baseUnitName: 'Viên',
+    baseUnitName: DEFAULT_BASE_UNIT_NAME,
     barcode: '',
     secondaryBarcode: '',
     registrationNumber: '',
@@ -165,14 +226,17 @@ const emptyValues: MedicineFormValues = {
     manufacturer: '',
     countryOfOrigin: '',
     importerName: '',
-    specification: '',
     usageInstructions: '',
-    sellingPrice: 0,
+    sellingPrice: undefined,
     minStock: 0,
+    importPrice: undefined,
+    quantity: undefined,
+    batchNumber: '',
+    expiryDate: '',
     requiresPrescription: false,
     description: '',
     isActive: true,
-    units: [baseUnit('Viên')],
+    units: [baseUnit(DEFAULT_BASE_UNIT_NAME)],
 };
 
 const getMedicineValues = (medicine: Medicine): MedicineFormValues => ({
@@ -190,10 +254,13 @@ const getMedicineValues = (medicine: Medicine): MedicineFormValues => ({
     manufacturer: medicine.manufacturer ?? '',
     countryOfOrigin: medicine.countryOfOrigin ?? '',
     importerName: medicine.importerName ?? '',
-    specification: medicine.specification ?? '',
     usageInstructions: medicine.usageInstructions ?? '',
     sellingPrice: medicine.sellingPrice,
     minStock: medicine.minStock,
+    importPrice: undefined,
+    quantity: undefined,
+    batchNumber: '',
+    expiryDate: '',
     requiresPrescription: medicine.requiresPrescription,
     description: medicine.description ?? '',
     isActive: medicine.isActive,
@@ -206,10 +273,46 @@ const getMedicineValues = (medicine: Medicine): MedicineFormValues => ({
         : [baseUnit(medicine.baseUnitName)],
 });
 
+function NumberField({
+    control,
+    name,
+    label,
+    suffix,
+    required,
+    error,
+}: {
+    control: Control<MedicineFormValues>;
+    name: 'sellingPrice' | 'minStock' | 'importPrice' | 'quantity';
+    label: string;
+    suffix: string;
+    required?: boolean;
+    error?: string;
+}) {
+    return (
+        <Field label={label} required={required} error={error}>
+            <Controller
+                control={control}
+                name={name}
+                render={({ field }) => (
+                    <NumberInput
+                        ref={field.ref}
+                        name={field.name}
+                        value={field.value}
+                        onValueChange={field.onChange}
+                        onBlur={field.onBlur}
+                        suffix={suffix}
+                        aria-invalid={Boolean(error)}
+                    />
+                )}
+            />
+        </Field>
+    );
+}
+
 const getNextSaleBatch = (medicine: InventoryMedicine) =>
     medicine.batches.find((batch) => !batch.isExpired);
 
-function MedicineDialog({
+export function MedicineDialog({
     open,
     onOpenChange,
     medicine,
@@ -219,7 +322,12 @@ function MedicineDialog({
     medicine: Medicine | null;
 }) {
     const queryClient = useQueryClient();
-    const { selectedStoreId } = useWorkspace();
+    const { selectedStoreId, canImport } = useWorkspace();
+    const requireInitialImport = !medicine && canImport;
+    const schema = useMemo(
+        () => createMedicineSchema(requireInitialImport),
+        [requireInitialImport]
+    );
     const [sourceMode, setSourceMode] = useState<'manual' | 'library'>(
         'manual'
     );
@@ -232,7 +340,7 @@ function MedicineDialog({
     const [customUnitNames, setCustomUnitNames] = useState<string[]>([]);
     const debouncedLibrarySearch = useDebounce(librarySearch, 350);
     const form = useForm<MedicineFormValues>({
-        resolver: zodResolver(medicineSchema),
+        resolver: zodResolver(schema),
         defaultValues: medicine ? getMedicineValues(medicine) : emptyValues,
     });
     const requiresPrescription = useWatch({
@@ -247,6 +355,11 @@ function MedicineDialog({
         name: 'baseUnitName',
     });
     const units = useWatch({ control: form.control, name: 'units' });
+    const importPrice = useWatch({
+        control: form.control,
+        name: 'importPrice',
+    });
+    const quantity = useWatch({ control: form.control, name: 'quantity' });
     const unitFields = useFieldArray({ control: form.control, name: 'units' });
     const unitNames = [
         ...new Set([
@@ -325,8 +438,7 @@ function MedicineDialog({
                     sensitivity: 'accent',
                 }) === 0
         );
-        const selectedBaseUnitName =
-            product.unitName ?? emptyValues.baseUnitName;
+        const selectedBaseUnitName = product.unitName ?? DEFAULT_BASE_UNIT_NAME;
         form.reset({
             ...emptyValues,
             categoryId: matchingCategory?.id ?? '',
@@ -345,9 +457,9 @@ function MedicineDialog({
             manufacturer: product.manufacturer ?? '',
             countryOfOrigin: product.countryOfOrigin ?? '',
             importerName: product.importerName ?? '',
-            specification: product.specification ?? '',
             usageInstructions: product.usageInstructions ?? '',
             minStock: product.minInventory ?? 0,
+            importPrice: product.inputPrice ?? undefined,
             units: product.medicineUnits.length
                 ? product.medicineUnits.map((unit) => ({
                       name: unit.name,
@@ -410,8 +522,15 @@ function MedicineDialog({
                     }
                 );
             }
+            const {
+                importPrice: enteredImportPrice,
+                quantity: enteredQuantity,
+                batchNumber,
+                expiryDate,
+                ...productValues
+            } = values;
             const payload = {
-                ...values,
+                ...productValues,
                 code: values.code || undefined,
                 referenceProductId: selectedReferenceProduct?.id,
                 barcode: values.barcode || undefined,
@@ -423,9 +542,19 @@ function MedicineDialog({
                 manufacturer: values.manufacturer || undefined,
                 countryOfOrigin: values.countryOfOrigin || undefined,
                 importerName: values.importerName || undefined,
-                specification: values.specification || undefined,
                 usageInstructions: values.usageInstructions || undefined,
                 description: values.description || undefined,
+                initialImport:
+                    requireInitialImport &&
+                    enteredImportPrice !== undefined &&
+                    enteredQuantity !== undefined
+                        ? {
+                              importPrice: enteredImportPrice,
+                              quantity: enteredQuantity,
+                              batchNumber,
+                              expiryDate,
+                          }
+                        : undefined,
             };
             return medicine
                 ? workspaceService.updateMedicine(
@@ -437,7 +566,11 @@ function MedicineDialog({
         },
         onSuccess: () => {
             toast.success(
-                medicine ? 'Đã cập nhật sản phẩm' : 'Đã thêm sản phẩm vào quầy'
+                medicine
+                    ? 'Đã cập nhật sản phẩm'
+                    : requireInitialImport
+                      ? 'Đã thêm sản phẩm và nhập kho'
+                      : 'Đã thêm sản phẩm vào quầy'
             );
             void queryClient.invalidateQueries({
                 queryKey: ['workspace', selectedStoreId, 'medicines'],
@@ -447,6 +580,9 @@ function MedicineDialog({
             });
             void queryClient.invalidateQueries({
                 queryKey: ['workspace', selectedStoreId, 'reference-products'],
+            });
+            void queryClient.invalidateQueries({
+                queryKey: ['workspace', selectedStoreId, 'imports'],
             });
             form.reset(emptyValues);
             setSelectedReferenceProduct(null);
@@ -465,6 +601,7 @@ function MedicineDialog({
     });
 
     const errors = form.formState.errors;
+    const unitLabel = baseUnitName.toLowerCase();
     const sharedDetailsLocked = Boolean(medicine?.referenceProductId);
     const referenceDetailsLocked =
         sharedDetailsLocked || Boolean(selectedReferenceProduct);
@@ -487,12 +624,18 @@ function MedicineDialog({
             <DialogContent className="max-h-[92vh] overflow-y-auto sm:max-w-3xl">
                 <DialogHeader>
                     <DialogTitle>
-                        {medicine ? 'Cập nhật sản phẩm' : 'Thêm sản phẩm mới'}
+                        {medicine
+                            ? 'Cập nhật sản phẩm'
+                            : requireInitialImport
+                              ? 'Nhập hàng sản phẩm mới'
+                              : 'Thêm sản phẩm mới'}
                     </DialogTitle>
                     <DialogDescription>
                         {sharedDetailsLocked
                             ? 'Thông tin thuốc từ thư viện được dùng chung; mã hàng hóa, nhóm, vị trí, giá và tồn tối thiểu được cấu hình riêng cho quầy.'
-                            : 'Mã hàng hóa được gợi ý tự động và có thể chỉnh sửa; vị trí, giá và định mức tồn được áp dụng riêng cho quầy đang chọn.'}
+                            : requireInitialImport
+                              ? 'Sản phẩm được thêm vào danh mục và nhập kho ngay, kèm một phiếu nhập đã hoàn tất.'
+                              : 'Mã hàng hóa được gợi ý tự động và có thể chỉnh sửa; vị trí, giá và định mức tồn được áp dụng riêng cho quầy đang chọn.'}
                     </DialogDescription>
                 </DialogHeader>
                 {!medicine ? (
@@ -1029,17 +1172,6 @@ function MedicineDialog({
                             />
                         </Field>
                         <Field
-                            label="Quy cách"
-                            error={errors.specification?.message}
-                            className="sm:col-span-2"
-                        >
-                            <Input
-                                readOnly={referenceDetailsLocked}
-                                placeholder="Hộp 10 vỉ x 10 viên"
-                                {...form.register('specification')}
-                            />
-                        </Field>
-                        <Field
                             label="Hướng dẫn sử dụng"
                             error={errors.usageInstructions?.message}
                             className="sm:col-span-2"
@@ -1052,35 +1184,92 @@ function MedicineDialog({
                                 {...form.register('usageInstructions')}
                             />
                         </Field>
-                        <Field
-                            label={`Giá bán / ${baseUnitName.toLowerCase()}`}
+                        {requireInitialImport ? (
+                            <>
+                                <div className="border-border border-t pt-4 sm:col-span-2">
+                                    <h3 className="text-sm font-semibold">
+                                        Thông tin nhập hàng
+                                    </h3>
+                                    <p className="text-muted-foreground text-xs">
+                                        Giá và số lượng tính theo {unitLabel},
+                                        đơn vị nhỏ nhất của sản phẩm.
+                                    </p>
+                                </div>
+                                <NumberField
+                                    control={form.control}
+                                    name="importPrice"
+                                    label={`Giá nhập / ${unitLabel}`}
+                                    suffix="VND"
+                                    required
+                                    error={errors.importPrice?.message}
+                                />
+                            </>
+                        ) : null}
+                        <NumberField
+                            control={form.control}
+                            name="sellingPrice"
+                            label={`Giá bán / ${unitLabel}`}
+                            suffix="VND"
                             required
                             error={errors.sellingPrice?.message}
-                        >
-                            <Input
-                                type="number"
-                                min="0"
-                                step="100"
-                                inputMode="decimal"
-                                {...form.register('sellingPrice', {
-                                    valueAsNumber: true,
-                                })}
+                        />
+                        {requireInitialImport ? (
+                            <>
+                                <NumberField
+                                    control={form.control}
+                                    name="quantity"
+                                    label="Số lượng"
+                                    suffix={unitLabel}
+                                    required
+                                    error={errors.quantity?.message}
+                                />
+                                <Field
+                                    label="Số lô"
+                                    required
+                                    error={errors.batchNumber?.message}
+                                >
+                                    <Input
+                                        placeholder="LO-2026-01"
+                                        aria-invalid={Boolean(
+                                            errors.batchNumber
+                                        )}
+                                        {...form.register('batchNumber')}
+                                    />
+                                </Field>
+                                <Field
+                                    label="Hạn sử dụng"
+                                    required
+                                    error={errors.expiryDate?.message}
+                                >
+                                    <Input
+                                        type="date"
+                                        min={tomorrow}
+                                        aria-invalid={Boolean(
+                                            errors.expiryDate
+                                        )}
+                                        {...form.register('expiryDate')}
+                                    />
+                                </Field>
+                                <div className="border-primary/20 bg-secondary self-end rounded-lg border px-3 py-2">
+                                    <p className="text-muted-foreground text-xs">
+                                        Tổng tiền nhập
+                                    </p>
+                                    <p className="text-brand-navy text-base font-semibold">
+                                        {formatCurrency(
+                                            (importPrice ?? 0) * (quantity ?? 0)
+                                        )}
+                                    </p>
+                                </div>
+                            </>
+                        ) : (
+                            <NumberField
+                                control={form.control}
+                                name="minStock"
+                                label={`Tồn tối thiểu (${unitLabel})`}
+                                suffix={unitLabel}
+                                error={errors.minStock?.message}
                             />
-                        </Field>
-                        <Field
-                            label={`Tồn tối thiểu (${baseUnitName.toLowerCase()})`}
-                            error={errors.minStock?.message}
-                        >
-                            <Input
-                                type="number"
-                                min="0"
-                                step="1"
-                                inputMode="decimal"
-                                {...form.register('minStock', {
-                                    valueAsNumber: true,
-                                })}
-                            />
-                        </Field>
+                        )}
                         <Field
                             label="Ghi chú"
                             error={errors.description?.message}
@@ -1149,7 +1338,11 @@ function MedicineDialog({
                             {mutation.isPending ? (
                                 <LoaderCircle className="animate-spin" />
                             ) : null}
-                            {medicine ? 'Lưu thay đổi' : 'Thêm sản phẩm'}
+                            {medicine
+                                ? 'Lưu thay đổi'
+                                : requireInitialImport
+                                  ? 'Thêm và nhập kho'
+                                  : 'Thêm sản phẩm'}
                         </Button>
                     ) : null}
                 </DialogFooter>

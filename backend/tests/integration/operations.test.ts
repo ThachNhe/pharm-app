@@ -702,6 +702,68 @@ describe('Store operations flow', () => {
     expect(updatedLibraryRes.body.results[0]).toMatchObject({ isAddedToStore: true });
   });
 
+  test('should create a new product together with its first completed import', async () => {
+    await insertUsers([userOne, userTwo]);
+    const store = await prisma.store.create({ data: { name: 'New product import store' } });
+    await prisma.userStoreRole.create({ data: { userId: userOne.id, storeId: store.id, role: 'manager' } });
+    await prisma.user.update({ where: { id: userTwo.id }, data: { isSystemAdmin: true } });
+    const managerToken = accessToken(userOne.id);
+    const category = await prisma.productCategory.create({ data: { storeId: store.id, name: 'Dược phẩm' } });
+    const newProduct = (name: string, expiryDate: string) => ({
+      categoryId: category.id,
+      name,
+      baseUnitName: 'Viên',
+      sellingPrice: 2500,
+      initialImport: { quantity: 120, importPrice: 1500, batchNumber: 'LO-NEW-01', expiryDate },
+    });
+
+    const res = await request(app)
+      .post(`/v1/stores/${store.id}/medicines`)
+      .set('Authorization', `Bearer ${managerToken}`)
+      .send(newProduct('Vitamin C 500mg', futureDate(365)))
+      .expect(httpStatus.CREATED);
+
+    expect(res.body).toMatchObject({ name: 'Vitamin C 500mg', sellingPrice: 2500, totalStock: 120, availableStock: 120 });
+
+    const importsRes = await request(app)
+      .get(`/v1/stores/${store.id}/imports`)
+      .set('Authorization', `Bearer ${managerToken}`)
+      .expect(httpStatus.OK);
+    expect(importsRes.body.results).toHaveLength(1);
+    expect(importsRes.body.results[0]).toMatchObject({ status: 'completed', totalAmount: 180000 });
+    expect(importsRes.body.results[0].details[0]).toMatchObject({
+      medicineId: res.body.id,
+      batchNumber: 'LO-NEW-01',
+      quantity: 120,
+      importPrice: 1500,
+      unitName: 'Viên',
+    });
+
+    const batch = await prisma.stockBatch.findFirstOrThrow({ where: { storeId: store.id, medicineId: res.body.id } });
+    expect(Number(batch.quantityRemaining)).toBe(120);
+    expect(Number(batch.importPrice)).toBe(1500);
+    const movement = await prisma.inventoryMovement.findFirstOrThrow({ where: { stockBatchId: batch.id } });
+    expect(movement).toMatchObject({ type: 'import', referenceType: 'import_receipt', createdBy: userOne.id });
+    expect(Number(movement.quantityDelta)).toBe(120);
+    const auditActions = await prisma.auditLog.findMany({ where: { storeId: store.id }, select: { action: true } });
+    expect(auditActions.map(({ action }) => action).sort()).toEqual(['import.complete', 'medicine.create']);
+
+    await request(app)
+      .post(`/v1/stores/${store.id}/medicines`)
+      .set('Authorization', `Bearer ${managerToken}`)
+      .send(newProduct('Expired product', moment().format('YYYY-MM-DD')))
+      .expect(httpStatus.BAD_REQUEST);
+
+    await request(app)
+      .post(`/v1/stores/${store.id}/medicines`)
+      .set('Authorization', `Bearer ${accessToken(userTwo.id)}`)
+      .send(newProduct('System admin product', futureDate(365)))
+      .expect(httpStatus.FORBIDDEN);
+
+    expect(await prisma.storeMedicine.count({ where: { storeId: store.id } })).toBe(1);
+    expect(await prisma.importReceipt.count({ where: { storeId: store.id } })).toBe(1);
+  });
+
   test('should expose only one membership per user and store', async () => {
     await insertUsers([userOne]);
     const store = await prisma.store.create({ data: { name: 'Unique role store' } });

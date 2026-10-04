@@ -24,6 +24,13 @@ type MedicineUnitPayload = {
   isBaseUnit: boolean;
 };
 
+type InitialImportPayload = {
+  quantity: number | string;
+  importPrice: number | string;
+  batchNumber: string;
+  expiryDate: string | Date;
+};
+
 type MedicinePayload = {
   referenceProductId?: string | null;
   categoryId: string;
@@ -49,6 +56,7 @@ type MedicinePayload = {
   minStock?: number | string;
   isActive?: boolean;
   units?: MedicineUnitPayload[];
+  initialImport?: InitialImportPayload;
 };
 
 type ProductCategoryPayload = {
@@ -238,6 +246,46 @@ const writeAudit = async (
       targetType: data.targetType,
       targetId: data.targetId ?? null,
       metadata: data.metadata,
+    },
+  });
+};
+
+// Turns one import detail into sellable stock: a batch plus its inventory movement.
+const receiveImportDetail = async (
+  tx: Prisma.TransactionClient,
+  actor: Actor,
+  storeId: string,
+  receiptId: string,
+  detail: {
+    id: string;
+    medicineId: string;
+    batchNumber: string;
+    importPrice: Prisma.Decimal;
+    expiryDate: Date;
+    quantity: Prisma.Decimal;
+  },
+) => {
+  const batch = await tx.stockBatch.create({
+    data: {
+      storeId,
+      medicineId: detail.medicineId,
+      importDetailId: detail.id,
+      batchNumber: detail.batchNumber,
+      importPrice: detail.importPrice,
+      expiryDate: detail.expiryDate,
+      quantityRemaining: detail.quantity,
+    },
+  });
+  await tx.inventoryMovement.create({
+    data: {
+      storeId,
+      medicineId: detail.medicineId,
+      stockBatchId: batch.id,
+      type: 'import',
+      quantityDelta: detail.quantity,
+      referenceType: 'import_receipt',
+      referenceId: receiptId,
+      createdBy: actor.id,
     },
   });
 };
@@ -779,7 +827,15 @@ const queryReferenceProducts = async (actor: Actor, storeId: string, query: Page
 };
 
 const createMedicine = async (actor: Actor, storeId: string, body: MedicinePayload) => {
-  await getStoreAccess(actor, storeId, 'manager');
+  const { initialImport } = body;
+  if (initialImport) {
+    await getStoreOperationAccess(actor, storeId, 'manager');
+    if (toDateOnly(initialImport.expiryDate) <= currentBusinessDateOnly()) {
+      throw new ApiError(httpStatus.BAD_REQUEST, 'Hạn sử dụng phải sau ngày hiện tại');
+    }
+  } else {
+    await getStoreAccess(actor, storeId, 'manager');
+  }
   const code = body.code ? normalizeProductCode(body.code) : await getNextProductCode(storeId);
 
   return prisma.$transaction(async (tx) => {
@@ -935,7 +991,45 @@ const createMedicine = async (actor: Actor, storeId: string, body: MedicinePaylo
       targetId: medicine.id,
       metadata: body.referenceProductId ? { referenceProductId: body.referenceProductId } : undefined,
     });
-    return serializeMedicine(storeMedicine);
+
+    if (!initialImport) return serializeMedicine(storeMedicine);
+
+    // A new product's first stock is a completed import receipt in base units, created with the product.
+    const quantity = toDecimal(initialImport.quantity);
+    const importPrice = toDecimal(initialImport.importPrice);
+    const totalAmount = quantity.mul(importPrice);
+    const receipt = await tx.importReceipt.create({
+      data: {
+        storeId,
+        createdBy: actor.id,
+        status: 'completed',
+        totalAmount,
+        details: {
+          create: {
+            storeId,
+            medicineId: medicine.id,
+            batchNumber: initialImport.batchNumber.trim(),
+            quantity,
+            importPrice,
+            enteredQuantity: quantity,
+            enteredImportPrice: importPrice,
+            unitNameSnapshot: medicine.baseUnitName,
+            conversionRateSnapshot: toDecimal(1),
+            expiryDate: toDateOnly(initialImport.expiryDate),
+          },
+        },
+      },
+      include: { details: true },
+    });
+    await receiveImportDetail(tx, actor, storeId, receipt.id, receipt.details[0]);
+    await writeAudit(tx, actor, {
+      storeId,
+      action: 'import.complete',
+      targetType: 'import_receipt',
+      targetId: receipt.id,
+      metadata: { totalAmount: Number(totalAmount), itemCount: 1, newMedicineId: medicine.id },
+    });
+    return serializeMedicine(storeMedicine, { total: quantity, available: quantity });
   });
 };
 
@@ -1314,29 +1408,7 @@ const completeImportReceipt = async (actor: Actor, storeId: string, receiptId: s
         }
 
         for (const detail of draft.details) {
-          const batch = await tx.stockBatch.create({
-            data: {
-              storeId,
-              medicineId: detail.medicineId,
-              importDetailId: detail.id,
-              batchNumber: detail.batchNumber,
-              importPrice: detail.importPrice,
-              expiryDate: detail.expiryDate,
-              quantityRemaining: detail.quantity,
-            },
-          });
-          await tx.inventoryMovement.create({
-            data: {
-              storeId,
-              medicineId: detail.medicineId,
-              stockBatchId: batch.id,
-              type: 'import',
-              quantityDelta: detail.quantity,
-              referenceType: 'import_receipt',
-              referenceId: draft.id,
-              createdBy: actor.id,
-            },
-          });
+          await receiveImportDetail(tx, actor, storeId, draft.id, detail);
         }
 
         await writeAudit(tx, actor, {

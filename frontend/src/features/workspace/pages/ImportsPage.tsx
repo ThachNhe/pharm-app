@@ -7,6 +7,7 @@ import {
     CheckCircle2,
     Eye,
     LoaderCircle,
+    PackagePlus,
     Plus,
     Trash2,
     XCircle,
@@ -33,6 +34,7 @@ import { getApiErrorMessage } from '../utils/api-error';
 import { workspaceService } from '../services/workspace.service';
 import type { ImportReceipt, ReceiptStatus } from '../types';
 import { useWorkspace } from '../hooks/useWorkspace';
+import { MedicineDialog } from './MedicinesPage';
 import {
     EmptyState,
     ErrorState,
@@ -181,7 +183,7 @@ function CreateImportDialog({
         <Dialog open={open} onOpenChange={onOpenChange}>
             <DialogContent className="max-h-[94vh] overflow-y-auto sm:max-w-5xl">
                 <DialogHeader>
-                    <DialogTitle>Lập phiếu nhập hàng</DialogTitle>
+                    <DialogTitle>Nhập sản phẩm có sẵn</DialogTitle>
                     <DialogDescription>
                         Phiếu được lưu ở trạng thái nháp và chưa làm thay đổi
                         tồn kho.
@@ -711,6 +713,7 @@ export function ImportsPage() {
     const [page, setPage] = useState(1);
     const [status, setStatus] = useState<ReceiptStatus | ''>('');
     const [createOpen, setCreateOpen] = useState(false);
+    const [newProductOpen, setNewProductOpen] = useState(false);
     const [selectedReceipt, setSelectedReceipt] =
         useState<ImportReceipt | null>(null);
     const { selectedStoreId, hasRole, canImport } = useWorkspace();
@@ -728,19 +731,25 @@ export function ImportsPage() {
 
     if (!hasRole('manager')) return <PermissionDenied />;
 
+    const importActions = (
+        <div className="flex flex-wrap gap-2">
+            <Button variant="outline" onClick={() => setNewProductOpen(true)}>
+                <PackagePlus />
+                Nhập sản phẩm mới
+            </Button>
+            <Button onClick={() => setCreateOpen(true)}>
+                <Plus />
+                Nhập sản phẩm có sẵn
+            </Button>
+        </div>
+    );
+
     return (
         <div className="space-y-5">
             <PageHeader
                 title="Nhập hàng"
-                description="Lập phiếu nháp, kiểm tra lô và xác nhận nhập kho theo từng quầy."
-                actions={
-                    canImport ? (
-                        <Button onClick={() => setCreateOpen(true)}>
-                            <Plus />
-                            Lập phiếu nhập
-                        </Button>
-                    ) : undefined
-                }
+                description="Nhập thêm sản phẩm đã có trong danh mục hoặc nhập sản phẩm mới vào kho của quầy."
+                actions={canImport ? importActions : undefined}
             />
 
             <Panel className="overflow-hidden">
@@ -782,12 +791,7 @@ export function ImportsPage() {
                         title="Chưa có phiếu nhập phù hợp"
                         description="Lập phiếu nhập đầu tiên để tiếp nhận lô hàng vào kho."
                         action={
-                            canImport && !status ? (
-                                <Button onClick={() => setCreateOpen(true)}>
-                                    <Plus />
-                                    Lập phiếu nhập
-                                </Button>
-                            ) : undefined
+                            canImport && !status ? importActions : undefined
                         }
                     />
                 ) : (
@@ -909,6 +913,13 @@ export function ImportsPage() {
                     onOpenChange={setCreateOpen}
                 />
             )}
+            {canImport && newProductOpen ? (
+                <MedicineDialog
+                    open
+                    onOpenChange={setNewProductOpen}
+                    medicine={null}
+                />
+            ) : null}
             <ImportDetailDialog
                 receipt={selectedReceipt}
                 onClose={() => setSelectedReceipt(null)}
