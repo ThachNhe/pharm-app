@@ -238,7 +238,7 @@ const getSales = {
 
 const saleItem = Joi.object().keys({
   medicineId: Joi.string().required().custom(objectId),
-  quantity: Joi.number().positive().required(),
+  quantity: Joi.number().integer().positive().required(),
   unitId: Joi.string().custom(objectId),
 });
 
@@ -246,7 +246,7 @@ const createSale = {
   params: Joi.object().keys(storeParams),
   body: Joi.object().keys({
     paymentMethod: Joi.string().valid('cash', 'bank_transfer', 'card', 'e_wallet', 'other').required(),
-    discountAmount: Joi.number().min(0),
+    discountAmount: Joi.number().integer().min(0),
     note: Joi.string().allow('', null).max(2000),
     items: Joi.array().items(saleItem).min(1).max(100).required(),
   }),

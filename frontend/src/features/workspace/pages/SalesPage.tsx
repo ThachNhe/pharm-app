@@ -22,6 +22,7 @@ import {
     DialogTitle,
 } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
+import { NumberInput } from '@/components/ui/number-input';
 import { useDebounce } from '@/hooks/useDebounce';
 import { formatCurrency, formatDateTime, formatNumber } from '@/lib/utils';
 import { getApiErrorMessage } from '../utils/api-error';
@@ -55,6 +56,10 @@ const getBaseUnit = (medicine: Medicine) =>
 const getCartUnit = (item: CartItem) =>
     item.medicine.units.find((unit) => unit.id === item.unitId) ??
     getBaseUnit(item.medicine);
+
+// Sales are whole units only: the most of a unit that available stock can cover.
+const getMaxQuantity = (medicine: Medicine, conversionRate: number) =>
+    Math.floor(medicine.availableStock / conversionRate);
 
 const paymentLabels: Record<PaymentMethod, string> = {
     cash: 'Tiền mặt',
@@ -257,7 +262,7 @@ function SaleReceipt({
 function PointOfSale({ onCreated }: { onCreated: (sale: Sale) => void }) {
     const [search, setSearch] = useState('');
     const [cart, setCart] = useState<CartItem[]>([]);
-    const [discount, setDiscount] = useState(0);
+    const [discount, setDiscount] = useState<number | null>(null);
     const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('cash');
     const [note, setNote] = useState('');
     const { selectedStoreId } = useWorkspace();
@@ -292,23 +297,39 @@ function PointOfSale({ onCreated }: { onCreated: (sale: Sale) => void }) {
                 item.quantity,
         0
     );
-    const payable = Math.max(0, subtotal - discount);
+    const discountAmount = discount ?? 0;
+    const discountTooHigh = discountAmount > subtotal;
+    const payable = Math.max(0, subtotal - discountAmount);
 
-    const updateQuantity = (medicineId: string, quantity: number) => {
+    // Quantity 0 is kept while the cashier retypes it; removal is explicit.
+    const setQuantity = (medicineId: string, quantity: number | null) => {
         setCart((current) =>
-            current
-                .map((item) => {
-                    if (item.medicine.id !== medicineId) return item;
-                    const maxQuantity =
-                        item.medicine.availableStock /
-                        getCartUnit(item).conversionRate;
-                    return {
-                        ...item,
-                        quantity: Math.min(Math.max(quantity, 0), maxQuantity),
-                    };
-                })
-                .filter((item) => item.quantity > 0)
+            current.map((item) =>
+                item.medicine.id === medicineId
+                    ? {
+                          ...item,
+                          quantity: Math.min(
+                              Math.max(Math.floor(quantity ?? 0), 0),
+                              getMaxQuantity(
+                                  item.medicine,
+                                  getCartUnit(item).conversionRate
+                              )
+                          ),
+                      }
+                    : item
+            )
         );
+    };
+
+    const removeItem = (medicineId: string) => {
+        setCart((current) =>
+            current.filter((item) => item.medicine.id !== medicineId)
+        );
+    };
+
+    const decreaseQuantity = (item: CartItem) => {
+        if (item.quantity <= 1) removeItem(item.medicine.id);
+        else setQuantity(item.medicine.id, item.quantity - 1);
     };
 
     const changeUnit = (medicineId: string, unitId: string) => {
@@ -319,14 +340,15 @@ function PointOfSale({ onCreated }: { onCreated: (sale: Sale) => void }) {
                 const nextUnit =
                     item.medicine.units.find((unit) => unit.id === unitId) ??
                     getBaseUnit(item.medicine);
+                const converted = Math.floor(
+                    (item.quantity * previousRate) / nextUnit.conversionRate
+                );
                 return {
                     ...item,
                     unitId: nextUnit.id ?? '',
-                    quantity: Number(
-                        (
-                            (item.quantity * previousRate) /
-                            nextUnit.conversionRate
-                        ).toFixed(2)
+                    quantity: Math.min(
+                        Math.max(converted, 1),
+                        getMaxQuantity(item.medicine, nextUnit.conversionRate)
                     ),
                 };
             })
@@ -349,24 +371,17 @@ function PointOfSale({ onCreated }: { onCreated: (sale: Sale) => void }) {
                     { medicine, quantity: 1, unitId: base.id ?? '' },
                 ];
             }
-            const unit = getCartUnit(existing);
-            if (
-                existing.quantity * unit.conversionRate >=
-                medicine.availableStock
-            ) {
+            const maxQuantity = getMaxQuantity(
+                medicine,
+                getCartUnit(existing).conversionRate
+            );
+            if (existing.quantity >= maxQuantity) {
                 toast.warning(`Đã đạt số lượng tồn của ${medicine.name}`);
                 return current;
             }
             return current.map((item) =>
                 item.medicine.id === medicine.id
-                    ? {
-                          ...item,
-                          quantity: Math.min(
-                              item.quantity + 1,
-                              item.medicine.availableStock /
-                                  getCartUnit(item).conversionRate
-                          ),
-                      }
+                    ? { ...item, quantity: item.quantity + 1 }
                     : item
             );
         });
@@ -376,7 +391,7 @@ function PointOfSale({ onCreated }: { onCreated: (sale: Sale) => void }) {
         mutationFn: () =>
             workspaceService.createSale(selectedStoreId, {
                 paymentMethod,
-                discountAmount: discount,
+                discountAmount,
                 note: note || undefined,
                 items: cart.map((item) => ({
                     medicineId: item.medicine.id,
@@ -387,7 +402,7 @@ function PointOfSale({ onCreated }: { onCreated: (sale: Sale) => void }) {
         onSuccess: (sale) => {
             toast.success('Đã hoàn tất đơn bán');
             setCart([]);
-            setDiscount(0);
+            setDiscount(null);
             setNote('');
             void queryClient.invalidateQueries({
                 queryKey: ['workspace', selectedStoreId],
@@ -408,7 +423,11 @@ function PointOfSale({ onCreated }: { onCreated: (sale: Sale) => void }) {
             toast.error('Hãy thêm ít nhất một sản phẩm vào đơn');
             return;
         }
-        if (discount < 0 || discount > subtotal) {
+        if (cart.some((item) => item.quantity < 1)) {
+            toast.error('Nhập số lượng cho tất cả sản phẩm trong đơn');
+            return;
+        }
+        if (discountTooHigh) {
             toast.error('Giảm giá không được lớn hơn tiền hàng');
             return;
         }
@@ -468,23 +487,53 @@ function PointOfSale({ onCreated }: { onCreated: (sale: Sale) => void }) {
                                                     Kê đơn
                                                 </StatusBadge>
                                             ) : null}
+                                            {medicine.availableStock <= 0 ? (
+                                                <StatusBadge tone="danger">
+                                                    Hết hàng
+                                                </StatusBadge>
+                                            ) : null}
                                         </div>
                                         <p className="text-muted-foreground mt-0.5 text-xs">
-                                            {medicine.barcode ||
-                                                'Không có mã vạch'}{' '}
-                                            · Còn{' '}
-                                            {formatNumber(
-                                                medicine.availableStock
-                                            )}{' '}
-                                            {medicine.baseUnitName.toLowerCase()}
+                                            Tồn:{' '}
+                                            <span className="text-foreground font-medium">
+                                                {formatNumber(
+                                                    medicine.availableStock
+                                                )}{' '}
+                                                {medicine.baseUnitName.toLowerCase()}
+                                            </span>
+                                            {medicine.barcode
+                                                ? ` · Mã vạch: ${medicine.barcode}`
+                                                : ''}
                                         </p>
                                     </div>
                                     <div className="shrink-0 text-right">
+                                        <p className="text-muted-foreground text-xs">
+                                            Giá bán
+                                        </p>
                                         <p className="font-semibold">
                                             {formatCurrency(
                                                 medicine.sellingPrice
                                             )}
+                                            <span className="text-muted-foreground text-xs font-normal">
+                                                {' '}
+                                                /{' '}
+                                                {medicine.baseUnitName.toLowerCase()}
+                                            </span>
                                         </p>
+                                        {medicine.units
+                                            .filter((unit) => !unit.isBaseUnit)
+                                            .map((unit) => (
+                                                <p
+                                                    key={unit.id}
+                                                    className="text-muted-foreground text-xs"
+                                                >
+                                                    {formatCurrency(
+                                                        medicine.sellingPrice *
+                                                            unit.conversionRate
+                                                    )}{' '}
+                                                    / {unit.name.toLowerCase()}
+                                                </p>
+                                            ))}
                                         {cartItem ? (
                                             <p className="text-primary text-xs font-medium">
                                                 Trong giỏ:{' '}
@@ -495,12 +544,7 @@ function PointOfSale({ onCreated }: { onCreated: (sale: Sale) => void }) {
                                                     cartItem
                                                 ).name.toLowerCase()}
                                             </p>
-                                        ) : (
-                                            <p className="text-muted-foreground text-xs">
-                                                /{' '}
-                                                {medicine.baseUnitName.toLowerCase()}
-                                            </p>
-                                        )}
+                                        ) : null}
                                     </div>
                                 </button>
                             );
@@ -530,33 +574,40 @@ function PointOfSale({ onCreated }: { onCreated: (sale: Sale) => void }) {
                         <div className="divide-border divide-y">
                             {cart.map((item) => {
                                 const unit = getCartUnit(item);
-                                const maxQuantity =
-                                    item.medicine.availableStock /
+                                const unitLabel = unit.name.toLowerCase();
+                                const unitPrice =
+                                    item.medicine.sellingPrice *
                                     unit.conversionRate;
+                                const maxQuantity = getMaxQuantity(
+                                    item.medicine,
+                                    unit.conversionRate
+                                );
+                                const missingQuantity = item.quantity < 1;
                                 return (
-                                    <div key={item.medicine.id} className="p-4">
+                                    <div
+                                        key={item.medicine.id}
+                                        className="space-y-3 p-4"
+                                    >
                                         <div className="flex items-start gap-3">
                                             <div className="min-w-0 flex-1">
                                                 <p className="font-medium">
                                                     {item.medicine.name}
                                                 </p>
                                                 <p className="text-muted-foreground mt-0.5 text-xs">
-                                                    {formatCurrency(
-                                                        item.medicine
-                                                            .sellingPrice *
-                                                            unit.conversionRate
-                                                    )}{' '}
-                                                    / {unit.name.toLowerCase()}
+                                                    Đơn giá:{' '}
+                                                    <span className="text-foreground font-medium">
+                                                        {formatCurrency(
+                                                            unitPrice
+                                                        )}
+                                                    </span>{' '}
+                                                    / {unitLabel}
                                                 </p>
                                             </div>
                                             <Button
                                                 size="icon-sm"
                                                 variant="ghost"
                                                 onClick={() =>
-                                                    updateQuantity(
-                                                        item.medicine.id,
-                                                        0
-                                                    )
+                                                    removeItem(item.medicine.id)
                                                 }
                                                 aria-label={`Xóa ${item.medicine.name}`}
                                                 title="Xóa khỏi giỏ"
@@ -565,7 +616,7 @@ function PointOfSale({ onCreated }: { onCreated: (sale: Sale) => void }) {
                                             </Button>
                                         </div>
                                         {item.medicine.units.length > 1 ? (
-                                            <label className="mt-3 grid gap-1 text-xs font-medium">
+                                            <label className="grid gap-1 text-xs font-medium">
                                                 Đơn vị bán
                                                 <select
                                                     value={unit.id ?? ''}
@@ -585,6 +636,12 @@ function PointOfSale({ onCreated }: { onCreated: (sale: Sale) => void }) {
                                                                 value={
                                                                     option.id
                                                                 }
+                                                                disabled={
+                                                                    getMaxQuantity(
+                                                                        item.medicine,
+                                                                        option.conversionRate
+                                                                    ) < 1
+                                                                }
                                                             >
                                                                 {option.name}
                                                                 {option.isBaseUnit
@@ -596,64 +653,90 @@ function PointOfSale({ onCreated }: { onCreated: (sale: Sale) => void }) {
                                                 </select>
                                             </label>
                                         ) : null}
-                                        <div className="mt-3 flex items-center justify-between gap-3">
-                                            <div className="border-input flex items-center rounded-md border">
-                                                <Button
-                                                    size="icon-sm"
-                                                    variant="ghost"
-                                                    onClick={() =>
-                                                        updateQuantity(
-                                                            item.medicine.id,
-                                                            item.quantity - 1
-                                                        )
-                                                    }
-                                                    aria-label={`Giảm ${item.medicine.name}`}
-                                                >
-                                                    <Minus />
-                                                </Button>
-                                                <Input
-                                                    type="number"
-                                                    min="0.01"
-                                                    max={maxQuantity}
-                                                    step="0.01"
-                                                    value={item.quantity}
-                                                    onChange={(event) =>
-                                                        updateQuantity(
-                                                            item.medicine.id,
-                                                            Number(
-                                                                event.target
-                                                                    .value
+                                        <div className="flex items-end justify-between gap-3">
+                                            <div className="grid gap-1">
+                                                <span className="text-xs font-medium">
+                                                    Số lượng ({unitLabel})
+                                                </span>
+                                                <div className="border-input flex w-fit items-center rounded-md border">
+                                                    <Button
+                                                        size="icon-sm"
+                                                        variant="ghost"
+                                                        onClick={() =>
+                                                            decreaseQuantity(
+                                                                item
                                                             )
-                                                        )
+                                                        }
+                                                        aria-label={`Giảm ${item.medicine.name}`}
+                                                    >
+                                                        <Minus />
+                                                    </Button>
+                                                    <div className="w-20">
+                                                        <NumberInput
+                                                            value={
+                                                                item.quantity ||
+                                                                null
+                                                            }
+                                                            onValueChange={(
+                                                                value
+                                                            ) =>
+                                                                setQuantity(
+                                                                    item
+                                                                        .medicine
+                                                                        .id,
+                                                                    value
+                                                                )
+                                                            }
+                                                            className="h-8 rounded-none border-y-0 text-center shadow-none"
+                                                            aria-label={`Số lượng ${item.medicine.name}`}
+                                                            aria-invalid={
+                                                                missingQuantity
+                                                            }
+                                                        />
+                                                    </div>
+                                                    <Button
+                                                        size="icon-sm"
+                                                        variant="ghost"
+                                                        disabled={
+                                                            item.quantity >=
+                                                            maxQuantity
+                                                        }
+                                                        onClick={() =>
+                                                            setQuantity(
+                                                                item.medicine
+                                                                    .id,
+                                                                item.quantity +
+                                                                    1
+                                                            )
+                                                        }
+                                                        aria-label={`Tăng ${item.medicine.name}`}
+                                                    >
+                                                        <Plus />
+                                                    </Button>
+                                                </div>
+                                                <span
+                                                    className={
+                                                        missingQuantity
+                                                            ? 'text-destructive text-xs'
+                                                            : 'text-muted-foreground text-xs'
                                                     }
-                                                    className="h-8 w-20 rounded-none border-y-0 text-center shadow-none"
-                                                    aria-label={`Số lượng ${item.medicine.name}`}
-                                                />
-                                                <Button
-                                                    size="icon-sm"
-                                                    variant="ghost"
-                                                    disabled={
-                                                        item.quantity >=
-                                                        maxQuantity
-                                                    }
-                                                    onClick={() =>
-                                                        updateQuantity(
-                                                            item.medicine.id,
-                                                            item.quantity + 1
-                                                        )
-                                                    }
-                                                    aria-label={`Tăng ${item.medicine.name}`}
                                                 >
-                                                    <Plus />
-                                                </Button>
+                                                    {missingQuantity
+                                                        ? 'Nhập số lượng'
+                                                        : `Tối đa ${formatNumber(maxQuantity)} ${unitLabel}`}
+                                                </span>
                                             </div>
-                                            <p className="font-semibold">
-                                                {formatCurrency(
-                                                    item.medicine.sellingPrice *
-                                                        unit.conversionRate *
-                                                        item.quantity
-                                                )}
-                                            </p>
+                                            <div className="text-right">
+                                                <p className="text-muted-foreground text-xs">
+                                                    Thành tiền
+                                                </p>
+                                                <p className="font-semibold">
+                                                    {formatCurrency(
+                                                        unitPrice *
+                                                            item.quantity
+                                                    )}
+                                                </p>
+                                            </div>
                                         </div>
                                     </div>
                                 );
@@ -686,17 +769,18 @@ function PointOfSale({ onCreated }: { onCreated: (sale: Sale) => void }) {
                         </label>
                         <label className="grid gap-1 text-xs font-medium">
                             Giảm giá
-                            <Input
-                                type="number"
-                                min="0"
-                                max={subtotal}
-                                step="100"
+                            <NumberInput
                                 value={discount}
-                                onChange={(event) =>
-                                    setDiscount(Number(event.target.value))
-                                }
-                                inputMode="decimal"
+                                onValueChange={setDiscount}
+                                suffix="VND"
+                                placeholder="0"
+                                aria-invalid={discountTooHigh}
                             />
+                            {discountTooHigh ? (
+                                <span className="text-destructive font-normal">
+                                    Không được lớn hơn tiền hàng
+                                </span>
+                            ) : null}
                         </label>
                     </div>
                     <label className="grid gap-1 text-xs font-medium">
@@ -714,6 +798,14 @@ function PointOfSale({ onCreated }: { onCreated: (sale: Sale) => void }) {
                             </span>
                             <span>{formatCurrency(subtotal)}</span>
                         </div>
+                        {discountAmount > 0 ? (
+                            <div className="flex justify-between">
+                                <span className="text-muted-foreground">
+                                    Giảm giá
+                                </span>
+                                <span>-{formatCurrency(discountAmount)}</span>
+                            </div>
+                        ) : null}
                         <div className="flex items-end justify-between gap-3">
                             <span className="font-semibold">
                                 Khách thanh toán

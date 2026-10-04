@@ -204,6 +204,17 @@ describe('Store operations flow', () => {
       expect(staffDashboard.body.today).not.toHaveProperty('grossProfit');
       expect(staffDashboard.body.inventory).not.toHaveProperty('value');
 
+      for (const invalidSale of [
+        { items: [{ medicineId: medicineRes.body.id, quantity: 1.5, unitId: blisterUnitId }] },
+        { discountAmount: 500.5, items: [{ medicineId: medicineRes.body.id, quantity: 1, unitId: blisterUnitId }] },
+      ]) {
+        await request(app)
+          .post(`/v1/stores/${store.id}/sales`)
+          .set('Authorization', `Bearer ${staffToken}`)
+          .send({ paymentMethod: 'cash', ...invalidSale })
+          .expect(httpStatus.BAD_REQUEST);
+      }
+
       const saleRes = await request(app)
         .post(`/v1/stores/${store.id}/sales`)
         .set('Authorization', `Bearer ${staffToken}`)
