@@ -6,6 +6,7 @@ import * as loginOtpService from './loginOtp.service.js';
 import { prisma } from '../config/database.js';
 import ApiError from '../utils/ApiError.js';
 import { tokenTypes } from '../config/tokens.js';
+import { publicUserSelect } from '../utils/user.js';
 
 /**
  * Login with username and password
@@ -17,6 +18,9 @@ const loginUserWithEmailAndPassword = async (email: string, password: string) =>
   const user = await userService.getUserByEmail(email);
   if (!user || !(await bcrypt.compare(password, user.password))) {
     throw new ApiError(httpStatus.UNAUTHORIZED, 'Incorrect email or password');
+  }
+  if (!user.isActive) {
+    throw new ApiError(httpStatus.FORBIDDEN, 'Account is disabled');
   }
 
   const challenge = await loginOtpService.createLoginOtp(user.id, user.email);
@@ -62,10 +66,14 @@ const refreshAuth = async (refreshToken?: string) => {
       throw new Error();
     }
     const refreshTokenDoc = await tokenService.verifyToken(refreshToken, tokenTypes.REFRESH);
-    const user = await userService.getUserById(refreshTokenDoc.userId);
-    if (!user) {
+    const authUser = await prisma.user.findUnique({
+      where: { id: refreshTokenDoc.userId },
+      select: { ...publicUserSelect, isActive: true },
+    });
+    if (!authUser || !authUser.isActive) {
       throw new Error();
     }
+    const { isActive: _isActive, ...user } = authUser;
     const access = tokenService.generateAccessToken(user);
     return { user, tokens: { access } };
   } catch (error) {

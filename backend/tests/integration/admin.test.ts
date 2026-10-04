@@ -15,6 +15,20 @@ setupTestDB();
 const createAccessToken = (userId: string) =>
   tokenService.generateToken(userId, moment().add(config.jwt.accessExpirationMinutes, 'minutes'), tokenTypes.ACCESS);
 
+const saveRefreshToken = async (userId: string) => {
+  const expires = moment().add(config.jwt.refreshExpirationDays, 'days');
+  const refreshToken = tokenService.generateToken(userId, expires, tokenTypes.REFRESH);
+  await tokenService.saveToken(refreshToken, userId, expires, tokenTypes.REFRESH);
+  return refreshToken;
+};
+
+const expectRefreshStatus = async (refreshToken: string, status: number) => {
+  await request(app)
+    .post('/v1/auth/refresh-tokens')
+    .set('Cookie', [`refreshToken=${refreshToken}`])
+    .expect(status);
+};
+
 describe('Admin routes', () => {
   describe('GET /v1/admin/me', () => {
     test('should return 403 if staff tries to access admin panel', async () => {
@@ -234,6 +248,8 @@ describe('Admin routes', () => {
         ],
       });
 
+      const refreshToken = await saveRefreshToken(userTwo.id);
+
       await request(app)
         .patch(`/v1/admin/users/${userTwo.id}`)
         .set('Authorization', `Bearer ${createAccessToken(userOne.id)}`)
@@ -242,6 +258,8 @@ describe('Admin routes', () => {
           isActive: false,
         })
         .expect(httpStatus.OK);
+
+      await expectRefreshStatus(refreshToken, httpStatus.OK);
 
       const user = await prisma.user.findUniqueOrThrow({
         where: { id: userTwo.id },
@@ -284,6 +302,69 @@ describe('Admin routes', () => {
 
       const owner = await prisma.user.findUniqueOrThrow({ where: { id: userTwo.id } });
       expect(owner.isActive).toBe(true);
+    });
+  });
+
+  describe('Session revocation', () => {
+    const setupStoreWithStaff = async () => {
+      await insertUsers([userOne, userTwo]);
+      const store = await prisma.store.create({ data: { name: 'Revocation store' } });
+      await prisma.userStoreRole.createMany({
+        data: [
+          { userId: userOne.id, storeId: store.id, role: 'owner' },
+          { userId: userTwo.id, storeId: store.id, role: 'staff' },
+        ],
+      });
+      return store;
+    };
+
+    test('should revoke refresh tokens and pending OTPs when a password is reset', async () => {
+      const store = await setupStoreWithStaff();
+      const refreshToken = await saveRefreshToken(userTwo.id);
+      await prisma.loginOtp.create({
+        data: { userId: userTwo.id, codeHash: 'pending', expiresAt: moment().add(5, 'minutes').toDate() },
+      });
+
+      await request(app)
+        .post(`/v1/admin/users/${userTwo.id}/reset-password`)
+        .set('Authorization', `Bearer ${createAccessToken(userOne.id)}`)
+        .send({ storeId: store.id, password: 'newPassword1' })
+        .expect(httpStatus.OK);
+
+      expect(await prisma.token.count({ where: { userId: userTwo.id } })).toBe(0);
+      expect(await prisma.loginOtp.count({ where: { userId: userTwo.id } })).toBe(0);
+      await expectRefreshStatus(refreshToken, httpStatus.UNAUTHORIZED);
+    });
+
+    test('should revoke refresh tokens when a password is changed through user update', async () => {
+      const store = await setupStoreWithStaff();
+      const refreshToken = await saveRefreshToken(userTwo.id);
+
+      await request(app)
+        .patch(`/v1/admin/users/${userTwo.id}`)
+        .set('Authorization', `Bearer ${createAccessToken(userOne.id)}`)
+        .send({ storeId: store.id, password: 'newPassword1' })
+        .expect(httpStatus.OK);
+
+      await expectRefreshStatus(refreshToken, httpStatus.UNAUTHORIZED);
+    });
+
+    test('should revoke all sessions when system admin disables an account', async () => {
+      await insertUsers([{ ...admin, isSystemAdmin: true }, userTwo]);
+      const refreshToken = await saveRefreshToken(userTwo.id);
+
+      await request(app)
+        .patch(`/v1/admin/users/${userTwo.id}`)
+        .set('Authorization', `Bearer ${createAccessToken(admin.id)}`)
+        .send({ isActive: false })
+        .expect(httpStatus.OK);
+
+      expect(await prisma.token.count({ where: { userId: userTwo.id } })).toBe(0);
+      await expectRefreshStatus(refreshToken, httpStatus.UNAUTHORIZED);
+      await request(app)
+        .get('/v1/stores/context')
+        .set('Authorization', `Bearer ${createAccessToken(userTwo.id)}`)
+        .expect(httpStatus.UNAUTHORIZED);
     });
   });
 });

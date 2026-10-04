@@ -62,31 +62,40 @@ const createLoginOtp = async (userId: string, email: string): Promise<LoginOtpCh
 };
 
 const verifyLoginOtp = async (challengeId: string, code: string): Promise<PublicUser> => {
+  // Reserve an attempt in one conditional UPDATE so concurrent guesses cannot exceed maxAttempts.
+  const reserved = await prisma.loginOtp.updateMany({
+    where: {
+      id: challengeId,
+      consumedAt: null,
+      expiresAt: { gt: new Date() },
+      attempts: { lt: config.otp.maxAttempts },
+    },
+    data: { attempts: { increment: 1 } },
+  });
+
+  if (reserved.count !== 1) {
+    const exhausted = await prisma.loginOtp.findFirst({
+      where: {
+        id: challengeId,
+        consumedAt: null,
+        expiresAt: { gt: new Date() },
+        attempts: { gte: config.otp.maxAttempts },
+      },
+      select: { id: true },
+    });
+    throw new ApiError(httpStatus.UNAUTHORIZED, exhausted ? 'Too many attempts' : 'Invalid or expired code');
+  }
+
   const challenge = await prisma.loginOtp.findUnique({
     where: { id: challengeId },
     include: {
       user: {
-        select: publicUserSelect,
+        select: { ...publicUserSelect, isActive: true },
       },
     },
   });
 
-  if (!challenge || challenge.consumedAt || challenge.expiresAt < new Date()) {
-    throw new ApiError(httpStatus.UNAUTHORIZED, 'Invalid or expired code');
-  }
-
-  if (challenge.attempts >= config.otp.maxAttempts) {
-    throw new ApiError(httpStatus.UNAUTHORIZED, 'Too many attempts');
-  }
-
-  const codeHash = hashOtp(challenge.id, code.trim());
-
-  if (!isHashMatch(codeHash, challenge.codeHash)) {
-    await prisma.loginOtp.update({
-      where: { id: challenge.id },
-      data: { attempts: { increment: 1 } },
-    });
-
+  if (!challenge || !isHashMatch(hashOtp(challenge.id, code.trim()), challenge.codeHash)) {
     throw new ApiError(httpStatus.UNAUTHORIZED, 'Invalid or expired code');
   }
 
@@ -104,7 +113,12 @@ const verifyLoginOtp = async (challengeId: string, code: string): Promise<Public
     throw new ApiError(httpStatus.UNAUTHORIZED, 'Invalid or expired code');
   }
 
-  return challenge.user;
+  const { isActive, ...user } = challenge.user;
+  if (!isActive) {
+    throw new ApiError(httpStatus.FORBIDDEN, 'Account is disabled');
+  }
+
+  return user;
 };
 
 export { createLoginOtp, hashOtp, verifyLoginOtp };

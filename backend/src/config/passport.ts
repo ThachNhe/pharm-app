@@ -22,7 +22,7 @@ const jwtVerify = async (payload, done: VerifiedCallback) => {
       where: { id: payload.sub },
       select: authenticatedUserSelect,
     });
-    if (!user) {
+    if (!user || !user.isActive) {
       return done(null, false);
     }
     done(null, user);

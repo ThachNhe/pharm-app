@@ -35,6 +35,13 @@ const getLoginOtpCode = (sendMailSpy) => {
   return message.text?.match(/\b\d{6}\b/)?.[0];
 };
 
+const saveRefreshToken = async (userId: string) => {
+  const expires = moment().add(config.jwt.refreshExpirationDays, 'days');
+  const refreshToken = tokenService.generateToken(userId, expires, tokenTypes.REFRESH);
+  await tokenService.saveToken(refreshToken, userId, expires, tokenTypes.REFRESH);
+  return refreshToken;
+};
+
 describe('Auth routes', () => {
   test('should not expose public registration', async () => {
     await request(app).post('/v1/auth/register').send({}).expect(httpStatus.NOT_FOUND);
@@ -98,6 +105,21 @@ describe('Auth routes', () => {
       const res = await request(app).post('/v1/auth/login').send(loginCredentials).expect(httpStatus.UNAUTHORIZED);
 
       expect(res.body).toEqual({ code: httpStatus.UNAUTHORIZED, message: 'Incorrect email or password' });
+    });
+  });
+
+  describe('POST /v1/auth/login (disabled account)', () => {
+    test('should return 403 without sending an OTP if the account is disabled', async () => {
+      await insertUsers([{ ...userOne, isActive: false }]);
+      const sendMailSpy = vi.spyOn(emailService.transport, 'sendMail').mockResolvedValue({} as never);
+
+      await request(app)
+        .post('/v1/auth/login')
+        .send({ email: userOne.email, password: userOne.password })
+        .expect(httpStatus.FORBIDDEN);
+
+      expect(sendMailSpy).not.toHaveBeenCalled();
+      expect(await prisma.loginOtp.count()).toBe(0);
     });
   });
 
@@ -194,6 +216,72 @@ describe('Auth routes', () => {
         .post('/v1/auth/verify-login-otp')
         .send({ challengeId, code: '123456' })
         .expect(httpStatus.UNAUTHORIZED);
+    });
+
+    test('should not exceed max attempts when wrong codes are sent concurrently', async () => {
+      await insertUsers([userOne]);
+
+      const loginRes = await request(app)
+        .post('/v1/auth/login')
+        .send({ email: userOne.email, password: userOne.password })
+        .expect(httpStatus.OK);
+
+      const responses = await Promise.all(
+        Array.from({ length: config.otp.maxAttempts * 4 }, () =>
+          request(app).post('/v1/auth/verify-login-otp').send({ challengeId: loginRes.body.challengeId, code: '000000' }),
+        ),
+      );
+
+      expect(responses.every((res) => res.status === httpStatus.UNAUTHORIZED)).toBe(true);
+      const dbLoginOtp = await prisma.loginOtp.findUnique({ where: { id: loginRes.body.challengeId } });
+      expect(dbLoginOtp?.attempts).toBe(config.otp.maxAttempts);
+    });
+
+    test('should reject the correct code once max attempts are used', async () => {
+      await insertUsers([userOne]);
+      const sendMailSpy = vi.spyOn(emailService.transport, 'sendMail');
+
+      const loginRes = await request(app)
+        .post('/v1/auth/login')
+        .send({ email: userOne.email, password: userOne.password })
+        .expect(httpStatus.OK);
+      const code = getLoginOtpCode(sendMailSpy);
+
+      for (let attempt = 0; attempt < config.otp.maxAttempts; attempt += 1) {
+        await request(app)
+          .post('/v1/auth/verify-login-otp')
+          .send({ challengeId: loginRes.body.challengeId, code: '000000' })
+          .expect(httpStatus.UNAUTHORIZED);
+      }
+
+      const res = await request(app)
+        .post('/v1/auth/verify-login-otp')
+        .send({ challengeId: loginRes.body.challengeId, code })
+        .expect(httpStatus.UNAUTHORIZED);
+
+      expect(res.body.message).toBe('Too many attempts');
+      expectNoRefreshCookie(res);
+      expect(await prisma.token.count()).toBe(0);
+    });
+
+    test('should return 403 without issuing tokens if the account is disabled before OTP verification', async () => {
+      await insertUsers([userOne]);
+      const sendMailSpy = vi.spyOn(emailService.transport, 'sendMail');
+
+      const loginRes = await request(app)
+        .post('/v1/auth/login')
+        .send({ email: userOne.email, password: userOne.password })
+        .expect(httpStatus.OK);
+      const code = getLoginOtpCode(sendMailSpy);
+      await prisma.user.update({ where: { id: userOne.id }, data: { isActive: false } });
+
+      const res = await request(app)
+        .post('/v1/auth/verify-login-otp')
+        .send({ challengeId: loginRes.body.challengeId, code })
+        .expect(httpStatus.FORBIDDEN);
+
+      expectNoRefreshCookie(res);
+      expect(await prisma.token.count()).toBe(0);
     });
 
     test('should return 400 if login OTP payload is invalid', async () => {
@@ -341,6 +429,16 @@ describe('Auth routes', () => {
         .expect(httpStatus.UNAUTHORIZED);
     });
 
+    test('should return 401 error if user is disabled', async () => {
+      await insertUsers([{ ...userOne, isActive: false }]);
+      const refreshToken = await saveRefreshToken(userOne.id);
+
+      await request(app)
+        .post('/v1/auth/refresh-tokens')
+        .set('Cookie', [`refreshToken=${refreshToken}`])
+        .expect(httpStatus.UNAUTHORIZED);
+    });
+
     test('should return 401 error if user is not found', async () => {
       await insertUsers([userOne]);
       const expires = moment().add(config.jwt.refreshExpirationDays, 'days');
@@ -455,6 +553,18 @@ describe('Auth middleware', () => {
     await auth()(req, httpMocks.createResponse(), next);
 
     expect(next).toHaveBeenCalledWith(expect.any(ApiError));
+    expect(next).toHaveBeenCalledWith(
+      expect.objectContaining({ statusCode: httpStatus.UNAUTHORIZED, message: 'Please authenticate' }),
+    );
+  });
+
+  test('should call next with unauthorized error if user is disabled', async () => {
+    await insertUsers([{ ...userOne, isActive: false }]);
+    const req = httpMocks.createRequest({ headers: { Authorization: `Bearer ${userOneAccessToken}` } });
+    const next = vi.fn();
+
+    await auth()(req, httpMocks.createResponse(), next);
+
     expect(next).toHaveBeenCalledWith(
       expect.objectContaining({ statusCode: httpStatus.UNAUTHORIZED, message: 'Please authenticate' }),
     );

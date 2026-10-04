@@ -4,6 +4,7 @@ import type { Prisma, StoreRole } from '../generated/prisma/client.js';
 import { prisma } from '../config/database.js';
 import { defaultProductCategoryNames } from '../config/productCategories.js';
 import ApiError from '../utils/ApiError.js';
+import { revokeUserSessions } from './token.service.js';
 
 const STORE_ROLES: StoreRole[] = ['owner', 'manager', 'staff'];
 const adminUserSelect = {
@@ -524,6 +525,10 @@ const updateAdminUser = async (actor: Actor, userId: string, body) => {
       },
     });
 
+    if (body.password || (!body.storeId && body.isActive === false)) {
+      await revokeUserSessions(userId, tx);
+    }
+
     if (body.storeId && (body.storeRole !== undefined || body.isActive !== undefined)) {
       await tx.userStoreRole.update({
         where: {
@@ -564,9 +569,13 @@ const resetUserPassword = async (actor: Actor, userId: string, body) => {
   }
   await assertCanAssignRole(actor, body.storeId, targetRole.role);
 
-  await prisma.user.update({
-    where: { id: userId },
-    data: { password: await bcrypt.hash(body.password, 8) },
+  const passwordHash = await bcrypt.hash(body.password, 8);
+  await prisma.$transaction(async (tx) => {
+    await tx.user.update({
+      where: { id: userId },
+      data: { password: passwordHash },
+    });
+    await revokeUserSessions(userId, tx);
   });
 
   await audit({

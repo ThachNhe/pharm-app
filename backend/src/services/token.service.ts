@@ -1,13 +1,14 @@
 import crypto from 'node:crypto';
 import jwt, { type JwtPayload } from 'jsonwebtoken';
 import moment, { type Moment } from 'moment';
-import type { Token, TokenType } from '../generated/prisma/client.js';
+import type { Prisma, Token, TokenType } from '../generated/prisma/client.js';
 import config from '../config/config.js';
 import { prisma } from '../config/database.js';
 import { tokenTypes, type TokenTypeValue } from '../config/tokens.js';
 import type { PublicUser } from '../utils/user.js';
 
 type StoredTokenType = Exclude<TokenTypeValue, typeof tokenTypes.ACCESS>;
+type DbClient = typeof prisma | Prisma.TransactionClient;
 
 const hashToken = (token: string) => {
   return crypto.createHmac('sha256', config.jwt.secret).update(token).digest('hex');
@@ -122,4 +123,16 @@ const generateAuthTokens = async (user: PublicUser) => {
   };
 };
 
-export { generateToken, hashToken, saveToken, verifyToken, generateAccessToken, generateAuthTokens };
+/**
+ * Revoke every persisted session secret of a user (refresh tokens and pending login OTPs).
+ * Call inside the same transaction that changes the password or disables the account.
+ * @param {string} userId
+ * @param {DbClient} [db]
+ * @returns {Promise<void>}
+ */
+const revokeUserSessions = async (userId: string, db: DbClient = prisma) => {
+  await db.token.deleteMany({ where: { userId } });
+  await db.loginOtp.deleteMany({ where: { userId, consumedAt: null } });
+};
+
+export { generateToken, hashToken, saveToken, verifyToken, generateAccessToken, generateAuthTokens, revokeUserSessions };

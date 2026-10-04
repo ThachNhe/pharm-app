@@ -4,6 +4,7 @@ import type { Prisma, Role, User } from '../generated/prisma/client.js';
 import { prisma } from '../config/database.js';
 import ApiError from '../utils/ApiError.js';
 import { publicUserSelect, toPublicUser, type PublicUser } from '../utils/user.js';
+import { revokeUserSessions } from './token.service.js';
 
 type CreateUserBody = {
   name: string;
@@ -141,9 +142,15 @@ const updateUserById = async (userId: string, updateBody: UpdateUserBody): Promi
     ...(updateBody.password ? { password: await bcrypt.hash(updateBody.password, 8) } : {}),
   };
 
-  const updatedUser = await prisma.user.update({
-    where: { id: userId },
-    data,
+  const updatedUser = await prisma.$transaction(async (tx) => {
+    const updated = await tx.user.update({
+      where: { id: userId },
+      data,
+    });
+    if (updateBody.password) {
+      await revokeUserSessions(userId, tx);
+    }
+    return updated;
   });
 
   return toPublicUser(updatedUser);
