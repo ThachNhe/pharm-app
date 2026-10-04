@@ -1,4 +1,0 @@
-interface:
-  display_name: "Pharm Code Review"
-  short_description: "Review code Pharm App theo mức độ rủi ro"
-  default_prompt: "Use $pharm-code-review to review this Pharm App change for correctness, security, and regression risks."

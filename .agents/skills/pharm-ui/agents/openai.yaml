@@ -1,4 +1,0 @@
-interface:
-  display_name: "Pharm UI"
-  short_description: "Xây dựng UI Pharm App chuyên nghiệp"
-  default_prompt: "Use $pharm-ui to build a professional, accessible Pharm App interface."
