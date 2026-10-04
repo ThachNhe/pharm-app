@@ -240,6 +240,7 @@ const saleItem = Joi.object().keys({
   medicineId: Joi.string().required().custom(objectId),
   quantity: Joi.number().integer().positive().required(),
   unitId: Joi.string().custom(objectId),
+  expectedUnitPrice: Joi.number().min(0),
 });
 
 const createSale = {

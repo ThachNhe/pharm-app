@@ -215,13 +215,24 @@ describe('Store operations flow', () => {
           .expect(httpStatus.BAD_REQUEST);
       }
 
+      const stalePriceRes = await request(app)
+        .post(`/v1/stores/${store.id}/sales`)
+        .set('Authorization', `Bearer ${staffToken}`)
+        .send({
+          paymentMethod: 'cash',
+          items: [{ medicineId: medicineRes.body.id, quantity: 4, unitId: blisterUnitId, expectedUnitPrice: 15000 }],
+        })
+        .expect(httpStatus.CONFLICT);
+      expect(stalePriceRes.body.message).toContain('Giá bán đã thay đổi');
+      expect(await prisma.sale.count({ where: { storeId: store.id } })).toBe(0);
+
       const saleRes = await request(app)
         .post(`/v1/stores/${store.id}/sales`)
         .set('Authorization', `Bearer ${staffToken}`)
         .send({
           paymentMethod: 'cash',
           discountAmount: 10000,
-          items: [{ medicineId: medicineRes.body.id, quantity: 4, unitId: blisterUnitId }],
+          items: [{ medicineId: medicineRes.body.id, quantity: 4, unitId: blisterUnitId, expectedUnitPrice: 20000 }],
         })
         .expect(httpStatus.CREATED);
 

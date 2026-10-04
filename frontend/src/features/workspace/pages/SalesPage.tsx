@@ -25,7 +25,7 @@ import { Input } from '@/components/ui/input';
 import { NumberInput } from '@/components/ui/number-input';
 import { useDebounce } from '@/hooks/useDebounce';
 import { formatCurrency, formatDateTime, formatNumber } from '@/lib/utils';
-import { getApiErrorMessage } from '../utils/api-error';
+import { getApiErrorMessage, getApiErrorStatus } from '../utils/api-error';
 import { workspaceService } from '../services/workspace.service';
 import type { Medicine, PaymentMethod, Sale } from '../types';
 import { useWorkspace } from '../hooks/useWorkspace';
@@ -43,6 +43,8 @@ type CartItem = {
     medicine: Medicine;
     quantity: number;
     unitId: string;
+    /** Unit price before the server reported a price change, shown struck through. */
+    previousUnitPrice?: number;
 };
 
 const getBaseUnit = (medicine: Medicine) =>
@@ -60,6 +62,9 @@ const getCartUnit = (item: CartItem) =>
 // Sales are whole units only: the most of a unit that available stock can cover.
 const getMaxQuantity = (medicine: Medicine, conversionRate: number) =>
     Math.floor(medicine.availableStock / conversionRate);
+
+const getUnitPrice = (item: CartItem) =>
+    item.medicine.sellingPrice * getCartUnit(item).conversionRate;
 
 const paymentLabels: Record<PaymentMethod, string> = {
     cash: 'Tiền mặt',
@@ -345,6 +350,7 @@ function PointOfSale({ onCreated }: { onCreated: (sale: Sale) => void }) {
                 );
                 return {
                     ...item,
+                    previousUnitPrice: undefined,
                     unitId: nextUnit.id ?? '',
                     quantity: Math.min(
                         Math.max(converted, 1),
@@ -387,6 +393,66 @@ function PointOfSale({ onCreated }: { onCreated: (sale: Sale) => void }) {
         });
     };
 
+    // Reload price and stock of every cart line after the server rejected a stale cart.
+    const refreshCart = async (items: CartItem[]) => {
+        const fresh = await Promise.all(
+            items.map((item) =>
+                workspaceService
+                    .getMedicines(selectedStoreId, {
+                        page: 1,
+                        limit: 20,
+                        active: true,
+                        search: item.medicine.code,
+                    })
+                    .then((result) =>
+                        result.results.find(
+                            (medicine) => medicine.id === item.medicine.id
+                        )
+                    )
+            )
+        );
+        const removed = items
+            .filter((_, index) => !fresh[index])
+            .map((item) => item.medicine.name);
+        setCart((current) =>
+            current.flatMap((item) => {
+                const medicine = fresh.find(
+                    (candidate) => candidate?.id === item.medicine.id
+                );
+                if (!medicine) return [];
+                const unit =
+                    medicine.units.find(
+                        (option) => option.id === item.unitId
+                    ) ?? getBaseUnit(medicine);
+                const next: CartItem = {
+                    ...item,
+                    medicine,
+                    unitId: unit.id ?? '',
+                    quantity: Math.min(
+                        item.quantity,
+                        getMaxQuantity(medicine, unit.conversionRate)
+                    ),
+                };
+                const oldPrice = item.previousUnitPrice ?? getUnitPrice(item);
+                return [
+                    {
+                        ...next,
+                        previousUnitPrice:
+                            getUnitPrice(next) === oldPrice
+                                ? undefined
+                                : oldPrice,
+                    },
+                ];
+            })
+        );
+        if (removed.length) {
+            toast.warning(`Đã bỏ khỏi đơn vì ngừng bán: ${removed.join(', ')}`);
+        }
+        void queryClient.invalidateQueries({
+            queryKey: ['workspace', selectedStoreId, 'medicines'],
+        });
+    };
+
     const mutation = useMutation({
         mutationFn: () =>
             workspaceService.createSale(selectedStoreId, {
@@ -397,6 +463,7 @@ function PointOfSale({ onCreated }: { onCreated: (sale: Sale) => void }) {
                     medicineId: item.medicine.id,
                     quantity: item.quantity,
                     unitId: item.unitId || undefined,
+                    expectedUnitPrice: getUnitPrice(item),
                 })),
             }),
         onSuccess: (sale) => {
@@ -409,13 +476,16 @@ function PointOfSale({ onCreated }: { onCreated: (sale: Sale) => void }) {
             });
             onCreated(sale);
         },
-        onError: (error) =>
+        onError: (error) => {
             toast.error(
                 getApiErrorMessage(
                     error,
                     'Không thể hoàn tất đơn. Tồn kho có thể vừa thay đổi.'
                 )
-            ),
+            );
+            // 409: prices or stock changed since the cart was built.
+            if (getApiErrorStatus(error) === 409) void refreshCart(cart);
+        },
     });
 
     const submitSale = () => {
@@ -595,6 +665,14 @@ function PointOfSale({ onCreated }: { onCreated: (sale: Sale) => void }) {
                                                 </p>
                                                 <p className="text-muted-foreground mt-0.5 text-xs">
                                                     Đơn giá:{' '}
+                                                    {item.previousUnitPrice !==
+                                                    undefined ? (
+                                                        <s className="mr-1">
+                                                            {formatCurrency(
+                                                                item.previousUnitPrice
+                                                            )}
+                                                        </s>
+                                                    ) : null}
                                                     <span className="text-foreground font-medium">
                                                         {formatCurrency(
                                                             unitPrice
@@ -602,6 +680,15 @@ function PointOfSale({ onCreated }: { onCreated: (sale: Sale) => void }) {
                                                     </span>{' '}
                                                     / {unitLabel}
                                                 </p>
+                                                {item.previousUnitPrice !==
+                                                undefined ? (
+                                                    <div className="mt-1">
+                                                        <StatusBadge tone="warning">
+                                                            Giá đã thay đổi, báo
+                                                            lại khách
+                                                        </StatusBadge>
+                                                    </div>
+                                                ) : null}
                                             </div>
                                             <Button
                                                 size="icon-sm"

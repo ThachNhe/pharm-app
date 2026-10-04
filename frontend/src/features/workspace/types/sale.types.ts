@@ -68,5 +68,7 @@ export interface SalePayload {
         medicineId: string;
         quantity: number;
         unitId?: string;
+        /** Unit price shown to the customer; the server rejects the sale if it no longer matches. */
+        expectedUnitPrice?: number;
     }>;
 }

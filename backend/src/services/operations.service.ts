@@ -89,6 +89,7 @@ type SalePayload = {
     medicineId: string;
     quantity: number | string;
     unitId?: string;
+    expectedUnitPrice?: number | string;
   }>;
 };
 
@@ -120,6 +121,9 @@ const getUnitsKey = (units: Array<{ name: string; conversionRate: Prisma.Decimal
 
 const TABLET_UNIT_NAME = 'Viên';
 const BLISTER_UNIT_NAME = 'Vỉ';
+
+const vndFormatter = new Intl.NumberFormat('vi-VN');
+const formatVnd = (value: Prisma.Decimal) => `${vndFormatter.format(Number(value))} ₫`;
 
 const isSameUnitName = (left: string, right: string) => left.localeCompare(right, 'vi', { sensitivity: 'accent' }) === 0;
 
@@ -1625,6 +1629,7 @@ const createSale = async (actor: Actor, storeId: string, body: SalePayload) => {
           }
         >();
         let grossAmount = new PrismaRuntime.Decimal(0);
+        const changedPrices: string[] = [];
         for (const configured of storeMedicines) {
           const item = itemByMedicine.get(configured.medicineId);
           if (!item) continue;
@@ -1638,6 +1643,19 @@ const createSale = async (actor: Actor, storeId: string, body: SalePayload) => {
           }
           resolvedItems.set(configured.medicineId, { quantity, unit });
           grossAmount = grossAmount.plus(configured.sellingPrice.mul(quantity));
+          // The cashier quoted the price on screen; never charge a price that changed after the cart was built.
+          const currentUnitPrice = configured.sellingPrice.mul(unit.conversionRate);
+          if (item.expectedUnitPrice !== undefined && !currentUnitPrice.equals(toDecimal(item.expectedUnitPrice))) {
+            changedPrices.push(
+              `${configured.medicine.name} (${formatVnd(toDecimal(item.expectedUnitPrice))} → ${formatVnd(currentUnitPrice)}/${unit.name.toLowerCase()})`,
+            );
+          }
+        }
+        if (changedPrices.length) {
+          throw new ApiError(
+            httpStatus.CONFLICT,
+            `Giá bán đã thay đổi: ${changedPrices.join(', ')}. Vui lòng báo lại khách và thanh toán lại.`,
+          );
         }
 
         const discountAmount = toDecimal(body.discountAmount ?? 0);
