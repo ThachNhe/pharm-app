@@ -110,7 +110,7 @@ const getReferenceProducts = {
 
 const medicineUnit = Joi.object().keys({
   name: Joi.string().trim().required().max(50),
-  conversionRate: Joi.number().positive().precision(2).required(),
+  conversionRate: Joi.number().integer().positive().required(),
   isBaseUnit: Joi.boolean().required(),
 });
 

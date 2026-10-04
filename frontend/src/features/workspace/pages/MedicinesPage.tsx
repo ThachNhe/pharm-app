@@ -3,21 +3,13 @@ import { z } from 'zod';
 import { zodResolver } from '@hookform/resolvers/zod';
 import {
     Controller,
-    useFieldArray,
     useForm,
     useWatch,
     type Control,
     type DefaultValues,
 } from 'react-hook-form';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import {
-    CheckCircle2,
-    Edit3,
-    Library,
-    LoaderCircle,
-    Plus,
-    Trash2,
-} from 'lucide-react';
+import { CheckCircle2, Edit3, Library, LoaderCircle, Plus } from 'lucide-react';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -50,7 +42,6 @@ import {
     ErrorState,
     Field,
     LoadingState,
-    PageHeader,
     Pager,
     Panel,
     SearchInput,
@@ -71,6 +62,10 @@ const COMMON_UNIT_NAMES = [
 ];
 
 const DEFAULT_BASE_UNIT_NAME = 'Viên';
+const DEFAULT_CATEGORY_NAME = 'Thuốc không kê đơn';
+
+const TABLET_UNIT_NAME = 'Viên';
+const BLISTER_UNIT_NAME = 'Vỉ';
 
 const todayDate = new Date();
 const today = toDateInputValue(todayDate);
@@ -82,11 +77,32 @@ const tomorrow = toDateInputValue(
     )
 );
 
-const baseUnit = (name: string) => ({
-    name,
-    conversionRate: 1,
-    isBaseUnit: true,
-});
+type MedicineUnitValue = {
+    name: string;
+    conversionRate: number;
+    isBaseUnit: boolean;
+};
+
+// Only tablet products can also be sold by blister ("1 vỉ = N viên"); nothing else converts.
+const getTabletsPerBlister = (units: MedicineUnitValue[]) =>
+    units.find((unit) => !unit.isBaseUnit && unit.name === BLISTER_UNIT_NAME)
+        ?.conversionRate ?? null;
+
+const toUnits = (
+    baseUnitName: string,
+    tabletsPerBlister: number | null | undefined
+): MedicineUnitValue[] => [
+        { name: baseUnitName, conversionRate: 1, isBaseUnit: true },
+        ...(baseUnitName === TABLET_UNIT_NAME && tabletsPerBlister
+            ? [
+                {
+                    name: BLISTER_UNIT_NAME,
+                    conversionRate: tabletsPerBlister,
+                    isBaseUnit: false,
+                },
+            ]
+            : []),
+    ];
 
 const medicineSchema = z
     .object({
@@ -111,26 +127,18 @@ const medicineSchema = z
         minStock: z
             .number({ error: 'Nhập tồn tối thiểu' })
             .min(0, 'Tồn tối thiểu không được âm'),
-        importPrice: z.number().min(0, 'Giá nhập không được âm').optional(),
-        quantity: z.number().positive('Số lượng phải lớn hơn 0').optional(),
+        importPrice: z.number().min(0, 'Giá nhập không được âm').nullish(),
+        quantity: z.number().positive('Số lượng phải lớn hơn 0').nullish(),
         batchNumber: z.string().trim().max(100),
         expiryDate: z.string(),
         requiresPrescription: z.boolean(),
         description: z.string().trim().max(2000),
         isActive: z.boolean(),
-        units: z
-            .array(
-                z.object({
-                    name: z.string().trim().min(1, 'Chọn đơn vị tính').max(50),
-                    conversionRate: z
-                        .number({ error: 'Nhập hệ số hợp lệ' })
-                        .positive('Hệ số phải lớn hơn 0')
-                        .multipleOf(0.01, 'Hệ số có tối đa 2 số thập phân'),
-                    isBaseUnit: z.boolean(),
-                })
-            )
-            .min(1)
-            .max(10, 'Mỗi sản phẩm có tối đa 10 đơn vị tính'),
+        tabletsPerBlister: z
+            .number({ error: 'Nhập số viên' })
+            .int('Phải là số nguyên')
+            .min(2, 'Tối thiểu là 2')
+            .nullish(),
     })
     .refine(
         (values) =>
@@ -141,40 +149,7 @@ const medicineSchema = z
             path: ['secondaryBarcode'],
             message: 'Mã vạch 2 phải khác mã vạch chính',
         }
-    )
-    .superRefine((values, context) => {
-        const baseUnits = values.units.filter((unit) => unit.isBaseUnit);
-        if (
-            baseUnits.length !== 1 ||
-            baseUnits[0].name !== values.baseUnitName ||
-            baseUnits[0].conversionRate !== 1
-        ) {
-            context.addIssue({
-                code: 'custom',
-                path: ['units'],
-                message: 'Đơn vị nhỏ nhất phải có hệ số bằng 1',
-            });
-        }
-        const names = values.units.map((unit) =>
-            unit.name.trim().toLocaleLowerCase('vi')
-        );
-        if (new Set(names).size !== names.length) {
-            context.addIssue({
-                code: 'custom',
-                path: ['units'],
-                message: 'Tên đơn vị tính không được trùng nhau',
-            });
-        }
-        values.units.forEach((unit, index) => {
-            if (!unit.isBaseUnit && unit.conversionRate <= 1) {
-                context.addIssue({
-                    code: 'custom',
-                    path: ['units', index, 'conversionRate'],
-                    message: 'Hệ số phải lớn hơn 1',
-                });
-            }
-        });
-    });
+    );
 
 // New products created by an importer are received into stock in the same request.
 // `when` keeps these checks running while other fields are invalid, so every missing field shows at once.
@@ -182,12 +157,12 @@ const createMedicineSchema = (requireInitialImport: boolean) => {
     if (!requireInitialImport) return medicineSchema;
     const always = () => true;
     return medicineSchema
-        .refine((values) => values.importPrice !== undefined, {
+        .refine((values) => values.importPrice != null, {
             path: ['importPrice'],
             message: 'Nhập giá nhập',
             when: always,
         })
-        .refine((values) => values.quantity !== undefined, {
+        .refine((values) => values.quantity != null, {
             path: ['quantity'],
             message: 'Nhập số lượng',
             when: always,
@@ -236,7 +211,7 @@ const emptyValues: DefaultValues<MedicineFormValues> = {
     requiresPrescription: false,
     description: '',
     isActive: true,
-    units: [baseUnit(DEFAULT_BASE_UNIT_NAME)],
+    tabletsPerBlister: null,
 };
 
 const getMedicineValues = (medicine: Medicine): MedicineFormValues => ({
@@ -264,13 +239,7 @@ const getMedicineValues = (medicine: Medicine): MedicineFormValues => ({
     requiresPrescription: medicine.requiresPrescription,
     description: medicine.description ?? '',
     isActive: medicine.isActive,
-    units: medicine.units.length
-        ? medicine.units.map((unit) => ({
-              name: unit.name,
-              conversionRate: unit.conversionRate,
-              isBaseUnit: unit.isBaseUnit,
-          }))
-        : [baseUnit(medicine.baseUnitName)],
+    tabletsPerBlister: getTabletsPerBlister(medicine.units),
 });
 
 function NumberField({
@@ -354,20 +323,22 @@ export function MedicineDialog({
         control: form.control,
         name: 'baseUnitName',
     });
-    const units = useWatch({ control: form.control, name: 'units' });
     const importPrice = useWatch({
         control: form.control,
         name: 'importPrice',
     });
     const quantity = useWatch({ control: form.control, name: 'quantity' });
-    const unitFields = useFieldArray({ control: form.control, name: 'units' });
     const unitNames = [
-        ...new Set([
-            ...COMMON_UNIT_NAMES,
-            ...customUnitNames,
-            ...units.map((unit) => unit.name),
-        ]),
+        ...new Set([...COMMON_UNIT_NAMES, ...customUnitNames, baseUnitName]),
     ];
+    const canSellByBlister = baseUnitName === TABLET_UNIT_NAME;
+    // A library medicine that already exists keeps its shared units.
+    const blisterLocked = Boolean(
+        selectedReferenceProduct?.medicineUnits.length
+    );
+    const initialTabletsPerBlister = medicine
+        ? getTabletsPerBlister(medicine.units)
+        : null;
     const categoriesQuery = useQuery({
         queryKey: [
             'workspace',
@@ -418,6 +389,20 @@ export function MedicineDialog({
         }
     }, [form, generatedCodeQuery.data?.code, medicine]);
 
+    // New products default to the store's OTC category; a library match or the user's choice still wins.
+    const defaultCategoryId = categoriesQuery.data?.results.find(
+        (category) =>
+            category.isActive &&
+            category.name.localeCompare(DEFAULT_CATEGORY_NAME, 'vi', {
+                sensitivity: 'accent',
+            }) === 0
+    )?.id;
+    useEffect(() => {
+        if (!medicine && !categoryId && defaultCategoryId) {
+            form.setValue('categoryId', defaultCategoryId);
+        }
+    }, [categoryId, defaultCategoryId, form, medicine]);
+
     const chooseSourceMode = (mode: 'manual' | 'library') => {
         setSourceMode(mode);
         setLibrarySearch('');
@@ -449,7 +434,7 @@ export function MedicineDialog({
             barcode: product.barcode ?? product.secondaryBarcode ?? '',
             secondaryBarcode:
                 product.secondaryBarcode &&
-                product.secondaryBarcode !== product.barcode
+                    product.secondaryBarcode !== product.barcode
                     ? product.secondaryBarcode
                     : '',
             registrationNumber: product.registrationNumber ?? '',
@@ -460,33 +445,18 @@ export function MedicineDialog({
             usageInstructions: product.usageInstructions ?? '',
             minStock: product.minInventory ?? 0,
             importPrice: product.inputPrice ?? undefined,
-            units: product.medicineUnits.length
-                ? product.medicineUnits.map((unit) => ({
-                      name: unit.name,
-                      conversionRate: unit.conversionRate,
-                      isBaseUnit: unit.isBaseUnit,
-                  }))
-                : [baseUnit(selectedBaseUnitName)],
+            tabletsPerBlister: getTabletsPerBlister(product.medicineUnits),
         });
     };
 
     const changeBaseUnit = (name: string) => {
-        const nextUnits = [
-            baseUnit(name),
-            ...units
-                .filter((unit) => !unit.isBaseUnit)
-                .filter(
-                    (unit) =>
-                        unit.name.localeCompare(name, 'vi', {
-                            sensitivity: 'accent',
-                        }) !== 0
-                ),
-        ];
         form.setValue('baseUnitName', name, {
             shouldDirty: true,
             shouldValidate: true,
         });
-        unitFields.replace(nextUnits);
+        if (name !== TABLET_UNIT_NAME) {
+            form.setValue('tabletsPerBlister', null);
+        }
     };
 
     const addCustomUnit = () => {
@@ -507,6 +477,11 @@ export function MedicineDialog({
 
     const mutation = useMutation({
         mutationFn: (values: MedicineFormValues) => {
+            // Send units only when they change, so editing a price never touches units shared with other stores.
+            const unitsChanged =
+                !medicine ||
+                values.baseUnitName !== medicine.baseUnitName ||
+                (values.tabletsPerBlister ?? null) !== initialTabletsPerBlister;
             if (medicine?.referenceProductId) {
                 return workspaceService.updateMedicine(
                     selectedStoreId,
@@ -518,7 +493,12 @@ export function MedicineDialog({
                         sellingPrice: values.sellingPrice,
                         minStock: values.minStock,
                         isActive: values.isActive,
-                        units: values.units,
+                        units: unitsChanged
+                            ? toUnits(
+                                values.baseUnitName,
+                                values.tabletsPerBlister
+                            )
+                            : undefined,
                     }
                 );
             }
@@ -527,10 +507,14 @@ export function MedicineDialog({
                 quantity: enteredQuantity,
                 batchNumber,
                 expiryDate,
+                tabletsPerBlister,
                 ...productValues
             } = values;
             const payload = {
                 ...productValues,
+                units: unitsChanged
+                    ? toUnits(values.baseUnitName, tabletsPerBlister)
+                    : undefined,
                 code: values.code || undefined,
                 referenceProductId: selectedReferenceProduct?.id,
                 barcode: values.barcode || undefined,
@@ -546,22 +530,22 @@ export function MedicineDialog({
                 description: values.description || undefined,
                 initialImport:
                     requireInitialImport &&
-                    enteredImportPrice !== undefined &&
-                    enteredQuantity !== undefined
+                        enteredImportPrice != null &&
+                        enteredQuantity != null
                         ? {
-                              importPrice: enteredImportPrice,
-                              quantity: enteredQuantity,
-                              batchNumber,
-                              expiryDate,
-                          }
+                            importPrice: enteredImportPrice,
+                            quantity: enteredQuantity,
+                            batchNumber,
+                            expiryDate,
+                        }
                         : undefined,
             };
             return medicine
                 ? workspaceService.updateMedicine(
-                      selectedStoreId,
-                      medicine.id,
-                      payload
-                  )
+                    selectedStoreId,
+                    medicine.id,
+                    payload
+                )
                 : workspaceService.createMedicine(selectedStoreId, payload);
         },
         onSuccess: () => {
@@ -569,8 +553,8 @@ export function MedicineDialog({
                 medicine
                     ? 'Đã cập nhật sản phẩm'
                     : requireInitialImport
-                      ? 'Đã thêm sản phẩm và nhập kho'
-                      : 'Đã thêm sản phẩm vào quầy'
+                        ? 'Đã thêm sản phẩm và nhập kho'
+                        : 'Đã thêm sản phẩm vào quầy'
             );
             void queryClient.invalidateQueries({
                 queryKey: ['workspace', selectedStoreId, 'medicines'],
@@ -627,15 +611,15 @@ export function MedicineDialog({
                         {medicine
                             ? 'Cập nhật sản phẩm'
                             : requireInitialImport
-                              ? 'Nhập hàng sản phẩm mới'
-                              : 'Thêm sản phẩm mới'}
+                                ? 'Nhập hàng sản phẩm mới'
+                                : 'Thêm sản phẩm mới'}
                     </DialogTitle>
                     <DialogDescription>
                         {sharedDetailsLocked
                             ? 'Thông tin thuốc từ thư viện được dùng chung; mã hàng hóa, nhóm, vị trí, giá và tồn tối thiểu được cấu hình riêng cho quầy.'
                             : requireInitialImport
-                              ? 'Sản phẩm được thêm vào danh mục và nhập kho ngay, kèm một phiếu nhập đã hoàn tất.'
-                              : 'Mã hàng hóa được gợi ý tự động và có thể chỉnh sửa; vị trí, giá và định mức tồn được áp dụng riêng cho quầy đang chọn.'}
+                                ? 'Sản phẩm được thêm vào danh mục và nhập kho ngay, kèm một phiếu nhập đã hoàn tất.'
+                                : 'Mã hàng hóa được gợi ý tự động và có thể chỉnh sửa; vị trí, giá và định mức tồn được áp dụng riêng cho quầy đang chọn.'}
                     </DialogDescription>
                 </DialogHeader>
                 {!medicine ? (
@@ -670,8 +654,8 @@ export function MedicineDialog({
                 ) : null}
 
                 {!medicine &&
-                sourceMode === 'library' &&
-                !selectedReferenceProduct ? (
+                    sourceMode === 'library' &&
+                    !selectedReferenceProduct ? (
                     <div className="border-border space-y-3 rounded-lg border p-4">
                         <div>
                             <p className="text-sm font-medium">
@@ -885,155 +869,32 @@ export function MedicineDialog({
                                 {...form.register('activeIngredient')}
                             />
                         </Field>
-                        <div className="border-border bg-muted/20 space-y-3 rounded-md border p-3 sm:col-span-2">
-                            <div className="flex flex-wrap items-start justify-between gap-3">
-                                <div>
-                                    <p className="text-sm font-medium">
-                                        Quy đổi đơn vị bán
-                                    </p>
-                                    <p className="text-muted-foreground mt-0.5 text-xs">
-                                        Tồn kho luôn lưu theo{' '}
-                                        {baseUnitName.toLowerCase()}.
-                                    </p>
-                                </div>
-                                <Button
-                                    type="button"
-                                    size="sm"
-                                    variant="outline"
-                                    onClick={() =>
-                                        unitFields.append({
-                                            name:
-                                                unitNames.find(
-                                                    (name) =>
-                                                        !units.some(
-                                                            (unit) =>
-                                                                unit.name ===
-                                                                name
-                                                        )
-                                                ) ?? '',
-                                            conversionRate: 10,
-                                            isBaseUnit: false,
-                                        })
-                                    }
-                                    disabled={unitFields.fields.length >= 10}
-                                >
-                                    <Plus />
-                                    Thêm quy đổi
-                                </Button>
-                            </div>
-                            {unitFields.fields.length === 1 ? (
-                                <p className="text-muted-foreground text-xs">
-                                    Ví dụ: 1 vỉ = 10 viên hoặc 1 hộp = 100 viên.
-                                </p>
-                            ) : (
-                                <div className="space-y-2">
-                                    {unitFields.fields
-                                        .slice(1)
-                                        .map((field, offset) => {
-                                            const index = offset + 1;
-                                            const unitError =
-                                                errors.units?.[index];
-                                            return (
-                                                <div
-                                                    key={field.id}
-                                                    className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_140px_36px]"
-                                                >
-                                                    <div>
-                                                        <select
-                                                            className="border-input bg-input-background focus:border-ring focus:ring-ring/20 h-9 w-full rounded-md border px-3 text-sm outline-none focus:ring-3"
-                                                            aria-label={`Đơn vị quy đổi ${index}`}
-                                                            {...form.register(
-                                                                `units.${index}.name`
-                                                            )}
-                                                        >
-                                                            <option value="">
-                                                                Chọn đơn vị
-                                                            </option>
-                                                            {unitNames.map(
-                                                                (unitName) => (
-                                                                    <option
-                                                                        key={
-                                                                            unitName
-                                                                        }
-                                                                        value={
-                                                                            unitName
-                                                                        }
-                                                                    >
-                                                                        {
-                                                                            unitName
-                                                                        }
-                                                                    </option>
-                                                                )
-                                                            )}
-                                                        </select>
-                                                        {unitError?.name
-                                                            ?.message ? (
-                                                            <p className="text-destructive mt-1 text-xs">
-                                                                {
-                                                                    unitError
-                                                                        .name
-                                                                        .message
-                                                                }
-                                                            </p>
-                                                        ) : null}
-                                                    </div>
-                                                    <div>
-                                                        <div className="relative">
-                                                            <Input
-                                                                type="number"
-                                                                min="1.01"
-                                                                step="0.01"
-                                                                inputMode="decimal"
-                                                                className="pr-12"
-                                                                aria-label={`Hệ số quy đổi ${index}`}
-                                                                {...form.register(
-                                                                    `units.${index}.conversionRate`,
-                                                                    {
-                                                                        valueAsNumber: true,
-                                                                    }
-                                                                )}
-                                                            />
-                                                            <span className="text-muted-foreground pointer-events-none absolute top-1/2 right-3 -translate-y-1/2 text-xs">
-                                                                x {baseUnitName}
-                                                            </span>
-                                                        </div>
-                                                        {unitError
-                                                            ?.conversionRate
-                                                            ?.message ? (
-                                                            <p className="text-destructive mt-1 text-xs">
-                                                                {
-                                                                    unitError
-                                                                        .conversionRate
-                                                                        .message
-                                                                }
-                                                            </p>
-                                                        ) : null}
-                                                    </div>
-                                                    <Button
-                                                        type="button"
-                                                        size="icon"
-                                                        variant="ghost"
-                                                        onClick={() =>
-                                                            unitFields.remove(
-                                                                index
-                                                            )
-                                                        }
-                                                        aria-label={`Xóa đơn vị quy đổi ${index}`}
-                                                        title="Xóa đơn vị quy đổi"
-                                                    >
-                                                        <Trash2 className="text-destructive" />
-                                                    </Button>
-                                                </div>
-                                            );
-                                        })}
-                                </div>
-                            )}
-                            {errors.units?.message ? (
-                                <p className="text-destructive text-xs">
-                                    {errors.units.message}
-                                </p>
-                            ) : null}
-                        </div>
+                        {canSellByBlister ? (
+                            <Field
+                                label="Số viên trong 1 vỉ"
+                                error={errors.tabletsPerBlister?.message}
+                            >
+                                <Controller
+                                    control={form.control}
+                                    name="tabletsPerBlister"
+                                    render={({ field }) => (
+                                        <NumberInput
+                                            ref={field.ref}
+                                            name={field.name}
+                                            value={field.value}
+                                            onValueChange={field.onChange}
+                                            onBlur={field.onBlur}
+                                            disabled={blisterLocked}
+                                            suffix="viên"
+                                            placeholder="Không bán theo vỉ"
+                                            aria-invalid={Boolean(
+                                                errors.tabletsPerBlister
+                                            )}
+                                        />
+                                    )}
+                                />
+                            </Field>
+                        ) : null}
                         <Field
                             label="Hàm lượng"
                             error={errors.strength?.message}
@@ -1341,8 +1202,8 @@ export function MedicineDialog({
                             {medicine
                                 ? 'Lưu thay đổi'
                                 : requireInitialImport
-                                  ? 'Thêm và nhập kho'
-                                  : 'Thêm sản phẩm'}
+                                    ? 'Thêm và nhập kho'
+                                    : 'Thêm sản phẩm'}
                         </Button>
                     ) : null}
                 </DialogFooter>
@@ -1446,18 +1307,6 @@ export function MedicinesPage() {
 
     return (
         <div className="space-y-5">
-            <PageHeader
-                title="Danh mục sản phẩm"
-                description="Tra cứu thông tin bán hàng, lô FEFO, giá và tồn kho của quầy."
-                actions={
-                    canManage ? (
-                        <Button onClick={openCreate}>
-                            <Plus />
-                            Thêm sản phẩm
-                        </Button>
-                    ) : undefined
-                }
-            />
 
             <Panel className="overflow-hidden">
                 <div className="border-border flex flex-col gap-3 border-b p-4 sm:flex-row sm:items-center sm:justify-between">
@@ -1511,13 +1360,13 @@ export function MedicinesPage() {
                             <table className="w-full min-w-[2600px] text-left text-sm">
                                 <thead className="bg-muted/55 text-muted-foreground text-xs uppercase">
                                     <tr>
-                                        <th className="bg-muted sticky left-0 z-20 w-16 min-w-16 px-4 py-3 text-right font-medium">
+                                        <th className="bg-muted z-20 w-16 min-w-16 md:sticky md:left-0 px-4 py-3 text-right font-medium">
                                             STT
                                         </th>
-                                        <th className="bg-muted sticky left-16 z-20 w-32 min-w-32 px-4 py-3 font-medium">
+                                        <th className="bg-muted z-20 w-32 min-w-32 md:sticky md:left-16 px-4 py-3 font-medium">
                                             Mã
                                         </th>
-                                        <th className="bg-muted sticky left-48 z-20 w-80 min-w-80 px-4 py-3 font-medium">
+                                        <th className="bg-muted z-20 w-80 min-w-80 md:sticky md:left-48 px-4 py-3 font-medium">
                                             Tên sản phẩm
                                         </th>
                                         <th className="px-4 py-3 font-medium">
@@ -1565,7 +1414,7 @@ export function MedicinesPage() {
                                             Trạng thái
                                         </th>
                                         {canManage ? (
-                                            <th className="w-16 px-4 py-3 text-right font-medium">
+                                            <th className="bg-muted sticky right-0 z-20 w-16 px-4 py-3 text-right font-medium shadow-[inset_1px_0_0_var(--color-border)]">
                                                 Sửa
                                             </th>
                                         ) : null}
@@ -1581,7 +1430,7 @@ export function MedicinesPage() {
                                                     key={medicine.id}
                                                     className="group hover:bg-muted/30"
                                                 >
-                                                    <td className="bg-card group-hover:bg-muted sticky left-0 z-10 w-16 min-w-16 px-4 py-3 text-right transition-colors">
+                                                    <td className="bg-card group-hover:bg-muted z-10 w-16 min-w-16 md:sticky md:left-0 px-4 py-3 text-right transition-colors">
                                                         {(medicinesQuery.data
                                                             .page -
                                                             1) *
@@ -1591,12 +1440,12 @@ export function MedicinesPage() {
                                                             1}
                                                     </td>
                                                     <td
-                                                        className="bg-card group-hover:bg-muted sticky left-16 z-10 w-32 max-w-32 min-w-32 truncate px-4 py-3 font-mono text-xs transition-colors"
+                                                        className="bg-card group-hover:bg-muted z-10 w-32 max-w-32 min-w-32 md:sticky md:left-16 truncate px-4 py-3 font-mono text-xs transition-colors"
                                                         title={medicine.code}
                                                     >
                                                         {medicine.code}
                                                     </td>
-                                                    <td className="bg-card group-hover:bg-muted sticky left-48 z-10 w-80 max-w-80 min-w-80 px-4 py-3 transition-colors">
+                                                    <td className="bg-card group-hover:bg-muted z-10 w-80 max-w-80 min-w-80 md:sticky md:left-48 px-4 py-3 transition-colors">
                                                         <p
                                                             className="line-clamp-2 font-medium"
                                                             title={
@@ -1622,7 +1471,7 @@ export function MedicinesPage() {
                                                             }
                                                         </p>
                                                         {medicine.units.length >
-                                                        1 ? (
+                                                            1 ? (
                                                             <p className="text-muted-foreground mt-0.5 text-xs">
                                                                 {medicine.units
                                                                     .filter(
@@ -1650,15 +1499,15 @@ export function MedicinesPage() {
                                                     <td className="px-4 py-3 whitespace-nowrap">
                                                         {nextBatch
                                                             ? formatDate(
-                                                                  nextBatch.expiryDate
-                                                              )
+                                                                nextBatch.expiryDate
+                                                            )
                                                             : '—'}
                                                     </td>
                                                     <td className="px-4 py-3 text-right whitespace-nowrap">
                                                         <span
                                                             className={
                                                                 medicine.availableStock <=
-                                                                medicine.minStock
+                                                                    medicine.minStock
                                                                     ? 'text-destructive font-semibold'
                                                                     : 'font-medium'
                                                             }
@@ -1674,11 +1523,11 @@ export function MedicinesPage() {
                                                     {canManage ? (
                                                         <td className="px-4 py-3 text-right whitespace-nowrap">
                                                             {nextBatch?.importPrice ==
-                                                            null
+                                                                null
                                                                 ? '—'
                                                                 : formatCurrency(
-                                                                      nextBatch.importPrice
-                                                                  )}
+                                                                    nextBatch.importPrice
+                                                                )}
                                                         </td>
                                                     ) : null}
                                                     <td className="px-4 py-3 text-right font-medium whitespace-nowrap">
@@ -1749,7 +1598,7 @@ export function MedicinesPage() {
                                                         </StatusBadge>
                                                     </td>
                                                     {canManage ? (
-                                                        <td className="px-4 py-3 text-right">
+                                                        <td className="bg-card group-hover:bg-muted sticky right-0 z-10 px-4 py-3 text-right shadow-[inset_1px_0_0_var(--color-border)] transition-colors">
                                                             <Button
                                                                 size="icon-sm"
                                                                 variant="ghost"

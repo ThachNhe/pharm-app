@@ -15,8 +15,9 @@ type NumberInputProps = Omit<
     React.ComponentProps<'input'>,
     'type' | 'value' | 'defaultValue' | 'onChange'
 > & {
-    value: number | undefined;
-    onValueChange: (value: number | undefined) => void;
+    value: number | null | undefined;
+    // Emits null (not undefined) when cleared: react-hook-form treats undefined as "reset to default".
+    onValueChange: (value: number | null) => void;
     suffix?: string;
 };
 
@@ -32,7 +33,7 @@ function NumberInput({
     const inputRef = React.useRef<HTMLInputElement | null>(null);
     const caretDigits = React.useRef<number | null>(null);
     const display =
-        value === undefined || !Number.isFinite(value)
+        value === null || value === undefined || !Number.isFinite(value)
             ? ''
             : groupFormatter.format(value);
 
@@ -67,7 +68,7 @@ function NumberInput({
             countDigits(raw.slice(0, selectionStart ?? raw.length)),
             digits.length
         );
-        onValueChange(digits ? Number(digits) : undefined);
+        onValueChange(digits ? Number(digits) : null);
     };
 
     return (

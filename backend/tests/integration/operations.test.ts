@@ -702,6 +702,91 @@ describe('Store operations flow', () => {
     expect(updatedLibraryRes.body.results[0]).toMatchObject({ isAddedToStore: true });
   });
 
+  test('should only allow tablet-to-blister conversion and protect shared units', async () => {
+    await insertUsers([userOne]);
+    const [firstStore, secondStore] = await Promise.all([
+      prisma.store.create({ data: { name: 'Unit store A' } }),
+      prisma.store.create({ data: { name: 'Unit store B' } }),
+    ]);
+    await prisma.userStoreRole.createMany({
+      data: [
+        { userId: userOne.id, storeId: firstStore.id, role: 'owner' },
+        { userId: userOne.id, storeId: secondStore.id, role: 'owner' },
+      ],
+    });
+    const token = accessToken(userOne.id);
+    const [firstCategory, secondCategory] = await Promise.all([
+      prisma.productCategory.create({ data: { storeId: firstStore.id, name: 'Dược phẩm' } }),
+      prisma.productCategory.create({ data: { storeId: secondStore.id, name: 'Dược phẩm' } }),
+    ]);
+    const createIn = (storeId: string, categoryId: string, body: Record<string, unknown>) =>
+      request(app)
+        .post(`/v1/stores/${storeId}/medicines`)
+        .set('Authorization', `Bearer ${token}`)
+        .send({ categoryId, name: faker.commerce.productName(), sellingPrice: 1000, ...body });
+    const tabletUnits = (tabletsPerBlister: number) => [
+      { name: 'Viên', conversionRate: 1, isBaseUnit: true },
+      { name: 'Vỉ', conversionRate: tabletsPerBlister, isBaseUnit: false },
+    ];
+
+    await createIn(firstStore.id, firstCategory.id, { baseUnitName: 'Viên', units: tabletUnits(10) }).expect(
+      httpStatus.CREATED,
+    );
+    await createIn(firstStore.id, firstCategory.id, {
+      baseUnitName: 'Viên',
+      units: [...tabletUnits(10), { name: 'Hộp', conversionRate: 100, isBaseUnit: false }],
+    }).expect(httpStatus.BAD_REQUEST);
+    await createIn(firstStore.id, firstCategory.id, {
+      baseUnitName: 'Viên',
+      units: [
+        { name: 'Viên', conversionRate: 1, isBaseUnit: true },
+        { name: 'Hộp', conversionRate: 100, isBaseUnit: false },
+      ],
+    }).expect(httpStatus.BAD_REQUEST);
+    await createIn(firstStore.id, firstCategory.id, {
+      baseUnitName: 'Gói',
+      units: [
+        { name: 'Gói', conversionRate: 1, isBaseUnit: true },
+        { name: 'Vỉ', conversionRate: 10, isBaseUnit: false },
+      ],
+    }).expect(httpStatus.BAD_REQUEST);
+    await createIn(firstStore.id, firstCategory.id, { baseUnitName: 'Viên', units: tabletUnits(9.99) }).expect(
+      httpStatus.BAD_REQUEST,
+    );
+
+    const referenceProduct = await prisma.referenceProduct.create({
+      data: {
+        id: faker.datatype.uuid(),
+        code: `REF-${faker.random.alphaNumeric(8)}`,
+        name: 'Thuốc viên dùng chung',
+        unitName: 'Viên',
+      },
+    });
+    const sharedRes = await createIn(firstStore.id, firstCategory.id, {
+      referenceProductId: referenceProduct.id,
+      baseUnitName: 'Viên',
+      units: tabletUnits(10),
+    }).expect(httpStatus.CREATED);
+    await createIn(secondStore.id, secondCategory.id, {
+      referenceProductId: referenceProduct.id,
+      baseUnitName: 'Viên',
+      units: tabletUnits(10),
+    }).expect(httpStatus.CREATED);
+
+    const patchShared = (body: Record<string, unknown>) =>
+      request(app)
+        .patch(`/v1/stores/${firstStore.id}/medicines/${sharedRes.body.id}`)
+        .set('Authorization', `Bearer ${token}`)
+        .send(body);
+    await patchShared({ units: tabletUnits(12) }).expect(httpStatus.CONFLICT);
+    await patchShared({ units: tabletUnits(10), sellingPrice: 1200 }).expect(httpStatus.OK);
+    const sharedUnits = await prisma.medicineUnit.findMany({ where: { medicineId: sharedRes.body.id } });
+    expect(sharedUnits.map(({ name, conversionRate }) => [name, Number(conversionRate)]).sort()).toEqual([
+      ['Viên', 1],
+      ['Vỉ', 10],
+    ]);
+  });
+
   test('should create a new product together with its first completed import', async () => {
     await insertUsers([userOne, userTwo]);
     const store = await prisma.store.create({ data: { name: 'New product import store' } });

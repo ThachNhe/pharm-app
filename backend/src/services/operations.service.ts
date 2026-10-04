@@ -112,6 +112,17 @@ const getNextProductCode = async (storeId: string) => {
 
 const toDecimal = (value: number | string | Prisma.Decimal) => new PrismaRuntime.Decimal(value);
 
+const getUnitsKey = (units: Array<{ name: string; conversionRate: Prisma.Decimal }>) =>
+  units
+    .map((unit) => `${unit.name.trim().toLocaleLowerCase('vi')}:${unit.conversionRate.toFixed(4)}`)
+    .sort()
+    .join('|');
+
+const TABLET_UNIT_NAME = 'Viên';
+const BLISTER_UNIT_NAME = 'Vỉ';
+
+const isSameUnitName = (left: string, right: string) => left.localeCompare(right, 'vi', { sensitivity: 'accent' }) === 0;
+
 const normalizeMedicineUnits = (baseUnitName: string, units?: MedicineUnitPayload[]) => {
   const normalizedBaseUnitName = baseUnitName.trim();
   const normalized = (units?.length ? units : [{ name: normalizedBaseUnitName, conversionRate: 1, isBaseUnit: true }]).map(
@@ -129,15 +140,24 @@ const normalizeMedicineUnits = (baseUnitName: string, units?: MedicineUnitPayloa
   ) {
     throw new ApiError(httpStatus.BAD_REQUEST, 'Đơn vị nhỏ nhất phải có hệ số quy đổi bằng 1');
   }
-  if (
-    normalized.some(
-      (unit) => !unit.name || unit.name.length > 50 || unit.conversionRate.lte(0) || unit.conversionRate.decimalPlaces() > 2,
-    )
-  ) {
+  if (normalized.some((unit) => !unit.name || unit.name.length > 50 || unit.conversionRate.lte(0))) {
     throw new ApiError(httpStatus.BAD_REQUEST, 'Đơn vị quy đổi không hợp lệ');
+  }
+  if (normalized.some((unit) => !unit.conversionRate.isInteger())) {
+    throw new ApiError(httpStatus.BAD_REQUEST, 'Hệ số quy đổi phải là số nguyên');
   }
   if (normalized.some((unit) => !unit.isBaseUnit && unit.conversionRate.lte(1))) {
     throw new ApiError(httpStatus.BAD_REQUEST, 'Đơn vị quy đổi phải lớn hơn đơn vị nhỏ nhất');
+  }
+  // Business rule: only products counted by tablet may also be sold by blister; no other conversions exist.
+  const packagingUnits = normalized.filter((unit) => !unit.isBaseUnit);
+  if (
+    packagingUnits.length &&
+    (!isSameUnitName(normalizedBaseUnitName, TABLET_UNIT_NAME) ||
+      packagingUnits.length > 1 ||
+      !isSameUnitName(packagingUnits[0].name, BLISTER_UNIT_NAME))
+  ) {
+    throw new ApiError(httpStatus.BAD_REQUEST, 'Chỉ sản phẩm tính theo viên mới được quy đổi, và chỉ sang vỉ');
   }
   const uniqueNames = new Set(normalized.map((unit) => unit.name.toLocaleLowerCase('vi')));
   if (uniqueNames.size !== normalized.length) {
@@ -1086,6 +1106,14 @@ const updateMedicine = async (
   const medicineUnits = body.units
     ? normalizeMedicineUnits(body.baseUnitName ?? assigned.medicine.baseUnitName, body.units)
     : null;
+  const unitsChanged = medicineUnits !== null && getUnitsKey(medicineUnits) !== getUnitsKey(assigned.medicine.units);
+  if (unitsChanged) {
+    // Units live on the medicine shared by every store using it; changing them would alter other stores' stock math.
+    const otherStoreCount = await prisma.storeMedicine.count({ where: { medicineId, storeId: { not: storeId } } });
+    if (otherStoreCount > 0) {
+      throw new ApiError(httpStatus.CONFLICT, 'Quy đổi đơn vị đang được quầy khác dùng chung nên không thể thay đổi');
+    }
+  }
 
   return prisma.$transaction(async (tx) => {
     if (body.code !== undefined) {
@@ -1168,7 +1196,7 @@ const updateMedicine = async (
       }
     }
 
-    if (medicineUnits) {
+    if (medicineUnits && unitsChanged) {
       await tx.medicineUnit.deleteMany({ where: { medicineId } });
       await tx.medicineUnit.createMany({
         data: medicineUnits.map((unit) => ({ medicineId, ...unit })),
