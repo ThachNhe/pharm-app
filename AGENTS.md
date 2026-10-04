@@ -18,7 +18,8 @@ When these sources disagree, call out the mismatch before making a broad or dest
 - `backend/`: Node.js, Express, TypeScript ESM, Prisma/PostgreSQL, Joi, Passport JWT, Vitest, and Supertest.
 - `backend/prisma/`: Prisma schema, migrations, and seed data.
 - `backend/tests/`: integration and unit tests.
-- `docker-compose*.yml`: development, test, and production-oriented services.
+- `docker-compose.dev.yml`: local development stack plus the `test` profile for backend tests.
+- `docker-compose.prod.yml`: staging/production stack; pass `--env-file env/<env>/<env>.env` (`APP_ENV` selects the environment).
 - `env/`: environment-specific configuration. Never expose secrets in logs or committed files.
 
 ## Working Rules
@@ -140,7 +141,7 @@ npm test
 Prefer the Docker test stack when local PostgreSQL/test configuration is uncertain:
 
 ```bash
-docker compose -f docker-compose.yml -f docker-compose.test.yml up --build --abort-on-container-exit
+docker compose -f docker-compose.dev.yml up --build --exit-code-from backend-test backend-test test-db
 ```
 
 - Never point a reset/push test command at development or production data.
