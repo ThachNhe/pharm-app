@@ -1933,14 +1933,15 @@ const createSaleReturn = async (actor: Actor, storeId: string, saleId: string, b
       throw new ApiError(httpStatus.CONFLICT, 'Đơn bán đã được trả hết hoặc đã bị hủy');
     }
 
-    // The sale discount is spread over lines pro rata; rounding is applied to the cumulative refund per line.
+    // The sale discount is spread over lines pro rata. VND has no minor unit, so the cumulative refund per line is
+    // rounded to whole đồng and the last return absorbs the remainder.
     const grossAmount = current.details.reduce(
       (sum, detail) => sum.plus(detail.salePrice.mul(detail.quantity)),
       new PrismaRuntime.Decimal(0),
     );
     const refundRatio = grossAmount.gt(0) ? current.totalAmount.div(grossAmount) : new PrismaRuntime.Decimal(0);
     const refundedUpTo = (detail: (typeof current.details)[number], quantity: Prisma.Decimal) =>
-      detail.salePrice.mul(quantity).mul(refundRatio).toDecimalPlaces(2, PrismaRuntime.Decimal.ROUND_HALF_UP);
+      detail.salePrice.mul(quantity).mul(refundRatio).toDecimalPlaces(0, PrismaRuntime.Decimal.ROUND_HALF_UP);
 
     const lines = body.items.map((item) => {
       const detail = current.details.find((candidate) => candidate.id === item.saleDetailId);

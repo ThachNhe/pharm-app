@@ -1120,6 +1120,53 @@ describe('Store operations flow', () => {
     expect(audits).toHaveLength(2);
   });
 
+  test('should refund whole đồng and reconcile rounding across partial returns', async () => {
+    await insertUsers([userOne]);
+    const store = await prisma.store.create({ data: { name: 'Rounding store' } });
+    await prisma.userStoreRole.create({ data: { userId: userOne.id, storeId: store.id, role: 'manager' } });
+    const token = accessToken(userOne.id);
+    const category = await prisma.productCategory.create({ data: { storeId: store.id, name: 'Dược phẩm' } });
+    const medicine = (
+      await request(app)
+        .post(`/v1/stores/${store.id}/medicines`)
+        .set('Authorization', `Bearer ${token}`)
+        .send({
+          categoryId: category.id,
+          name: 'Thuốc làm tròn',
+          baseUnitName: 'Viên',
+          sellingPrice: 2500,
+          initialImport: { quantity: 100, importPrice: 500, batchNumber: 'LO-1', expiryDate: futureDate(365) },
+        })
+        .expect(httpStatus.CREATED)
+    ).body;
+
+    // gross 12500, discount 1001 -> paid 11499 (ratio 0.91992), so single-unit refunds are not whole đồng
+    const sale = (
+      await request(app)
+        .post(`/v1/stores/${store.id}/sales`)
+        .set('Authorization', `Bearer ${token}`)
+        .send({ paymentMethod: 'cash', discountAmount: 1001, items: [{ medicineId: medicine.id, quantity: 5 }] })
+        .expect(httpStatus.CREATED)
+    ).body;
+    expect(sale.totalAmount).toBe(11499);
+
+    const returnItems = (quantity: number) =>
+      request(app)
+        .post(`/v1/stores/${store.id}/sales/${sale.id}/returns`)
+        .set('Authorization', `Bearer ${token}`)
+        .send({ items: [{ saleDetailId: sale.details[0].id, quantity }] })
+        .expect(httpStatus.CREATED);
+
+    const first = await returnItems(1);
+    const second = await returnItems(2);
+    const last = await returnItems(2);
+
+    expect(first.body.returns[0].refundAmount).toBe(2300);
+    expect(second.body.returns[0].refundAmount).toBe(4599);
+    expect(last.body.returns[0].refundAmount).toBe(4600);
+    expect(last.body).toMatchObject({ status: 'refunded', refundedAmount: 11499 });
+  });
+
   test('should expose only one membership per user and store', async () => {
     await insertUsers([userOne]);
     const store = await prisma.store.create({ data: { name: 'Unique role store' } });
