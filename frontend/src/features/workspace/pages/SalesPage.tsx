@@ -287,6 +287,7 @@ function PointOfSale({ onCreated }: { onCreated: (sale: Sale) => void }) {
                 page: 1,
                 limit: 100,
                 active: true,
+                inStockFirst: true,
                 search: debouncedSearch,
             }),
         enabled: Boolean(selectedStoreId),

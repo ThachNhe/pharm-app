@@ -96,6 +96,7 @@ const getMedicines = {
     search: Joi.string().allow('').max(255),
     alert: Joi.string().valid('low', 'expiring'),
     active: Joi.boolean(),
+    inStockFirst: Joi.boolean(),
     ...pagination,
   }),
 };

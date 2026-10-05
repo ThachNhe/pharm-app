@@ -943,6 +943,43 @@ describe('Store operations flow', () => {
     expect(await prisma.importReceipt.count({ where: { storeId: store.id } })).toBe(1);
   });
 
+  test('should list in-stock products before sold-out ones when requested', async () => {
+    await insertUsers([userOne]);
+    const store = await prisma.store.create({ data: { name: 'Stock order store' } });
+    await prisma.userStoreRole.create({ data: { userId: userOne.id, storeId: store.id, role: 'manager' } });
+    const token = accessToken(userOne.id);
+    const category = await prisma.productCategory.create({ data: { storeId: store.id, name: 'Dược phẩm' } });
+    const create = (name: string, stocked: boolean) =>
+      request(app)
+        .post(`/v1/stores/${store.id}/medicines`)
+        .set('Authorization', `Bearer ${token}`)
+        .send({
+          categoryId: category.id,
+          name,
+          baseUnitName: 'Viên',
+          sellingPrice: 1000,
+          ...(stocked
+            ? { initialImport: { quantity: 20, importPrice: 500, batchNumber: 'LO-1', expiryDate: futureDate(365) } }
+            : {}),
+        })
+        .expect(httpStatus.CREATED);
+    await create('Aaa hết hàng', false);
+    await create('Bbb còn hàng', true);
+    await create('Ccc còn hàng', true);
+
+    const list = (query: Record<string, unknown>) =>
+      request(app)
+        .get(`/v1/stores/${store.id}/medicines`)
+        .query(query)
+        .set('Authorization', `Bearer ${token}`)
+        .expect(httpStatus.OK);
+    const names = (res: { body: { results: Array<{ name: string }> } }) => res.body.results.map(({ name }) => name);
+
+    expect(names(await list({}))).toEqual(['Aaa hết hàng', 'Bbb còn hàng', 'Ccc còn hàng']);
+    expect(names(await list({ inStockFirst: true }))).toEqual(['Bbb còn hàng', 'Ccc còn hàng', 'Aaa hết hàng']);
+    expect(names(await list({ inStockFirst: true, limit: 1 }))).toEqual(['Bbb còn hàng']);
+  });
+
   test('should expose only one membership per user and store', async () => {
     await insertUsers([userOne]);
     const store = await prisma.store.create({ data: { name: 'Unique role store' } });

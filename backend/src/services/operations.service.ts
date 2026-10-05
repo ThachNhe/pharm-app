@@ -782,7 +782,7 @@ const updateProductCategory = async (
 const queryMedicines = async (
   actor: Actor,
   storeId: string,
-  query: PageQuery & { alert?: 'low' | 'expiring'; active?: string | boolean },
+  query: PageQuery & { alert?: 'low' | 'expiring'; active?: string | boolean; inStockFirst?: string | boolean },
 ) => {
   const access = await getStoreAccess(actor, storeId, 'staff');
   const { page, limit } = getPagination(query);
@@ -792,6 +792,10 @@ const queryMedicines = async (
   if (query.active !== undefined) {
     const active = query.active === true || query.active === 'true';
     rows = rows.filter((item) => item.isActive === active);
+  }
+  // Stable sort keeps the name order inside each group; must run before pagination.
+  if (query.inStockFirst === true || query.inStockFirst === 'true') {
+    rows = [...rows].sort((a, b) => Number(b.availableStock > 0) - Number(a.availableStock > 0));
   }
   const canViewCosts = access.user.isSystemAdmin || access.role === 'owner' || access.role === 'manager';
   return paginateRows(canViewCosts ? rows : hideInventoryCosts(rows), page, limit);
