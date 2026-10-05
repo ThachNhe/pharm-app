@@ -16,18 +16,18 @@ import type { StoreRole } from '../types';
 type NavItem = {
     label: string;
     to:
-        | '/admin'
-        | '/admin/stores'
-        | '/admin/store'
-        | '/admin/users'
-        | '/admin/medicines'
-        | '/admin/medicine-library'
-        | '/admin/product-categories'
-        | '/admin/suppliers'
-        | '/admin/imports'
-        | '/admin/inventory'
-        | '/admin/sales'
-        | '/admin/reports';
+    | '/admin'
+    | '/admin/stores'
+    | '/admin/store'
+    | '/admin/users'
+    | '/admin/medicines'
+    | '/admin/medicine-library'
+    | '/admin/product-categories'
+    | '/admin/suppliers'
+    | '/admin/imports'
+    | '/admin/inventory'
+    | '/admin/sales'
+    | '/admin/reports';
     icon: typeof LayoutDashboard;
     minimumRole?: StoreRole;
     systemOnly?: boolean;
@@ -61,6 +61,12 @@ export const workspaceRoutes: NavItem[] = [
         minimumRole: 'staff',
     },
     {
+        label: 'Nhập hàng',
+        to: '/admin/imports',
+        icon: PackagePlus,
+        minimumRole: 'manager',
+    },
+    {
         label: 'Thư viện thuốc',
         to: '/admin/medicine-library',
         icon: Library,
@@ -70,12 +76,6 @@ export const workspaceRoutes: NavItem[] = [
         label: 'Nhóm sản phẩm',
         to: '/admin/product-categories',
         icon: Tags,
-        minimumRole: 'manager',
-    },
-    {
-        label: 'Nhập hàng',
-        to: '/admin/imports',
-        icon: PackagePlus,
         minimumRole: 'manager',
     },
     {
