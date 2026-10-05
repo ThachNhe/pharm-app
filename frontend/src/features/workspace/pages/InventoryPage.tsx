@@ -229,9 +229,6 @@ export function InventoryPage({
                                             <th className="px-4 py-3 text-right font-medium">
                                                 Tồn khả dụng
                                             </th>
-                                            <th className="px-4 py-3 text-right font-medium">
-                                                Tồn tối thiểu
-                                            </th>
                                             <th className="px-4 py-3 font-medium">
                                                 Hạn gần nhất
                                             </th>
@@ -284,11 +281,6 @@ export function InventoryPage({
                                                             <span className="text-muted-foreground">
                                                                 {medicine.baseUnitName.toLowerCase()}
                                                             </span>
-                                                        </td>
-                                                        <td className="text-muted-foreground px-4 py-3 text-right">
-                                                            {formatNumber(
-                                                                medicine.minStock
-                                                            )}
                                                         </td>
                                                         <td className="px-4 py-3">
                                                             {medicine.nearestExpiry
@@ -363,8 +355,8 @@ export function InventoryPage({
                                                             <td
                                                                 colSpan={
                                                                     canViewCosts
-                                                                        ? 7
-                                                                        : 6
+                                                                        ? 6
+                                                                        : 5
                                                                 }
                                                             >
                                                                 {renderBatchDetails(

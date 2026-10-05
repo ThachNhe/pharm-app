@@ -135,7 +135,6 @@ const medicineBody = {
   requiresPrescription: Joi.boolean(),
   description: Joi.string().allow('', null).max(2000),
   sellingPrice: Joi.number().min(0).required(),
-  minStock: Joi.number().min(0),
   isActive: Joi.boolean(),
   units: Joi.array().items(medicineUnit).min(1).max(10),
 };

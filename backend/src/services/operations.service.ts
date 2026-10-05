@@ -53,7 +53,6 @@ type MedicinePayload = {
   requiresPrescription?: boolean;
   description?: string | null;
   sellingPrice: number | string;
-  minStock?: number | string;
   isActive?: boolean;
   units?: MedicineUnitPayload[];
   initialImport?: InitialImportPayload;
@@ -170,6 +169,9 @@ const normalizeMedicineUnits = (baseUnitName: string, units?: MedicineUnitPayloa
   }
   return normalized;
 };
+
+// One store-wide threshold (in base units) for the low-stock alert.
+const LOW_STOCK_THRESHOLD = 10;
 
 const BUSINESS_TIME_ZONE = 'Asia/Ho_Chi_Minh';
 const BUSINESS_UTC_OFFSET = '+07:00';
@@ -354,7 +356,6 @@ const serializeMedicine = (storeMedicine, stock?: { total: Prisma.Decimal; avail
   description: storeMedicine.medicine.description,
   isActive: storeMedicine.isActive && storeMedicine.medicine.isActive,
   sellingPrice: Number(storeMedicine.sellingPrice),
-  minStock: Number(storeMedicine.minStock),
   totalStock: Number(stock?.total ?? 0),
   availableStock: Number(stock?.available ?? 0),
   units: storeMedicine.medicine.units.map((unit) => ({
@@ -501,7 +502,7 @@ const buildInventoryRows = async (storeId: string, search?: string) => {
       ...serializeMedicine(storeMedicine, { total: totalStock, available: availableStock }),
       inventoryValue: Number(inventoryValue),
       nearestExpiry,
-      isLowStock: availableStock.lte(storeMedicine.minStock),
+      isLowStock: availableStock.lte(LOW_STOCK_THRESHOLD),
       hasExpiringBatch,
       batches: medicineBatches.map((batch) => ({
         id: batch.id,
@@ -1002,7 +1003,6 @@ const createMedicine = async (actor: Actor, storeId: string, body: MedicinePaylo
         code,
         positionName: asOptionalString(body.positionName ?? referenceProduct?.positionName),
         sellingPrice: toDecimal(body.sellingPrice),
-        minStock: toDecimal(body.minStock ?? 0),
         isActive: body.isActive ?? true,
       },
       include: {
@@ -1216,7 +1216,6 @@ const updateMedicine = async (
         code: body.code === undefined ? undefined : normalizeProductCode(body.code),
         positionName: body.positionName === undefined ? undefined : asOptionalString(body.positionName),
         sellingPrice: body.sellingPrice === undefined ? undefined : toDecimal(body.sellingPrice),
-        minStock: body.minStock === undefined ? undefined : toDecimal(body.minStock),
         isActive: body.isActive,
       },
       include: {
@@ -1233,7 +1232,6 @@ const updateMedicine = async (
         code: updated.code,
         positionName: updated.positionName,
         sellingPrice: Number(updated.sellingPrice),
-        minStock: Number(updated.minStock),
         isActive: updated.isActive,
         categoryId: updated.categoryId,
       },

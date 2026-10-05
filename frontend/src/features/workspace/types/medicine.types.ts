@@ -30,7 +30,6 @@ export interface Medicine {
     description?: string | null;
     isActive: boolean;
     sellingPrice: number;
-    minStock: number;
     totalStock: number;
     availableStock: number;
     units: MedicineUnit[];
@@ -88,7 +87,6 @@ export interface MedicinePayload {
     requiresPrescription?: boolean;
     description?: string;
     sellingPrice: number;
-    minStock?: number;
     isActive?: boolean;
     units?: MedicineUnit[];
 }

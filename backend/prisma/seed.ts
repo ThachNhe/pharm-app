@@ -166,7 +166,6 @@ const seedDemoStore = async (seededUsers: Awaited<ReturnType<typeof seedUsers>>)
       code: 'SP-DEMO-001',
       positionName: 'Kệ A',
       sellingPrice: 2000,
-      minStock: 20,
       isActive: true,
     },
     create: {
@@ -176,7 +175,6 @@ const seedDemoStore = async (seededUsers: Awaited<ReturnType<typeof seedUsers>>)
       code: 'SP-DEMO-001',
       positionName: 'Kệ A',
       sellingPrice: 2000,
-      minStock: 20,
     },
   });
 

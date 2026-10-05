@@ -69,7 +69,6 @@ describe('Store operations flow', () => {
           specification: 'Hộp 10 vỉ x 10 viên',
           usageInstructions: 'Uống sau ăn',
           sellingPrice: 2000,
-          minStock: 20,
           isActive: true,
           units: [
             { name: 'Viên', conversionRate: 1, isBaseUnit: true },
@@ -191,6 +190,7 @@ describe('Store operations flow', () => {
         id: medicineRes.body.id,
         totalStock: 100,
         availableStock: 100,
+        isLowStock: false,
       });
       expect(inventoryBeforeSale.body.results[0]).not.toHaveProperty('inventoryValue');
       expect(inventoryBeforeSale.body.results[0].batches[0]).not.toHaveProperty('importPrice');
@@ -280,6 +280,7 @@ describe('Store operations flow', () => {
       expect(inventoryAfterSale.body.results[0]).toMatchObject({
         totalStock: 60,
         availableStock: 60,
+        isLowStock: false,
       });
 
       const reportRes = await request(app)
@@ -598,7 +599,6 @@ describe('Store operations flow', () => {
       barcode: faker.random.alphaNumeric(12),
       manufacturer: 'Nhà sản xuất giả từ client',
       sellingPrice: 3000,
-      minStock: 10,
       isActive: true,
     };
     const firstMedicineRes = await request(app)
@@ -626,7 +626,7 @@ describe('Store operations flow', () => {
     const secondMedicineRes = await request(app)
       .post(`/v1/stores/${secondStore.id}/medicines`)
       .set('Authorization', `Bearer ${ownerToken}`)
-      .send({ ...createPayload, categoryId: secondCategory.id, sellingPrice: 3500, minStock: 20 })
+      .send({ ...createPayload, categoryId: secondCategory.id, sellingPrice: 3500 })
       .expect(httpStatus.CREATED);
 
     expect(secondMedicineRes.body).toMatchObject({
@@ -634,7 +634,6 @@ describe('Store operations flow', () => {
       referenceProductId: referenceProducts[1].id,
       categoryId: secondCategory.id,
       sellingPrice: 3500,
-      minStock: 20,
     });
     expect(secondMedicineRes.body.storeMedicineId).not.toBe(firstMedicineRes.body.storeMedicineId);
     expect(await prisma.medicine.count({ where: { referenceProductId: referenceProducts[1].id } })).toBe(1);
@@ -687,7 +686,6 @@ describe('Store operations flow', () => {
         code: `${search}-STORE-CODE`,
         positionName: 'Kệ C3',
         sellingPrice: 4200,
-        minStock: 15,
         isActive: false,
       })
       .expect(httpStatus.OK);
@@ -698,7 +696,6 @@ describe('Store operations flow', () => {
       code: `${search}-STORE-CODE`.toUpperCase(),
       positionName: 'Kệ C3',
       sellingPrice: 4200,
-      minStock: 15,
       isActive: false,
     });
     const secondAssignment = await prisma.storeMedicine.findUniqueOrThrow({
@@ -710,7 +707,6 @@ describe('Store operations flow', () => {
       },
     });
     expect(Number(secondAssignment.sellingPrice)).toBe(3500);
-    expect(Number(secondAssignment.minStock)).toBe(20);
     expect(secondAssignment.categoryId).toBe(secondCategory.id);
     expect(secondAssignment.code).toBe(referenceProducts[1].code.toUpperCase());
     expect(secondAssignment.positionName).toBe('Kệ B2');

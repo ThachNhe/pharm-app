@@ -124,9 +124,6 @@ const medicineSchema = z
         sellingPrice: z
             .number({ error: 'Nhập giá bán' })
             .min(0, 'Giá bán không được âm'),
-        minStock: z
-            .number({ error: 'Nhập tồn tối thiểu' })
-            .min(0, 'Tồn tối thiểu không được âm'),
         importPrice: z.number().min(0, 'Giá nhập không được âm').nullish(),
         quantity: z.number().positive('Số lượng phải lớn hơn 0').nullish(),
         batchNumber: z.string().trim().max(100),
@@ -203,7 +200,6 @@ const emptyValues: DefaultValues<MedicineFormValues> = {
     importerName: '',
     usageInstructions: '',
     sellingPrice: undefined,
-    minStock: 0,
     importPrice: undefined,
     quantity: undefined,
     batchNumber: '',
@@ -231,7 +227,6 @@ const getMedicineValues = (medicine: Medicine): MedicineFormValues => ({
     importerName: medicine.importerName ?? '',
     usageInstructions: medicine.usageInstructions ?? '',
     sellingPrice: medicine.sellingPrice,
-    minStock: medicine.minStock,
     importPrice: undefined,
     quantity: undefined,
     batchNumber: '',
@@ -251,7 +246,7 @@ function NumberField({
     error,
 }: {
     control: Control<MedicineFormValues>;
-    name: 'sellingPrice' | 'minStock' | 'importPrice' | 'quantity';
+    name: 'sellingPrice' | 'importPrice' | 'quantity';
     label: string;
     suffix: string;
     required?: boolean;
@@ -443,7 +438,6 @@ export function MedicineDialog({
             countryOfOrigin: product.countryOfOrigin ?? '',
             importerName: product.importerName ?? '',
             usageInstructions: product.usageInstructions ?? '',
-            minStock: product.minInventory ?? 0,
             importPrice: product.inputPrice ?? undefined,
             tabletsPerBlister: getTabletsPerBlister(product.medicineUnits),
         });
@@ -491,7 +485,6 @@ export function MedicineDialog({
                         code: values.code,
                         positionName: values.positionName || undefined,
                         sellingPrice: values.sellingPrice,
-                        minStock: values.minStock,
                         isActive: values.isActive,
                         units: unitsChanged
                             ? toUnits(
@@ -1122,15 +1115,7 @@ export function MedicineDialog({
                                     </p>
                                 </div>
                             </>
-                        ) : (
-                            <NumberField
-                                control={form.control}
-                                name="minStock"
-                                label={`Tồn tối thiểu (${unitLabel})`}
-                                suffix={unitLabel}
-                                error={errors.minStock?.message}
-                            />
-                        )}
+                        ) : null}
                         <Field
                             label="Ghi chú"
                             error={errors.description?.message}
@@ -1506,8 +1491,7 @@ export function MedicinesPage() {
                                                     <td className="px-4 py-3 text-right whitespace-nowrap">
                                                         <span
                                                             className={
-                                                                medicine.availableStock <=
-                                                                    medicine.minStock
+                                                                medicine.isLowStock
                                                                     ? 'text-destructive font-semibold'
                                                                     : 'font-medium'
                                                             }
