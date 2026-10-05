@@ -105,11 +105,17 @@ export function InventoryPage({
                                                     0
                                                 ) <=
                                             60 * 86400000
-                                          ? 'warning'
+                                          ? 'danger'
                                           : 'success'
                                 }
                             >
-                                {batch.isExpired ? 'Hết hạn' : 'Còn hạn'}
+                                {batch.isExpired
+                                    ? 'Hết hạn'
+                                    : new Date(batch.expiryDate).getTime() -
+                                            new Date().setHours(0, 0, 0, 0) <=
+                                        60 * 86400000
+                                      ? 'Cận hạn'
+                                      : 'Còn hạn'}
                             </StatusBadge>
                         </div>
                         <div className="mt-3 flex items-end justify-between gap-3">
@@ -270,7 +276,7 @@ export function InventoryPage({
                                                             <span
                                                                 className={
                                                                     medicine.isLowStock
-                                                                        ? 'text-destructive font-semibold'
+                                                                        ? 'text-muted-foreground font-semibold'
                                                                         : 'font-semibold'
                                                                 }
                                                             >
@@ -282,7 +288,13 @@ export function InventoryPage({
                                                                 {medicine.baseUnitName.toLowerCase()}
                                                             </span>
                                                         </td>
-                                                        <td className="px-4 py-3">
+                                                        <td
+                                                            className={
+                                                                medicine.hasExpiringBatch
+                                                                    ? 'text-destructive px-4 py-3 font-medium'
+                                                                    : 'px-4 py-3'
+                                                            }
+                                                        >
                                                             {medicine.nearestExpiry
                                                                 ? formatDate(
                                                                       medicine.nearestExpiry
@@ -300,12 +312,12 @@ export function InventoryPage({
                                                         <td className="px-4 py-3">
                                                             <div className="flex flex-wrap gap-1.5">
                                                                 {medicine.isLowStock ? (
-                                                                    <StatusBadge tone="danger">
+                                                                    <StatusBadge tone="neutral">
                                                                         Tồn thấp
                                                                     </StatusBadge>
                                                                 ) : null}
                                                                 {medicine.hasExpiringBatch ? (
-                                                                    <StatusBadge tone="warning">
+                                                                    <StatusBadge tone="danger">
                                                                         Cận hạn
                                                                     </StatusBadge>
                                                                 ) : null}

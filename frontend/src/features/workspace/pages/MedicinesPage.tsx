@@ -1492,7 +1492,7 @@ export function MedicinesPage() {
                                                         <span
                                                             className={
                                                                 medicine.isLowStock
-                                                                    ? 'text-destructive font-semibold'
+                                                                    ? 'text-muted-foreground font-semibold'
                                                                     : 'font-medium'
                                                             }
                                                         >

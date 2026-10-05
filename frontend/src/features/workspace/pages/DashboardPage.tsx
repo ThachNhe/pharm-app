@@ -75,7 +75,7 @@ export function DashboardPage() {
             value: formatNumber(data.inventory.expiringCount),
             detail: 'Trong vòng 60 ngày tới',
             icon: AlertTriangle,
-            tone: 'text-amber-800 bg-amber-100',
+            tone: 'text-rose-700 bg-rose-100',
         },
     ];
 
@@ -128,7 +128,7 @@ export function DashboardPage() {
                             search={{ alert: 'low' }}
                             className="hover:bg-muted/45 flex items-center gap-3 px-4 py-4 transition-colors sm:px-5"
                         >
-                            <div className="grid size-9 place-items-center rounded-md bg-rose-100 text-rose-700">
+                            <div className="grid size-9 place-items-center rounded-md bg-slate-100 text-slate-700">
                                 <PackageCheck className="size-4" />
                             </div>
                             <div className="min-w-0 flex-1">
@@ -145,7 +145,7 @@ export function DashboardPage() {
                             search={{ alert: 'expiring' }}
                             className="hover:bg-muted/45 flex items-center gap-3 px-4 py-4 transition-colors sm:px-5"
                         >
-                            <div className="grid size-9 place-items-center rounded-md bg-amber-100 text-amber-800">
+                            <div className="grid size-9 place-items-center rounded-md bg-rose-100 text-rose-700">
                                 <AlertTriangle className="size-4" />
                             </div>
                             <div className="min-w-0 flex-1">
