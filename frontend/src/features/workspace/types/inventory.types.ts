@@ -17,7 +17,15 @@ export interface InventoryMedicine extends Medicine {
 
 export interface InventoryMovement {
     id: string;
-    type: 'import' | 'sale' | 'adjustment' | 'return_in' | 'return_out';
+    type:
+        | 'import'
+        | 'sale'
+        | 'return'
+        | 'adjustment'
+        | 'damage'
+        | 'expired'
+        | 'transfer_in'
+        | 'transfer_out';
     quantityDelta: number;
     referenceType?: string | null;
     referenceId?: string | null;

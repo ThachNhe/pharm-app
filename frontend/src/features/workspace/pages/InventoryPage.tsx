@@ -29,8 +29,11 @@ const movementLabels = {
     import: 'Nhập kho',
     sale: 'Bán hàng',
     adjustment: 'Điều chỉnh',
-    return_in: 'Trả vào',
-    return_out: 'Trả ra',
+    return: 'Khách trả hàng',
+    damage: 'Hủy hàng',
+    expired: 'Hết hạn',
+    transfer_in: 'Chuyển đến',
+    transfer_out: 'Chuyển đi',
 };
 
 export function InventoryPage({

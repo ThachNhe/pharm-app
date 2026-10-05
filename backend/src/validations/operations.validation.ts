@@ -262,6 +262,26 @@ const saleParams = {
   }),
 };
 
+const createSaleReturn = {
+  params: Joi.object().keys({
+    ...storeParams,
+    saleId: Joi.string().required().custom(objectId),
+  }),
+  body: Joi.object().keys({
+    note: Joi.string().allow('', null).max(2000),
+    items: Joi.array()
+      .items(
+        Joi.object().keys({
+          saleDetailId: Joi.string().required().custom(objectId),
+          quantity: Joi.number().positive().required(),
+        }),
+      )
+      .min(1)
+      .max(100)
+      .required(),
+  }),
+};
+
 const getProfitReport = {
   params: Joi.object().keys(storeParams),
   query: Joi.object().keys(dateQuery),
@@ -272,6 +292,7 @@ export {
   createMedicine,
   createProductCategory,
   createSale,
+  createSaleReturn,
   createSupplier,
   getContext,
   getDashboard,

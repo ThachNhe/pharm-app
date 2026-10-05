@@ -7,6 +7,8 @@ const setupTestDB = () => {
 
   beforeEach(async () => {
     await prisma.auditLog.deleteMany();
+    await prisma.saleReturnDetail.deleteMany();
+    await prisma.saleReturn.deleteMany();
     await prisma.saleDetail.deleteMany();
     await prisma.sale.deleteMany();
     await prisma.inventoryMovement.deleteMany();

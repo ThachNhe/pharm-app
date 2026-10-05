@@ -93,6 +93,11 @@ type SalePayload = {
   }>;
 };
 
+type SaleReturnPayload = {
+  items: Array<{ saleDetailId: string; quantity: number | string }>;
+  note?: string | null;
+};
+
 const asOptionalString = (value?: string | null) => {
   const normalized = value?.trim();
   return normalized ? normalized : null;
@@ -419,13 +424,53 @@ const serializeImportReceipt = (receipt) => ({
   })),
 });
 
+const saleReturnsInclude = {
+  orderBy: { createdAt: 'desc' },
+  include: {
+    createdByUser: { select: { id: true, name: true } },
+    details: {
+      include: {
+        saleDetail: {
+          select: {
+            unitNameSnapshot: true,
+            conversionRateSnapshot: true,
+            medicine: { select: { name: true } },
+            stockBatch: { select: { batchNumber: true } },
+          },
+        },
+      },
+    },
+  },
+} as const satisfies Prisma.SaleInclude['returns'];
+
 const serializeSale = (sale, includeCosts = true) => ({
   ...sale,
   discountAmount: Number(sale.discountAmount),
   totalAmount: Number(sale.totalAmount),
+  refundedAmount: Number(
+    (sale.returns ?? []).reduce((sum, saleReturn) => sum.plus(saleReturn.refundAmount), new PrismaRuntime.Decimal(0)),
+  ),
+  returns: (sale.returns ?? []).map((saleReturn) => ({
+    id: saleReturn.id,
+    createdAt: saleReturn.createdAt,
+    refundAmount: Number(saleReturn.refundAmount),
+    note: saleReturn.note,
+    createdByUser: saleReturn.createdByUser,
+    details: saleReturn.details.map((detail) => ({
+      id: detail.id,
+      saleDetailId: detail.saleDetailId,
+      medicineName: detail.saleDetail.medicine.name,
+      batchNumber: detail.saleDetail.stockBatch.batchNumber,
+      unitName: detail.saleDetail.unitNameSnapshot,
+      displayQuantity: Number(detail.quantity.div(detail.saleDetail.conversionRateSnapshot)),
+      refundAmount: Number(detail.refundAmount),
+    })),
+  })),
   details: sale.details.map((detail) => ({
     ...detail,
     quantity: Number(detail.quantity),
+    returnedQuantity: Number(detail.returnedQuantity),
+    displayReturnedQuantity: Number(detail.returnedQuantity.div(detail.conversionRateSnapshot)),
     salePrice: Number(detail.salePrice),
     displayQuantity: Number(detail.quantity.div(detail.conversionRateSnapshot)),
     displaySalePrice: Number(detail.salePrice.mul(detail.conversionRateSnapshot)),
@@ -526,34 +571,70 @@ const hideInventoryCosts = (rows: Awaited<ReturnType<typeof buildInventoryRows>>
     })),
   }));
 
+// Returns reduce revenue and cost on the day they are made, not on the original sale date.
+const queryReturnsForReport = (storeId: string, createdAt?: ReturnType<typeof getDateRange>, soldBy?: string) =>
+  prisma.saleReturn.findMany({
+    where: { storeId, ...(createdAt ? { createdAt } : {}), ...(soldBy ? { sale: { soldBy } } : {}) },
+    include: {
+      details: {
+        include: {
+          saleDetail: {
+            select: {
+              medicineId: true,
+              costPrice: true,
+              medicine: { select: { id: true, name: true, baseUnitName: true } },
+            },
+          },
+        },
+      },
+    },
+  });
+
 const getDashboard = async (actor: Actor, storeId: string) => {
   const access = await getStoreAccess(actor, storeId, 'staff');
   const today = startOfCurrentBusinessDay();
-  const [sales, inventory, supplierCount] = await Promise.all([
+  const soldBy = !access.user.isSystemAdmin && access.role === 'staff' ? actor.id : undefined;
+  const [sales, returns, inventory, supplierCount] = await Promise.all([
     prisma.sale.findMany({
       where: {
         storeId,
-        status: 'completed',
+        status: { in: ['completed', 'refunded'] },
         soldAt: { gte: today },
-        ...(!access.user.isSystemAdmin && access.role === 'staff' ? { soldBy: actor.id } : {}),
+        ...(soldBy ? { soldBy } : {}),
       },
       include: { details: true },
     }),
+    queryReturnsForReport(storeId, { gte: today }, soldBy),
     buildInventoryRows(storeId),
     prisma.supplier.count({ where: { storeId, isActive: true } }),
   ]);
 
-  const revenue = sales.reduce((sum, sale) => sum.plus(sale.totalAmount), new PrismaRuntime.Decimal(0));
-  const cost = sales.reduce(
-    (sum, sale) =>
-      sum.plus(
-        sale.details.reduce(
-          (detailSum, detail) => detailSum.plus(detail.costPrice.mul(detail.quantity)),
-          new PrismaRuntime.Decimal(0),
+  const revenue = sales
+    .reduce((sum, sale) => sum.plus(sale.totalAmount), new PrismaRuntime.Decimal(0))
+    .minus(returns.reduce((sum, saleReturn) => sum.plus(saleReturn.refundAmount), new PrismaRuntime.Decimal(0)));
+  const cost = sales
+    .reduce(
+      (sum, sale) =>
+        sum.plus(
+          sale.details.reduce(
+            (detailSum, detail) => detailSum.plus(detail.costPrice.mul(detail.quantity)),
+            new PrismaRuntime.Decimal(0),
+          ),
         ),
+      new PrismaRuntime.Decimal(0),
+    )
+    .minus(
+      returns.reduce(
+        (sum, saleReturn) =>
+          sum.plus(
+            saleReturn.details.reduce(
+              (detailSum, detail) => detailSum.plus(detail.saleDetail.costPrice.mul(detail.quantity)),
+              new PrismaRuntime.Decimal(0),
+            ),
+          ),
+        new PrismaRuntime.Decimal(0),
       ),
-    new PrismaRuntime.Decimal(0),
-  );
+    );
   const canViewFinancials = access.user.isSystemAdmin || access.role === 'owner' || access.role === 'manager';
 
   return {
@@ -561,7 +642,7 @@ const getDashboard = async (actor: Actor, storeId: string) => {
     role: access.role,
     today: {
       revenue: Number(revenue),
-      orders: sales.length,
+      orders: sales.filter((sale) => sale.status === 'completed').length,
       ...(canViewFinancials
         ? {
             cost: Number(cost),
@@ -1618,6 +1699,7 @@ const querySales = async (actor: Actor, storeId: string, query: DateQuery) => {
             stockBatch: { select: { id: true, batchNumber: true, expiryDate: true } },
           },
         },
+        returns: saleReturnsInclude,
       },
     }),
   ]);
@@ -1648,6 +1730,7 @@ const getSale = async (actor: Actor, storeId: string, saleId: string) => {
           stockBatch: { select: { id: true, batchNumber: true, expiryDate: true } },
         },
       },
+      returns: saleReturnsInclude,
     },
   });
   if (!sale) throw new ApiError(httpStatus.NOT_FOUND, 'Không tìm thấy đơn bán');
@@ -1834,12 +1917,153 @@ const createSale = async (actor: Actor, storeId: string, body: SalePayload) => {
   }
 };
 
+const createSaleReturn = async (actor: Actor, storeId: string, saleId: string, body: SaleReturnPayload) => {
+  await getStoreOperationAccess(actor, storeId, 'manager');
+  const detailIds = body.items.map((item) => item.saleDetailId);
+  if (new Set(detailIds).size !== detailIds.length) {
+    throw new ApiError(httpStatus.BAD_REQUEST, 'Mỗi dòng hàng chỉ được xuất hiện một lần trong phiếu trả');
+  }
+
+  const sale = await prisma.$transaction(async (tx) => {
+    // Serialize returns per sale so refund totals and the refunded status stay consistent.
+    await tx.$queryRaw`SELECT id FROM sales WHERE id = ${saleId}::uuid AND store_id = ${storeId}::uuid FOR UPDATE`;
+    const current = await tx.sale.findFirst({ where: { id: saleId, storeId }, include: { details: true } });
+    if (!current) throw new ApiError(httpStatus.NOT_FOUND, 'Không tìm thấy đơn bán');
+    if (current.status !== 'completed') {
+      throw new ApiError(httpStatus.CONFLICT, 'Đơn bán đã được trả hết hoặc đã bị hủy');
+    }
+
+    // The sale discount is spread over lines pro rata; rounding is applied to the cumulative refund per line.
+    const grossAmount = current.details.reduce(
+      (sum, detail) => sum.plus(detail.salePrice.mul(detail.quantity)),
+      new PrismaRuntime.Decimal(0),
+    );
+    const refundRatio = grossAmount.gt(0) ? current.totalAmount.div(grossAmount) : new PrismaRuntime.Decimal(0);
+    const refundedUpTo = (detail: (typeof current.details)[number], quantity: Prisma.Decimal) =>
+      detail.salePrice.mul(quantity).mul(refundRatio).toDecimalPlaces(2, PrismaRuntime.Decimal.ROUND_HALF_UP);
+
+    const lines = body.items.map((item) => {
+      const detail = current.details.find((candidate) => candidate.id === item.saleDetailId);
+      if (!detail) throw new ApiError(httpStatus.BAD_REQUEST, 'Dòng hàng không thuộc đơn bán này');
+      const quantity = toDecimal(item.quantity).mul(detail.conversionRateSnapshot);
+      if (quantity.decimalPlaces() > 2) {
+        throw new ApiError(httpStatus.BAD_REQUEST, 'Số lượng sau quy đổi chỉ được có tối đa 2 chữ số thập phân');
+      }
+      if (quantity.gt(detail.quantity.minus(detail.returnedQuantity))) {
+        throw new ApiError(httpStatus.CONFLICT, 'Số lượng trả vượt quá số lượng còn có thể trả');
+      }
+      return {
+        detail,
+        quantity,
+        refundAmount: refundedUpTo(detail, detail.returnedQuantity.plus(quantity)).minus(
+          refundedUpTo(detail, detail.returnedQuantity),
+        ),
+      };
+    });
+
+    const returningNow = new Map(lines.map((line) => [line.detail.id, line.quantity]));
+    const fullyReturned = current.details.every((detail) =>
+      detail.returnedQuantity.plus(returningNow.get(detail.id) ?? 0).equals(detail.quantity),
+    );
+    if (fullyReturned) {
+      // Refunds across all returns must add up to the amount the customer paid.
+      const previous = await tx.saleReturn.aggregate({ where: { saleId, storeId }, _sum: { refundAmount: true } });
+      const thisReturn = lines.reduce((sum, line) => sum.plus(line.refundAmount), new PrismaRuntime.Decimal(0));
+      const remainder = current.totalAmount.minus(previous._sum.refundAmount ?? 0).minus(thisReturn);
+      const largest = lines.reduce((best, line) => (line.refundAmount.gt(best.refundAmount) ? line : best));
+      largest.refundAmount = largest.refundAmount.plus(remainder);
+    }
+
+    for (const line of lines) {
+      const returned = await tx.saleDetail.updateMany({
+        where: {
+          id: line.detail.id,
+          saleId,
+          storeId,
+          returnedQuantity: { lte: line.detail.quantity.minus(line.quantity) },
+        },
+        data: { returnedQuantity: { increment: line.quantity } },
+      });
+      const restocked = await tx.stockBatch.updateMany({
+        where: { id: line.detail.stockBatchId, storeId, medicineId: line.detail.medicineId },
+        data: { quantityRemaining: { increment: line.quantity } },
+      });
+      if (returned.count !== 1 || restocked.count !== 1) {
+        throw new ApiError(httpStatus.CONFLICT, 'Đơn bán vừa thay đổi, vui lòng tải lại và thử lại');
+      }
+    }
+
+    const refundAmount = lines.reduce((sum, line) => sum.plus(line.refundAmount), new PrismaRuntime.Decimal(0));
+    const saleReturn = await tx.saleReturn.create({
+      data: {
+        storeId,
+        saleId,
+        createdBy: actor.id,
+        refundAmount,
+        note: asOptionalString(body.note),
+        details: {
+          create: lines.map((line) => ({
+            saleDetailId: line.detail.id,
+            quantity: line.quantity,
+            refundAmount: line.refundAmount,
+          })),
+        },
+      },
+    });
+    await tx.inventoryMovement.createMany({
+      data: lines.map((line) => ({
+        storeId,
+        medicineId: line.detail.medicineId,
+        stockBatchId: line.detail.stockBatchId,
+        type: 'return' as const,
+        quantityDelta: line.quantity,
+        referenceType: 'sale_return' as const,
+        referenceId: saleReturn.id,
+        createdBy: actor.id,
+      })),
+    });
+    if (fullyReturned) {
+      await tx.sale.update({ where: { id: saleId }, data: { status: 'refunded' } });
+    }
+    await writeAudit(tx, actor, {
+      storeId,
+      action: 'sale.return',
+      targetType: 'sale',
+      targetId: saleId,
+      metadata: {
+        saleReturnId: saleReturn.id,
+        refundAmount: Number(refundAmount),
+        itemCount: lines.length,
+        saleRefunded: fullyReturned,
+      },
+    });
+
+    return tx.sale.findUniqueOrThrow({
+      where: { id: saleId },
+      include: {
+        store: { select: { id: true, name: true, address: true, phone: true } },
+        soldByUser: { select: { id: true, name: true } },
+        details: {
+          include: {
+            medicine: { select: { id: true, name: true, baseUnitName: true } },
+            stockBatch: { select: { id: true, batchNumber: true, expiryDate: true } },
+          },
+        },
+        returns: saleReturnsInclude,
+      },
+    });
+  });
+  return serializeSale(sale, true);
+};
+
 const getProfitReport = async (actor: Actor, storeId: string, query: DateQuery) => {
   await getStoreAccess(actor, storeId, 'manager');
+  const range = query.from || query.to ? getDateRange(query) : undefined;
+  const returns = await queryReturnsForReport(storeId, range);
   const sales = await prisma.sale.findMany({
     where: {
       storeId,
-      status: 'completed',
+      status: { in: ['completed', 'refunded'] },
       ...(query.from || query.to ? { soldAt: getDateRange(query) } : {}),
     },
     orderBy: { soldAt: 'asc' },
@@ -1883,7 +2107,7 @@ const getProfitReport = async (actor: Actor, storeId: string, query: DateQuery) 
     };
     day.revenue = day.revenue.plus(sale.totalAmount);
     day.cost = day.cost.plus(saleCost);
-    day.orders += 1;
+    if (sale.status === 'completed') day.orders += 1;
     series.set(date, day);
 
     for (const detail of sale.details) {
@@ -1903,22 +2127,59 @@ const getProfitReport = async (actor: Actor, storeId: string, query: DateQuery) 
     }
   }
 
+  for (const saleReturn of returns) {
+    const returnedCost = saleReturn.details.reduce(
+      (sum, detail) => sum.plus(detail.saleDetail.costPrice.mul(detail.quantity)),
+      new PrismaRuntime.Decimal(0),
+    );
+    revenue = revenue.minus(saleReturn.refundAmount);
+    cost = cost.minus(returnedCost);
+
+    const date = toBusinessDateKey(saleReturn.createdAt);
+    const day = series.get(date) ?? {
+      revenue: new PrismaRuntime.Decimal(0),
+      cost: new PrismaRuntime.Decimal(0),
+      orders: 0,
+    };
+    day.revenue = day.revenue.minus(saleReturn.refundAmount);
+    day.cost = day.cost.minus(returnedCost);
+    series.set(date, day);
+
+    for (const detail of saleReturn.details) {
+      const { medicine, medicineId, costPrice } = detail.saleDetail;
+      const current = medicineTotals.get(medicineId) ?? {
+        id: medicineId,
+        name: medicine.name,
+        unit: medicine.baseUnitName,
+        quantity: new PrismaRuntime.Decimal(0),
+        revenue: new PrismaRuntime.Decimal(0),
+        cost: new PrismaRuntime.Decimal(0),
+      };
+      current.quantity = current.quantity.minus(detail.quantity);
+      current.revenue = current.revenue.minus(detail.refundAmount);
+      current.cost = current.cost.minus(costPrice.mul(detail.quantity));
+      medicineTotals.set(medicineId, current);
+    }
+  }
+
   const inventoryRows = await buildInventoryRows(storeId);
   return {
     totals: {
       revenue: Number(revenue),
       cost: Number(cost),
       grossProfit: Number(revenue.minus(cost)),
-      orders: sales.length,
+      orders: sales.filter((sale) => sale.status === 'completed').length,
       inventoryValue: inventoryRows.reduce((sum, item) => sum + item.inventoryValue, 0),
     },
-    series: [...series.entries()].map(([date, item]) => ({
-      date,
-      revenue: Number(item.revenue),
-      cost: Number(item.cost),
-      grossProfit: Number(item.revenue.minus(item.cost)),
-      orders: item.orders,
-    })),
+    series: [...series.entries()]
+      .sort(([left], [right]) => left.localeCompare(right))
+      .map(([date, item]) => ({
+        date,
+        revenue: Number(item.revenue),
+        cost: Number(item.cost),
+        grossProfit: Number(item.revenue.minus(item.cost)),
+        orders: item.orders,
+      })),
     topMedicines: [...medicineTotals.values()]
       .sort((left, right) => Number(right.revenue.minus(right.cost).minus(left.revenue.minus(left.cost))))
       .slice(0, 10)
@@ -1941,6 +2202,7 @@ export {
   createMedicine,
   createProductCategory,
   createSale,
+  createSaleReturn,
   createSupplier,
   getContext,
   getDashboard,

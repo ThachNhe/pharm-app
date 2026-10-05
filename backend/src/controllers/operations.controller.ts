@@ -94,6 +94,11 @@ const getSales = catchAsync(async (req, res) => {
   res.send(await operationsService.querySales(req.user, param(req, 'storeId'), req.query));
 });
 
+const createSaleReturn = catchAsync(async (req, res) => {
+  const result = await operationsService.createSaleReturn(req.user, param(req, 'storeId'), param(req, 'saleId'), req.body);
+  res.status(httpStatus.CREATED).send(result);
+});
+
 const getSale = catchAsync(async (req, res) => {
   res.send(await operationsService.getSale(req.user, param(req, 'storeId'), param(req, 'saleId')));
 });
@@ -111,6 +116,7 @@ export {
   cancelImportReceipt,
   completeImportReceipt,
   createImportReceipt,
+  createSaleReturn,
   createMedicine,
   createProductCategory,
   createSale,

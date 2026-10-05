@@ -15,10 +15,15 @@ export interface Sale {
     soldAt: string;
     note?: string | null;
     soldByUser: { id: string; name: string };
+    /** Total refunded to the customer across all returns. */
+    refundedAmount: number;
+    returns: SaleReturn[];
     details: Array<{
         id: string;
         medicineId: string;
         quantity: number;
+        returnedQuantity: number;
+        displayReturnedQuantity: number;
         salePrice: number;
         costPrice?: number;
         displayQuantity: number;
@@ -31,6 +36,32 @@ export interface Sale {
             batchNumber: string;
             expiryDate: string;
         } | null;
+    }>;
+}
+
+export interface SaleReturn {
+    id: string;
+    createdAt: string;
+    refundAmount: number;
+    note?: string | null;
+    createdByUser: { id: string; name: string };
+    details: Array<{
+        id: string;
+        saleDetailId: string;
+        medicineName: string;
+        batchNumber: string;
+        unitName: string;
+        displayQuantity: number;
+        refundAmount: number;
+    }>;
+}
+
+export interface SaleReturnPayload {
+    note?: string;
+    items: Array<{
+        saleDetailId: string;
+        /** Quantity in the unit the line was sold in. */
+        quantity: number;
     }>;
 }
 

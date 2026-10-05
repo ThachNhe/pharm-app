@@ -73,6 +73,8 @@ export const API_ENDPOINTS = {
         SALES: (storeId: string) => `/stores/${storeId}/sales`,
         SALE: (storeId: string, saleId: string) =>
             `/stores/${storeId}/sales/${saleId}`,
+        SALE_RETURNS: (storeId: string, saleId: string) =>
+            `/stores/${storeId}/sales/${saleId}/returns`,
         PROFIT_REPORT: (storeId: string) => `/stores/${storeId}/reports/profit`,
     },
 } as const;

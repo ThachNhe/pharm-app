@@ -980,6 +980,146 @@ describe('Store operations flow', () => {
     expect(names(await list({ inStockFirst: true, limit: 1 }))).toEqual(['Bbb còn hàng']);
   });
 
+  test('should return sold items partially then fully, restocking batches and netting revenue', async () => {
+    await insertUsers([userOne, userTwo]);
+    const store = await prisma.store.create({ data: { name: 'Return store' } });
+    const otherStore = await prisma.store.create({ data: { name: 'Other return store' } });
+    await prisma.userStoreRole.createMany({
+      data: [
+        { userId: userOne.id, storeId: store.id, role: 'manager' },
+        { userId: userTwo.id, storeId: store.id, role: 'staff' },
+        { userId: userTwo.id, storeId: otherStore.id, role: 'manager' },
+      ],
+    });
+    const managerToken = accessToken(userOne.id);
+    const staffToken = accessToken(userTwo.id);
+    const category = await prisma.productCategory.create({ data: { storeId: store.id, name: 'Dược phẩm' } });
+    const createMedicine = async (name: string, sellingPrice: number, quantity: number) =>
+      (
+        await request(app)
+          .post(`/v1/stores/${store.id}/medicines`)
+          .set('Authorization', `Bearer ${managerToken}`)
+          .send({
+            categoryId: category.id,
+            name,
+            baseUnitName: 'Viên',
+            sellingPrice,
+            initialImport: { quantity, importPrice: 500, batchNumber: 'LO-1', expiryDate: futureDate(365) },
+          })
+          .expect(httpStatus.CREATED)
+      ).body;
+    const medicineA = await createMedicine('Thuốc A', 2000, 100);
+    const medicineB = await createMedicine('Thuốc B', 3000, 50);
+
+    // gross 26000, discount 2600 -> paid 23400, so every line is refunded at 90%
+    const saleRes = await request(app)
+      .post(`/v1/stores/${store.id}/sales`)
+      .set('Authorization', `Bearer ${staffToken}`)
+      .send({
+        paymentMethod: 'cash',
+        discountAmount: 2600,
+        items: [
+          { medicineId: medicineA.id, quantity: 10 },
+          { medicineId: medicineB.id, quantity: 2 },
+        ],
+      })
+      .expect(httpStatus.CREATED);
+    expect(saleRes.body.totalAmount).toBe(23400);
+    const detailOf = (medicineId: string) =>
+      saleRes.body.details.find((detail: { medicineId: string }) => detail.medicineId === medicineId);
+    const returnUrl = `/v1/stores/${store.id}/sales/${saleRes.body.id}/returns`;
+    const stockOf = async (medicineId: string) =>
+      Number((await prisma.stockBatch.findFirstOrThrow({ where: { storeId: store.id, medicineId } })).quantityRemaining);
+
+    await request(app)
+      .post(returnUrl)
+      .set('Authorization', `Bearer ${staffToken}`)
+      .send({ items: [{ saleDetailId: detailOf(medicineA.id).id, quantity: 1 }] })
+      .expect(httpStatus.FORBIDDEN);
+    await request(app)
+      .post(`/v1/stores/${otherStore.id}/sales/${saleRes.body.id}/returns`)
+      .set('Authorization', `Bearer ${staffToken}`)
+      .send({ items: [{ saleDetailId: detailOf(medicineA.id).id, quantity: 1 }] })
+      .expect(httpStatus.NOT_FOUND);
+    await request(app)
+      .post(`/v1/stores/${otherStore.id}/sales/${saleRes.body.id}/returns`)
+      .set('Authorization', `Bearer ${managerToken}`)
+      .send({ items: [{ saleDetailId: detailOf(medicineA.id).id, quantity: 1 }] })
+      .expect(httpStatus.FORBIDDEN);
+    expect(await stockOf(medicineA.id)).toBe(90);
+
+    const firstReturn = await request(app)
+      .post(returnUrl)
+      .set('Authorization', `Bearer ${managerToken}`)
+      .send({ note: 'Khách đổi ý', items: [{ saleDetailId: detailOf(medicineA.id).id, quantity: 4 }] })
+      .expect(httpStatus.CREATED);
+    expect(firstReturn.body).toMatchObject({ status: 'completed', refundedAmount: 7200 });
+    expect(firstReturn.body.returns).toHaveLength(1);
+    expect(firstReturn.body.returns[0]).toMatchObject({ refundAmount: 7200, note: 'Khách đổi ý' });
+    expect(firstReturn.body.details.find((detail: { id: string }) => detail.id === detailOf(medicineA.id).id)).toMatchObject(
+      {
+        returnedQuantity: 4,
+      },
+    );
+    expect(await stockOf(medicineA.id)).toBe(94);
+    const movement = await prisma.inventoryMovement.findFirstOrThrow({
+      where: { storeId: store.id, type: 'return', medicineId: medicineA.id },
+    });
+    expect(movement).toMatchObject({ referenceType: 'sale_return', createdBy: userOne.id });
+    expect(Number(movement.quantityDelta)).toBe(4);
+
+    await request(app)
+      .post(returnUrl)
+      .set('Authorization', `Bearer ${managerToken}`)
+      .send({ items: [{ saleDetailId: detailOf(medicineA.id).id, quantity: 7 }] })
+      .expect(httpStatus.CONFLICT);
+    await request(app)
+      .post(returnUrl)
+      .set('Authorization', `Bearer ${managerToken}`)
+      .send({
+        items: [
+          { saleDetailId: detailOf(medicineA.id).id, quantity: 1 },
+          { saleDetailId: detailOf(medicineA.id).id, quantity: 1 },
+        ],
+      })
+      .expect(httpStatus.BAD_REQUEST);
+    expect(await stockOf(medicineA.id)).toBe(94);
+
+    const secondReturn = await request(app)
+      .post(returnUrl)
+      .set('Authorization', `Bearer ${managerToken}`)
+      .send({
+        items: [
+          { saleDetailId: detailOf(medicineA.id).id, quantity: 6 },
+          { saleDetailId: detailOf(medicineB.id).id, quantity: 2 },
+        ],
+      })
+      .expect(httpStatus.CREATED);
+    expect(secondReturn.body).toMatchObject({ status: 'refunded', refundedAmount: 23400 });
+    expect(await stockOf(medicineA.id)).toBe(100);
+    expect(await stockOf(medicineB.id)).toBe(50);
+
+    await request(app)
+      .post(returnUrl)
+      .set('Authorization', `Bearer ${managerToken}`)
+      .send({ items: [{ saleDetailId: detailOf(medicineA.id).id, quantity: 1 }] })
+      .expect(httpStatus.CONFLICT);
+
+    const dashboard = await request(app)
+      .get(`/v1/stores/${store.id}/dashboard`)
+      .set('Authorization', `Bearer ${managerToken}`)
+      .expect(httpStatus.OK);
+    expect(dashboard.body.today).toMatchObject({ revenue: 0, cost: 0, grossProfit: 0, orders: 0 });
+    const report = await request(app)
+      .get(`/v1/stores/${store.id}/reports/profit`)
+      .set('Authorization', `Bearer ${managerToken}`)
+      .expect(httpStatus.OK);
+    expect(report.body.totals).toMatchObject({ revenue: 0, cost: 0, grossProfit: 0, orders: 0 });
+
+    const audits = await prisma.auditLog.findMany({ where: { storeId: store.id, action: 'sale.return' } });
+    expect(audits).toHaveLength(2);
+  });
+
   test('should expose only one membership per user and store', async () => {
     await insertUsers([userOne]);
     const store = await prisma.store.create({ data: { name: 'Unique role store' } });

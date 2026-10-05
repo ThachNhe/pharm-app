@@ -14,6 +14,7 @@ import type {
     ReferenceProduct,
     Sale,
     SalePayload,
+    SaleReturnPayload,
     StoreDashboard,
     Supplier,
     SupplierPayload,
@@ -142,6 +143,16 @@ export const workspaceService = {
         apiGet<Sale>(API_ENDPOINTS.OPERATIONS.SALE(storeId, saleId)),
     createSale: (storeId: string, payload: SalePayload) =>
         apiPost<Sale>(API_ENDPOINTS.OPERATIONS.SALES(storeId), payload),
+
+    createSaleReturn: (
+        storeId: string,
+        saleId: string,
+        payload: SaleReturnPayload
+    ) =>
+        apiPost<Sale>(
+            API_ENDPOINTS.OPERATIONS.SALE_RETURNS(storeId, saleId),
+            payload
+        ),
 
     getProfitReport: (storeId: string, params?: Record<string, unknown>) =>
         apiGet<ProfitReport>(

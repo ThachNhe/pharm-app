@@ -10,6 +10,7 @@ import {
     Search,
     ShoppingCart,
     Trash2,
+    Undo2,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
@@ -29,6 +30,7 @@ import { getApiErrorMessage, getApiErrorStatus } from '../utils/api-error';
 import { workspaceService } from '../services/workspace.service';
 import type { Medicine, PaymentMethod, Sale } from '../types';
 import { useWorkspace } from '../hooks/useWorkspace';
+import { SaleReturnDialog } from '../components/SaleReturnDialog';
 import {
     EmptyState,
     ErrorState,
@@ -74,15 +76,34 @@ const paymentLabels: Record<PaymentMethod, string> = {
     other: 'Khác',
 };
 
+const getSaleStatus = (sale: Sale) => {
+    if (sale.status === 'refunded') {
+        return { label: 'Đã trả hàng', tone: 'neutral' } as const;
+    }
+    if (sale.status === 'cancelled') {
+        return { label: 'Đã hủy', tone: 'neutral' } as const;
+    }
+    if (sale.refundedAmount > 0) {
+        return { label: 'Trả một phần', tone: 'warning' } as const;
+    }
+    return { label: 'Hoàn tất', tone: 'success' } as const;
+};
+
 function SaleReceipt({
     sale,
     onClose,
+    onSaleChange,
 }: {
     sale: Sale | null;
     onClose: () => void;
+    onSaleChange: (sale: Sale) => void;
 }) {
-    const { selectedStore } = useWorkspace();
+    const { selectedStore, canSell, hasRole } = useWorkspace();
+    const [returning, setReturning] = useState(false);
     if (!sale) return null;
+    const canReturn =
+        canSell && hasRole('manager') && sale.status === 'completed';
+    const saleStatus = getSaleStatus(sale);
     const receiptLines = [
         ...sale.details
             .reduce(
@@ -167,6 +188,14 @@ function SaleReceipt({
                             </span>
                             <span>{sale.soldByUser.name}</span>
                         </div>
+                        <div className="mt-1 flex items-center justify-between gap-4">
+                            <span className="text-muted-foreground">
+                                Trạng thái
+                            </span>
+                            <StatusBadge tone={saleStatus.tone}>
+                                {saleStatus.label}
+                            </StatusBadge>
+                        </div>
                     </div>
 
                     <div className="overflow-x-auto">
@@ -239,11 +268,75 @@ function SaleReceipt({
                                 {formatCurrency(sale.totalAmount)}
                             </span>
                         </div>
+                        {sale.refundedAmount > 0 ? (
+                            <>
+                                <div className="flex justify-between gap-4">
+                                    <span className="text-muted-foreground">
+                                        Đã hoàn trả
+                                    </span>
+                                    <span>
+                                        -{formatCurrency(sale.refundedAmount)}
+                                    </span>
+                                </div>
+                                <div className="flex justify-between gap-4 font-semibold">
+                                    <span>Thực thu</span>
+                                    <span>
+                                        {formatCurrency(
+                                            sale.totalAmount -
+                                                sale.refundedAmount
+                                        )}
+                                    </span>
+                                </div>
+                            </>
+                        ) : null}
                         <div className="text-muted-foreground flex justify-between gap-4 text-xs">
                             <span>Phương thức</span>
                             <span>{paymentLabels[sale.paymentMethod]}</span>
                         </div>
                     </div>
+                    {sale.returns.length ? (
+                        <div className="border-border mt-4 space-y-3 border-t border-dashed pt-3 text-sm">
+                            <p className="font-medium">Lịch sử trả hàng</p>
+                            {sale.returns.map((saleReturn) => (
+                                <div
+                                    key={saleReturn.id}
+                                    className="bg-muted/40 space-y-1 rounded-md p-3"
+                                >
+                                    <div className="flex items-start justify-between gap-3">
+                                        <p className="text-muted-foreground text-xs">
+                                            {formatDateTime(
+                                                saleReturn.createdAt
+                                            )}{' '}
+                                            · {saleReturn.createdByUser.name}
+                                        </p>
+                                        <p className="shrink-0 font-medium">
+                                            -
+                                            {formatCurrency(
+                                                saleReturn.refundAmount
+                                            )}
+                                        </p>
+                                    </div>
+                                    <ul className="text-xs">
+                                        {saleReturn.details.map((detail) => (
+                                            <li key={detail.id}>
+                                                {detail.medicineName} · lô{' '}
+                                                {detail.batchNumber} ·{' '}
+                                                {formatNumber(
+                                                    detail.displayQuantity
+                                                )}{' '}
+                                                {detail.unitName.toLowerCase()}
+                                            </li>
+                                        ))}
+                                    </ul>
+                                    {saleReturn.note ? (
+                                        <p className="text-muted-foreground text-xs italic">
+                                            {saleReturn.note}
+                                        </p>
+                                    ) : null}
+                                </div>
+                            ))}
+                        </div>
+                    ) : null}
                     <p className="text-muted-foreground mt-6 text-center text-xs">
                         Cảm ơn quý khách. Vui lòng kiểm tra hàng trước khi rời
                         quầy.
@@ -254,11 +347,27 @@ function SaleReceipt({
                     <Button variant="outline" onClick={onClose}>
                         Đóng
                     </Button>
+                    {canReturn ? (
+                        <Button
+                            variant="outline"
+                            onClick={() => setReturning(true)}
+                        >
+                            <Undo2 />
+                            Trả hàng
+                        </Button>
+                    ) : null}
                     <Button onClick={() => window.print()}>
                         <Printer />
                         In hóa đơn
                     </Button>
                 </DialogFooter>
+                {returning ? (
+                    <SaleReturnDialog
+                        sale={sale}
+                        onClose={() => setReturning(false)}
+                        onReturned={onSaleChange}
+                    />
+                ) : null}
             </DialogContent>
         </Dialog>
     );
@@ -946,7 +1055,7 @@ function SalesHistory({ onOpenSale }: { onOpenSale: (sale: Sale) => void }) {
             ) : (
                 <>
                     <div className="overflow-x-auto">
-                        <table className="w-full min-w-[800px] text-left text-sm">
+                        <table className="w-full min-w-[900px] text-left text-sm">
                             <thead className="bg-muted/55 text-muted-foreground text-xs uppercase">
                                 <tr>
                                     <th className="px-4 py-3 font-medium">
@@ -966,6 +1075,9 @@ function SalesHistory({ onOpenSale }: { onOpenSale: (sale: Sale) => void }) {
                                     </th>
                                     <th className="px-4 py-3 text-right font-medium">
                                         Tổng tiền
+                                    </th>
+                                    <th className="px-4 py-3 font-medium">
+                                        Trạng thái
                                     </th>
                                     <th className="w-16 px-4 py-3 text-right font-medium">
                                         Xem
@@ -995,6 +1107,21 @@ function SalesHistory({ onOpenSale }: { onOpenSale: (sale: Sale) => void }) {
                                         </td>
                                         <td className="px-4 py-3 text-right font-semibold">
                                             {formatCurrency(sale.totalAmount)}
+                                            {sale.refundedAmount > 0 ? (
+                                                <p className="text-muted-foreground text-xs font-normal">
+                                                    Hoàn{' '}
+                                                    {formatCurrency(
+                                                        sale.refundedAmount
+                                                    )}
+                                                </p>
+                                            ) : null}
+                                        </td>
+                                        <td className="px-4 py-3">
+                                            <StatusBadge
+                                                tone={getSaleStatus(sale).tone}
+                                            >
+                                                {getSaleStatus(sale).label}
+                                            </StatusBadge>
                                         </td>
                                         <td className="px-4 py-3 text-right">
                                             <Button
@@ -1072,7 +1199,11 @@ export function SalesPage() {
                 <SalesHistory onOpenSale={setReceipt} />
             )}
 
-            <SaleReceipt sale={receipt} onClose={() => setReceipt(null)} />
+            <SaleReceipt
+                sale={receipt}
+                onClose={() => setReceipt(null)}
+                onSaleChange={setReceipt}
+            />
         </div>
     );
 }

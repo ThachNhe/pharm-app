@@ -92,6 +92,12 @@ router
 
 router.get('/:storeId/sales/:saleId', validate(operationsValidation.saleParams), operationsController.getSale);
 
+router.post(
+  '/:storeId/sales/:saleId/returns',
+  validate(operationsValidation.createSaleReturn),
+  operationsController.createSaleReturn,
+);
+
 router.get('/:storeId/reports/profit', validate(operationsValidation.getProfitReport), operationsController.getProfitReport);
 
 export default router;
