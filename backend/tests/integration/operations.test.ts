@@ -809,6 +809,82 @@ describe('Store operations flow', () => {
     ]);
   });
 
+  test('should apply a new selling price from an import receipt only when it is completed', async () => {
+    await insertUsers([userOne]);
+    const store = await prisma.store.create({ data: { name: 'Import price store' } });
+    await prisma.userStoreRole.create({ data: { userId: userOne.id, storeId: store.id, role: 'manager' } });
+    const token = accessToken(userOne.id);
+    const category = await prisma.productCategory.create({ data: { storeId: store.id, name: 'Dược phẩm' } });
+    const medicineRes = await request(app)
+      .post(`/v1/stores/${store.id}/medicines`)
+      .set('Authorization', `Bearer ${token}`)
+      .send({
+        categoryId: category.id,
+        name: 'Thuốc đổi giá',
+        baseUnitName: 'Viên',
+        sellingPrice: 2000,
+        units: [
+          { name: 'Viên', conversionRate: 1, isBaseUnit: true },
+          { name: 'Vỉ', conversionRate: 10, isBaseUnit: false },
+        ],
+      })
+      .expect(httpStatus.CREATED);
+    const medicineId = medicineRes.body.id;
+    const blisterUnitId = medicineRes.body.units.find((unit: { name: string }) => unit.name === 'Vỉ').id;
+    const line = (batchNumber: string, extra: Record<string, unknown> = {}) => ({
+      medicineId,
+      unitId: blisterUnitId,
+      batchNumber,
+      quantity: 5,
+      importPrice: 15000,
+      expiryDate: futureDate(365),
+      ...extra,
+    });
+    const createImport = (items: Record<string, unknown>[]) =>
+      request(app).post(`/v1/stores/${store.id}/imports`).set('Authorization', `Bearer ${token}`).send({ items });
+    const currentPrice = async () =>
+      Number(
+        (
+          await prisma.storeMedicine.findUniqueOrThrow({
+            where: { storeId_medicineId: { storeId: store.id, medicineId } },
+          })
+        ).sellingPrice,
+      );
+
+    await createImport([line('LO-A', { sellingPrice: 2500 }), line('LO-B', { sellingPrice: 2600 })]).expect(
+      httpStatus.BAD_REQUEST,
+    );
+    await createImport([line('LO-A', { quantity: 1.5 })]).expect(httpStatus.BAD_REQUEST);
+    await createImport([line('LO-A', { sellingPrice: 2500.5 })]).expect(httpStatus.BAD_REQUEST);
+
+    const cancelledDraft = await createImport([line('LO-C', { sellingPrice: 9999 })]).expect(httpStatus.CREATED);
+    await request(app)
+      .post(`/v1/stores/${store.id}/imports/${cancelledDraft.body.id}/cancel`)
+      .set('Authorization', `Bearer ${token}`)
+      .expect(httpStatus.OK);
+
+    const draft = await createImport([line('LO-A', { sellingPrice: 2500 }), line('LO-B', { sellingPrice: 2500 })]).expect(
+      httpStatus.CREATED,
+    );
+    expect(draft.body.details[0].newSellingPrice).toBe(2500);
+    expect(await currentPrice()).toBe(2000);
+
+    const detailRes = await request(app)
+      .get(`/v1/stores/${store.id}/imports/${draft.body.id}`)
+      .set('Authorization', `Bearer ${token}`)
+      .expect(httpStatus.OK);
+    expect(detailRes.body.details[0]).toMatchObject({ newSellingPrice: 2500, currentSellingPrice: 2000 });
+
+    await request(app)
+      .post(`/v1/stores/${store.id}/imports/${draft.body.id}/complete`)
+      .set('Authorization', `Bearer ${token}`)
+      .expect(httpStatus.OK);
+    expect(await currentPrice()).toBe(2500);
+    const priceAudits = await prisma.auditLog.findMany({ where: { storeId: store.id, action: 'medicine.price_change' } });
+    expect(priceAudits).toHaveLength(1);
+    expect(priceAudits[0].metadata).toMatchObject({ from: 2000, to: 2500, importReceiptId: draft.body.id });
+  });
+
   test('should create a new product together with its first completed import', async () => {
     await insertUsers([userOne, userTwo]);
     const store = await prisma.store.create({ data: { name: 'New product import store' } });

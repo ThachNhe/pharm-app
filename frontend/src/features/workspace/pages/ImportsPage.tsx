@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { z } from 'zod';
 import { zodResolver } from '@hookform/resolvers/zod';
-import { useFieldArray, useForm, useWatch } from 'react-hook-form';
+import { Controller, useFieldArray, useForm, useWatch } from 'react-hook-form';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
     CheckCircle2,
@@ -23,6 +23,7 @@ import {
     DialogTitle,
 } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
+import { NumberInput } from '@/components/ui/number-input';
 import {
     formatCurrency,
     formatDate,
@@ -68,11 +69,18 @@ const importSchema = z.object({
                 unitId: z.string().min(1, 'Chọn đơn vị'),
                 batchNumber: z.string().trim().min(1, 'Nhập số lô').max(100),
                 quantity: z
-                    .number({ error: 'Nhập số lượng hợp lệ' })
+                    .number({ error: 'Nhập số lượng' })
+                    .int('Số lượng phải là số nguyên')
                     .positive('Số lượng phải lớn hơn 0'),
                 importPrice: z
-                    .number({ error: 'Nhập giá nhập hợp lệ' })
+                    .number({ error: 'Nhập giá nhập' })
+                    .int('Giá nhập phải là số nguyên')
                     .min(0, 'Giá nhập không được âm'),
+                sellingPrice: z
+                    .number()
+                    .int('Giá bán phải là số nguyên')
+                    .min(0, 'Giá bán không được âm')
+                    .nullish(),
                 expiryDate: z
                     .string()
                     .min(1, 'Chọn hạn dùng')
@@ -94,6 +102,7 @@ const emptyItem: ImportFormValues['items'][number] = {
     quantity: 1,
     importPrice: 0,
     expiryDate: '',
+    sellingPrice: null,
 };
 
 function CreateImportDialog({
@@ -119,11 +128,7 @@ function CreateImportDialog({
         () =>
             items.reduce(
                 (sum, item) =>
-                    sum +
-                    (Number.isFinite(item.quantity) ? item.quantity : 0) *
-                        (Number.isFinite(item.importPrice)
-                            ? item.importPrice
-                            : 0),
+                    sum + (item.quantity ?? 0) * (item.importPrice ?? 0),
                 0
             ),
         [items]
@@ -166,6 +171,18 @@ function CreateImportDialog({
                 ...values,
                 supplierId: values.supplierId || null,
                 note: values.note || undefined,
+                items: values.items.map(({ sellingPrice, ...item }) => {
+                    const current = medicinesQuery.data?.results.find(
+                        (medicine) => medicine.id === item.medicineId
+                    )?.sellingPrice;
+                    return {
+                        ...item,
+                        sellingPrice:
+                            sellingPrice != null && sellingPrice !== current
+                                ? sellingPrice
+                                : undefined,
+                    };
+                }),
             }),
         onSuccess: () => {
             toast.success('Đã lưu phiếu nhập nháp');
@@ -263,177 +280,324 @@ function CreateImportDialog({
                                             medicine.id ===
                                             items[index]?.medicineId
                                     );
+                                const selectedUnit =
+                                    selectedMedicine?.units.find(
+                                        (unit) =>
+                                            unit.id === items[index]?.unitId
+                                    );
+                                const baseUnitLabel =
+                                    selectedMedicine?.baseUnitName.toLowerCase() ??
+                                    'đơn vị nhỏ nhất';
+                                const costPerBaseUnit =
+                                    selectedUnit &&
+                                    items[index]?.importPrice != null
+                                        ? items[index].importPrice /
+                                          selectedUnit.conversionRate
+                                        : null;
+                                const sellingPrice =
+                                    items[index]?.sellingPrice ?? null;
+                                const belowCost =
+                                    costPerBaseUnit !== null &&
+                                    sellingPrice !== null &&
+                                    sellingPrice < costPerBaseUnit;
+                                const priceChanged =
+                                    selectedMedicine !== undefined &&
+                                    sellingPrice !== null &&
+                                    sellingPrice !==
+                                        selectedMedicine.sellingPrice;
+                                const pricingHint = !selectedMedicine
+                                    ? ''
+                                    : [
+                                          costPerBaseUnit !== null
+                                              ? `Giá vốn ${formatCurrency(costPerBaseUnit)}/${baseUnitLabel}`
+                                              : '',
+                                          belowCost
+                                              ? 'thấp hơn giá vốn'
+                                              : costPerBaseUnit &&
+                                                  sellingPrice !== null
+                                                ? `lãi ${formatNumber(Math.round(((sellingPrice - costPerBaseUnit) / costPerBaseUnit) * 100))}%`
+                                                : '',
+                                          priceChanged
+                                              ? `đổi từ ${formatCurrency(selectedMedicine.sellingPrice)} khi hoàn tất phiếu`
+                                              : '',
+                                      ]
+                                          .filter(Boolean)
+                                          .join(' · ');
                                 return (
                                     <div
                                         key={field.id}
-                                        className="grid items-start gap-3 p-4 lg:grid-cols-[minmax(180px,1.6fr)_100px_minmax(120px,1fr)_110px_140px_155px_36px]"
+                                        className="space-y-3 p-4"
                                     >
-                                        <Field
-                                            label="Sản phẩm"
-                                            required
-                                            error={
-                                                itemErrors?.medicineId?.message
-                                            }
-                                        >
-                                            <select
-                                                className="border-input bg-input-background focus:border-ring focus:ring-ring/20 h-9 w-full min-w-0 rounded-md border px-3 text-sm outline-none focus:ring-3"
-                                                {...form.register(
-                                                    `items.${index}.medicineId`,
-                                                    {
-                                                        onChange: (event) => {
-                                                            const medicine =
-                                                                medicinesQuery.data?.results.find(
-                                                                    (item) =>
-                                                                        item.id ===
-                                                                        event
-                                                                            .target
-                                                                            .value
+                                        <div className="grid items-start gap-3 lg:grid-cols-[minmax(180px,1.6fr)_120px_minmax(120px,1fr)_155px_36px]">
+                                            <Field
+                                                label="Sản phẩm"
+                                                required
+                                                error={
+                                                    itemErrors?.medicineId
+                                                        ?.message
+                                                }
+                                            >
+                                                <select
+                                                    className="border-input bg-input-background focus:border-ring focus:ring-ring/20 h-9 w-full min-w-0 rounded-md border px-3 text-sm outline-none focus:ring-3"
+                                                    {...form.register(
+                                                        `items.${index}.medicineId`,
+                                                        {
+                                                            onChange: (
+                                                                event
+                                                            ) => {
+                                                                const medicine =
+                                                                    medicinesQuery.data?.results.find(
+                                                                        (
+                                                                            item
+                                                                        ) =>
+                                                                            item.id ===
+                                                                            event
+                                                                                .target
+                                                                                .value
+                                                                    );
+                                                                form.setValue(
+                                                                    `items.${index}.unitId`,
+                                                                    medicine?.units.find(
+                                                                        (
+                                                                            unit
+                                                                        ) =>
+                                                                            unit.isBaseUnit
+                                                                    )?.id ?? '',
+                                                                    {
+                                                                        shouldDirty: true,
+                                                                        shouldValidate: true,
+                                                                    }
                                                                 );
-                                                            form.setValue(
-                                                                `items.${index}.unitId`,
-                                                                medicine?.units.find(
-                                                                    (unit) =>
-                                                                        unit.isBaseUnit
-                                                                )?.id ?? '',
-                                                                {
-                                                                    shouldDirty: true,
-                                                                    shouldValidate: true,
+                                                                form.setValue(
+                                                                    `items.${index}.sellingPrice`,
+                                                                    medicine?.sellingPrice ??
+                                                                        null
+                                                                );
+                                                            },
+                                                        }
+                                                    )}
+                                                >
+                                                    <option value="">
+                                                        Chọn sản phẩm
+                                                    </option>
+                                                    {medicinesQuery.data?.results.map(
+                                                        (medicine) => (
+                                                            <option
+                                                                key={
+                                                                    medicine.id
                                                                 }
-                                                            );
-                                                        },
-                                                    }
-                                                )}
-                                            >
-                                                <option value="">
-                                                    Chọn sản phẩm
-                                                </option>
-                                                {medicinesQuery.data?.results.map(
-                                                    (medicine) => (
-                                                        <option
-                                                            key={medicine.id}
-                                                            value={medicine.id}
-                                                        >
-                                                            {medicine.name}
-                                                        </option>
-                                                    )
-                                                )}
-                                            </select>
-                                        </Field>
-                                        <Field
-                                            label="ĐVT"
-                                            required
-                                            error={itemErrors?.unitId?.message}
-                                        >
-                                            <select
-                                                className="border-input bg-input-background focus:border-ring focus:ring-ring/20 h-9 w-full rounded-md border px-2 text-sm outline-none focus:ring-3"
-                                                disabled={!selectedMedicine}
-                                                {...form.register(
-                                                    `items.${index}.unitId`
-                                                )}
-                                            >
-                                                <option value="">
-                                                    Chọn ĐVT
-                                                </option>
-                                                {selectedMedicine?.units.map(
-                                                    (unit) => (
-                                                        <option
-                                                            key={unit.id}
-                                                            value={unit.id}
-                                                        >
-                                                            {unit.name}
-                                                            {unit.isBaseUnit
-                                                                ? ''
-                                                                : ` (x${formatNumber(unit.conversionRate)})`}
-                                                        </option>
-                                                    )
-                                                )}
-                                            </select>
-                                        </Field>
-                                        <Field
-                                            label="Số lô"
-                                            required
-                                            error={
-                                                itemErrors?.batchNumber?.message
-                                            }
-                                        >
-                                            <Input
-                                                placeholder="LO-2026-01"
-                                                {...form.register(
-                                                    `items.${index}.batchNumber`
-                                                )}
-                                            />
-                                        </Field>
-                                        <Field
-                                            label="Số lượng"
-                                            required
-                                            error={
-                                                itemErrors?.quantity?.message
-                                            }
-                                        >
-                                            <Input
-                                                type="number"
-                                                min="0.01"
-                                                step="0.01"
-                                                inputMode="decimal"
-                                                {...form.register(
-                                                    `items.${index}.quantity`,
-                                                    {
-                                                        valueAsNumber: true,
-                                                    }
-                                                )}
-                                            />
-                                        </Field>
-                                        <Field
-                                            label="Giá nhập / ĐVT"
-                                            required
-                                            error={
-                                                itemErrors?.importPrice?.message
-                                            }
-                                        >
-                                            <Input
-                                                type="number"
-                                                min="0"
-                                                step="100"
-                                                inputMode="decimal"
-                                                {...form.register(
-                                                    `items.${index}.importPrice`,
-                                                    {
-                                                        valueAsNumber: true,
-                                                    }
-                                                )}
-                                            />
-                                        </Field>
-                                        <Field
-                                            label="Hạn sử dụng"
-                                            required
-                                            error={
-                                                itemErrors?.expiryDate?.message
-                                            }
-                                        >
-                                            <Input
-                                                type="date"
-                                                min={tomorrow}
-                                                {...form.register(
-                                                    `items.${index}.expiryDate`
-                                                )}
-                                            />
-                                        </Field>
-                                        <div className="flex items-start pt-[1.625rem]">
-                                            <Button
-                                                type="button"
-                                                size="icon"
-                                                variant="ghost"
-                                                disabled={
-                                                    fields.fields.length === 1
+                                                                value={
+                                                                    medicine.id
+                                                                }
+                                                            >
+                                                                {medicine.name}
+                                                            </option>
+                                                        )
+                                                    )}
+                                                </select>
+                                            </Field>
+                                            <Field
+                                                label="ĐVT"
+                                                required
+                                                error={
+                                                    itemErrors?.unitId?.message
                                                 }
-                                                onClick={() =>
-                                                    fields.remove(index)
-                                                }
-                                                aria-label={`Xóa dòng ${index + 1}`}
-                                                title="Xóa dòng"
                                             >
-                                                <Trash2 className="text-destructive" />
-                                            </Button>
+                                                <select
+                                                    className="border-input bg-input-background focus:border-ring focus:ring-ring/20 h-9 w-full rounded-md border px-2 text-sm outline-none focus:ring-3"
+                                                    disabled={!selectedMedicine}
+                                                    {...form.register(
+                                                        `items.${index}.unitId`
+                                                    )}
+                                                >
+                                                    <option value="">
+                                                        Chọn ĐVT
+                                                    </option>
+                                                    {selectedMedicine?.units.map(
+                                                        (unit) => (
+                                                            <option
+                                                                key={unit.id}
+                                                                value={unit.id}
+                                                            >
+                                                                {unit.name}
+                                                                {unit.isBaseUnit
+                                                                    ? ''
+                                                                    : ` (x${formatNumber(unit.conversionRate)})`}
+                                                            </option>
+                                                        )
+                                                    )}
+                                                </select>
+                                            </Field>
+                                            <Field
+                                                label="Số lô"
+                                                required
+                                                error={
+                                                    itemErrors?.batchNumber
+                                                        ?.message
+                                                }
+                                            >
+                                                <Input
+                                                    placeholder="LO-2026-01"
+                                                    {...form.register(
+                                                        `items.${index}.batchNumber`
+                                                    )}
+                                                />
+                                            </Field>
+                                            <Field
+                                                label="Hạn sử dụng"
+                                                required
+                                                error={
+                                                    itemErrors?.expiryDate
+                                                        ?.message
+                                                }
+                                            >
+                                                <Input
+                                                    type="date"
+                                                    min={tomorrow}
+                                                    {...form.register(
+                                                        `items.${index}.expiryDate`
+                                                    )}
+                                                />
+                                            </Field>
+                                            <div className="flex items-start pt-[1.625rem]">
+                                                <Button
+                                                    type="button"
+                                                    size="icon"
+                                                    variant="ghost"
+                                                    disabled={
+                                                        fields.fields.length ===
+                                                        1
+                                                    }
+                                                    onClick={() =>
+                                                        fields.remove(index)
+                                                    }
+                                                    aria-label={`Xóa dòng ${index + 1}`}
+                                                    title="Xóa dòng"
+                                                >
+                                                    <Trash2 className="text-destructive" />
+                                                </Button>
+                                            </div>
+                                        </div>
+                                        <div className="grid items-start gap-3 sm:grid-cols-3">
+                                            <Field
+                                                label="Số lượng"
+                                                required
+                                                error={
+                                                    itemErrors?.quantity
+                                                        ?.message
+                                                }
+                                            >
+                                                <Controller
+                                                    control={form.control}
+                                                    name={`items.${index}.quantity`}
+                                                    render={({
+                                                        field: quantityField,
+                                                    }) => (
+                                                        <NumberInput
+                                                            ref={
+                                                                quantityField.ref
+                                                            }
+                                                            value={
+                                                                quantityField.value
+                                                            }
+                                                            onValueChange={
+                                                                quantityField.onChange
+                                                            }
+                                                            onBlur={
+                                                                quantityField.onBlur
+                                                            }
+                                                            suffix={selectedUnit?.name.toLowerCase()}
+                                                            aria-invalid={Boolean(
+                                                                itemErrors?.quantity
+                                                            )}
+                                                        />
+                                                    )}
+                                                />
+                                            </Field>
+                                            <Field
+                                                label={`Giá nhập / ${selectedUnit?.name.toLowerCase() ?? 'ĐVT'}`}
+                                                required
+                                                error={
+                                                    itemErrors?.importPrice
+                                                        ?.message
+                                                }
+                                            >
+                                                <Controller
+                                                    control={form.control}
+                                                    name={`items.${index}.importPrice`}
+                                                    render={({
+                                                        field: priceField,
+                                                    }) => (
+                                                        <NumberInput
+                                                            ref={priceField.ref}
+                                                            value={
+                                                                priceField.value
+                                                            }
+                                                            onValueChange={
+                                                                priceField.onChange
+                                                            }
+                                                            onBlur={
+                                                                priceField.onBlur
+                                                            }
+                                                            suffix="VND"
+                                                            aria-invalid={Boolean(
+                                                                itemErrors?.importPrice
+                                                            )}
+                                                        />
+                                                    )}
+                                                />
+                                            </Field>
+                                            <div className="grid gap-1.5">
+                                                <Field
+                                                    label={`Giá bán / ${baseUnitLabel}`}
+                                                    error={
+                                                        itemErrors?.sellingPrice
+                                                            ?.message
+                                                    }
+                                                >
+                                                    <Controller
+                                                        control={form.control}
+                                                        name={`items.${index}.sellingPrice`}
+                                                        render={({
+                                                            field: sellingField,
+                                                        }) => (
+                                                            <NumberInput
+                                                                ref={
+                                                                    sellingField.ref
+                                                                }
+                                                                value={
+                                                                    sellingField.value
+                                                                }
+                                                                onValueChange={
+                                                                    sellingField.onChange
+                                                                }
+                                                                onBlur={
+                                                                    sellingField.onBlur
+                                                                }
+                                                                disabled={
+                                                                    !selectedMedicine
+                                                                }
+                                                                suffix="VND"
+                                                                placeholder="Giữ giá hiện tại"
+                                                                aria-invalid={
+                                                                    belowCost
+                                                                }
+                                                            />
+                                                        )}
+                                                    />
+                                                </Field>
+                                                {pricingHint ? (
+                                                    <p
+                                                        className={
+                                                            belowCost
+                                                                ? 'text-destructive text-xs'
+                                                                : 'text-muted-foreground text-xs'
+                                                        }
+                                                    >
+                                                        {pricingHint}
+                                                    </p>
+                                                ) : null}
+                                            </div>
                                         </div>
                                     </div>
                                 );
@@ -511,9 +675,26 @@ function ImportDetailDialog({
     const { selectedStoreId, canImport } = useWorkspace();
     const queryClient = useQueryClient();
 
+    // The single-receipt endpoint adds each product's current selling price.
+    const detailQuery = useQuery({
+        queryKey: [
+            'workspace',
+            selectedStoreId,
+            'imports',
+            'detail',
+            receipt?.id,
+        ],
+        queryFn: () =>
+            workspaceService.getImport(selectedStoreId, receipt?.id ?? ''),
+        enabled: Boolean(receipt),
+    });
+
     const invalidate = () => {
         void queryClient.invalidateQueries({
             queryKey: ['workspace', selectedStoreId, 'imports'],
+        });
+        void queryClient.invalidateQueries({
+            queryKey: ['workspace', selectedStoreId, 'medicines'],
         });
         void queryClient.invalidateQueries({
             queryKey: ['workspace', selectedStoreId, 'inventory'],
@@ -550,6 +731,12 @@ function ImportDetailDialog({
 
     if (!receipt) return null;
     const meta = statusMeta[receipt.status];
+    const details = detailQuery.data?.details ?? receipt.details;
+    const priceChangeCount = new Set(
+        details
+            .filter((detail) => detail.newSellingPrice != null)
+            .map((detail) => detail.medicineId)
+    ).size;
 
     return (
         <Dialog open onOpenChange={(nextOpen) => !nextOpen && onClose()}>
@@ -591,7 +778,7 @@ function ImportDetailDialog({
                 </div>
 
                 <div className="border-border overflow-x-auto rounded-lg border">
-                    <table className="w-full min-w-[680px] text-left text-sm">
+                    <table className="w-full min-w-[800px] text-left text-sm">
                         <thead className="bg-muted/55 text-muted-foreground text-xs uppercase">
                             <tr>
                                 <th className="px-4 py-3 font-medium">
@@ -608,12 +795,15 @@ function ImportDetailDialog({
                                     Giá nhập
                                 </th>
                                 <th className="px-4 py-3 text-right font-medium">
+                                    Giá bán mới
+                                </th>
+                                <th className="px-4 py-3 text-right font-medium">
                                     Thành tiền
                                 </th>
                             </tr>
                         </thead>
                         <tbody className="divide-border divide-y">
-                            {receipt.details.map((detail) => (
+                            {details.map((detail) => (
                                 <tr key={detail.id}>
                                     <td className="px-4 py-3 font-medium">
                                         {detail.medicine.name}
@@ -640,6 +830,33 @@ function ImportDetailDialog({
                                     <td className="px-4 py-3 text-right">
                                         {formatCurrency(detail.importPrice)}
                                     </td>
+                                    <td className="px-4 py-3 text-right">
+                                        {detail.newSellingPrice != null ? (
+                                            <>
+                                                {formatCurrency(
+                                                    detail.newSellingPrice
+                                                )}{' '}
+                                                /{' '}
+                                                {detail.medicine.baseUnitName.toLowerCase()}
+                                                {receipt.status === 'draft' &&
+                                                detail.currentSellingPrice !=
+                                                    null &&
+                                                detail.currentSellingPrice !==
+                                                    detail.newSellingPrice ? (
+                                                    <p className="text-muted-foreground text-xs">
+                                                        Hiện tại{' '}
+                                                        {formatCurrency(
+                                                            detail.currentSellingPrice
+                                                        )}
+                                                    </p>
+                                                ) : null}
+                                            </>
+                                        ) : (
+                                            <span className="text-muted-foreground">
+                                                Giữ nguyên
+                                            </span>
+                                        )}
+                                    </td>
                                     <td className="px-4 py-3 text-right font-medium">
                                         {formatCurrency(
                                             detail.quantity * detail.importPrice
@@ -660,8 +877,11 @@ function ImportDetailDialog({
 
                 {receipt.status === 'draft' && canImport ? (
                     <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
-                        Hoàn tất phiếu sẽ tạo lô và tăng tồn kho. Thao tác này
-                        không thể sửa trực tiếp sau khi xác nhận.
+                        Hoàn tất phiếu sẽ tạo lô và tăng tồn kho
+                        {priceChangeCount
+                            ? `, đồng thời cập nhật giá bán cho ${priceChangeCount} sản phẩm`
+                            : ''}
+                        . Thao tác này không thể sửa trực tiếp sau khi xác nhận.
                     </div>
                 ) : null}
 

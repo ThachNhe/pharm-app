@@ -179,10 +179,12 @@ const updateMedicine = {
 const importItem = Joi.object().keys({
   medicineId: Joi.string().required().custom(objectId),
   batchNumber: Joi.string().trim().required().max(100),
-  quantity: Joi.number().positive().required(),
-  importPrice: Joi.number().min(0).required(),
+  quantity: Joi.number().integer().positive().required(),
+  importPrice: Joi.number().integer().min(0).required(),
   expiryDate: Joi.date().iso().required(),
   unitId: Joi.string().custom(objectId),
+  // New selling price per base unit, applied when the receipt is completed.
+  sellingPrice: Joi.number().integer().min(0),
 });
 
 const getImportReceipts = {

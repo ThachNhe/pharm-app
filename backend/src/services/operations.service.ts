@@ -72,6 +72,7 @@ type ImportItemPayload = {
   importPrice: number | string;
   expiryDate: string | Date;
   unitId?: string;
+  sellingPrice?: number | string;
 };
 
 type ImportPayload = {
@@ -407,6 +408,7 @@ const serializeImportReceipt = (receipt) => ({
   totalAmount: Number(receipt.totalAmount),
   details: receipt.details.map((detail) => ({
     ...detail,
+    newSellingPrice: detail.newSellingPrice === null ? null : Number(detail.newSellingPrice),
     quantity: Number(detail.enteredQuantity),
     importPrice: Number(detail.enteredImportPrice),
     baseQuantity: Number(detail.quantity),
@@ -1278,6 +1280,17 @@ const validateImportReferences = async (
     throw new ApiError(httpStatus.BAD_REQUEST, 'Hạn sử dụng phải sau ngày hiện tại');
   }
 
+  const sellingPriceByMedicine = new Map<string, string>();
+  for (const item of items) {
+    if (item.sellingPrice === undefined) continue;
+    const price = toDecimal(item.sellingPrice).toFixed(2);
+    const existing = sellingPriceByMedicine.get(item.medicineId);
+    if (existing !== undefined && existing !== price) {
+      throw new ApiError(httpStatus.BAD_REQUEST, 'Một sản phẩm chỉ được đặt một giá bán mới trong cùng phiếu');
+    }
+    sellingPriceByMedicine.set(item.medicineId, price);
+  }
+
   const configuredByMedicine = new Map(configuredMedicines.map((item) => [item.medicineId, item]));
   return items.map((item) => {
     const configured = configuredByMedicine.get(item.medicineId);
@@ -1297,6 +1310,7 @@ const validateImportReferences = async (
       enteredImportPrice,
       quantity,
       importPrice: enteredImportPrice.div(unit.conversionRate),
+      newSellingPrice: item.sellingPrice === undefined ? null : toDecimal(item.sellingPrice),
       unit,
     };
   });
@@ -1337,6 +1351,7 @@ const createImportReceipt = async (actor: Actor, storeId: string, body: ImportPa
             unitNameSnapshot: item.unit.name,
             conversionRateSnapshot: item.unit.conversionRate,
             expiryDate: toDateOnly(item.expiryDate),
+            newSellingPrice: item.newSellingPrice,
           })),
         },
       },
@@ -1407,7 +1422,19 @@ const getImportReceipt = async (actor: Actor, storeId: string, receiptId: string
     },
   });
   if (!receipt) throw new ApiError(httpStatus.NOT_FOUND, 'Không tìm thấy phiếu nhập');
-  return serializeImportReceipt(receipt);
+  const storeMedicines = await prisma.storeMedicine.findMany({
+    where: { storeId, medicineId: { in: receipt.details.map((detail) => detail.medicineId) } },
+    select: { medicineId: true, sellingPrice: true },
+  });
+  const currentPrices = new Map(storeMedicines.map((item) => [item.medicineId, Number(item.sellingPrice)]));
+  const serialized = serializeImportReceipt(receipt);
+  return {
+    ...serialized,
+    details: serialized.details.map((detail) => ({
+      ...detail,
+      currentSellingPrice: currentPrices.get(detail.medicineId) ?? null,
+    })),
+  };
 };
 
 const completeImportReceipt = async (actor: Actor, storeId: string, receiptId: string) => {
@@ -1441,6 +1468,35 @@ const completeImportReceipt = async (actor: Actor, storeId: string, receiptId: s
 
         for (const detail of draft.details) {
           await receiveImportDetail(tx, actor, storeId, draft.id, detail);
+        }
+
+        // Selling prices set on the receipt take effect only now, together with the new stock.
+        const newPrices = new Map(
+          draft.details.flatMap((detail) =>
+            detail.newSellingPrice === null ? [] : [[detail.medicineId, detail.newSellingPrice] as const],
+          ),
+        );
+        for (const [medicineId, newSellingPrice] of newPrices) {
+          const storeMedicine = await tx.storeMedicine.findUnique({
+            where: { storeId_medicineId: { storeId, medicineId } },
+            select: { sellingPrice: true },
+          });
+          if (!storeMedicine || storeMedicine.sellingPrice.equals(newSellingPrice)) continue;
+          await tx.storeMedicine.update({
+            where: { storeId_medicineId: { storeId, medicineId } },
+            data: { sellingPrice: newSellingPrice },
+          });
+          await writeAudit(tx, actor, {
+            storeId,
+            action: 'medicine.price_change',
+            targetType: 'medicine',
+            targetId: medicineId,
+            metadata: {
+              from: Number(storeMedicine.sellingPrice),
+              to: Number(newSellingPrice),
+              importReceiptId: draft.id,
+            },
+          });
         }
 
         await writeAudit(tx, actor, {
