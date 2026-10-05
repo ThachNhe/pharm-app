@@ -4,6 +4,7 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { Controller, useFieldArray, useForm, useWatch } from 'react-hook-form';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
+    ArrowLeft,
     CheckCircle2,
     Eye,
     LoaderCircle,
@@ -33,7 +34,7 @@ import {
 } from '@/lib/utils';
 import { getApiErrorMessage } from '../utils/api-error';
 import { workspaceService } from '../services/workspace.service';
-import type { ImportReceipt, ReceiptStatus } from '../types';
+import type { ImportReceipt, Medicine, ReceiptStatus } from '../types';
 import { useWorkspace } from '../hooks/useWorkspace';
 import { MedicineDialog } from './MedicinesPage';
 import {
@@ -105,6 +106,144 @@ const emptyItem: ImportFormValues['items'][number] = {
     sellingPrice: null,
 };
 
+function ImportReview({
+    values,
+    medicines,
+    supplierName,
+}: {
+    values: ImportFormValues;
+    medicines: Medicine[];
+    supplierName: string | null;
+}) {
+    const total = values.items.reduce(
+        (sum, item) => sum + item.quantity * item.importPrice,
+        0
+    );
+
+    return (
+        <div className="space-y-5">
+            <dl className="border-border bg-muted/30 grid gap-3 rounded-lg border p-4 text-sm sm:grid-cols-3">
+                <div>
+                    <dt className="text-muted-foreground text-xs">
+                        Nhà cung cấp
+                    </dt>
+                    <dd className="font-medium">
+                        {supplierName ?? 'Không chọn nhà cung cấp'}
+                    </dd>
+                </div>
+                <div>
+                    <dt className="text-muted-foreground text-xs">Ngày nhập</dt>
+                    <dd className="font-medium">
+                        {formatDate(values.importedAt)}
+                    </dd>
+                </div>
+                <div>
+                    <dt className="text-muted-foreground text-xs">Ghi chú</dt>
+                    <dd className="font-medium break-words">
+                        {values.note || '—'}
+                    </dd>
+                </div>
+            </dl>
+
+            <div className="border-border divide-border divide-y overflow-hidden rounded-lg border">
+                {values.items.map((item, index) => {
+                    const medicine = medicines.find(
+                        (entry) => entry.id === item.medicineId
+                    );
+                    const unit = medicine?.units.find(
+                        (entry) => entry.id === item.unitId
+                    );
+                    const unitName = unit?.name.toLowerCase() ?? '';
+                    const baseUnitName =
+                        medicine?.baseUnitName.toLowerCase() ?? '';
+                    const baseQuantity = unit
+                        ? item.quantity * unit.conversionRate
+                        : item.quantity;
+                    const costPerBaseUnit = unit
+                        ? item.importPrice / unit.conversionRate
+                        : item.importPrice;
+                    const priceChanged =
+                        medicine !== undefined &&
+                        item.sellingPrice != null &&
+                        item.sellingPrice !== medicine.sellingPrice;
+                    const belowCost =
+                        priceChanged &&
+                        item.sellingPrice != null &&
+                        item.sellingPrice < costPerBaseUnit;
+
+                    return (
+                        <div
+                            key={`${item.medicineId}-${item.batchNumber}-${index}`}
+                            className="space-y-1.5 p-4"
+                        >
+                            <div className="flex items-start justify-between gap-3">
+                                <div className="min-w-0">
+                                    <p className="font-medium">
+                                        {medicine?.name ?? 'Sản phẩm'}
+                                    </p>
+                                    <p className="text-muted-foreground text-xs">
+                                        Lô {item.batchNumber} · HSD{' '}
+                                        {formatDate(item.expiryDate)}
+                                    </p>
+                                </div>
+                                <p className="shrink-0 font-semibold">
+                                    {formatCurrency(
+                                        item.quantity * item.importPrice
+                                    )}
+                                </p>
+                            </div>
+                            <p className="text-sm">
+                                {formatNumber(item.quantity)} {unitName} ×{' '}
+                                {formatCurrency(item.importPrice)}
+                                {unit && !unit.isBaseUnit ? (
+                                    <span className="text-muted-foreground">
+                                        {' '}
+                                        · nhập kho {formatNumber(
+                                            baseQuantity
+                                        )}{' '}
+                                        {baseUnitName}
+                                    </span>
+                                ) : null}
+                            </p>
+                            {priceChanged && medicine ? (
+                                <p
+                                    className={
+                                        belowCost
+                                            ? 'text-destructive text-xs'
+                                            : 'text-muted-foreground text-xs'
+                                    }
+                                >
+                                    Giá bán / {baseUnitName}:{' '}
+                                    {formatCurrency(medicine.sellingPrice)} →{' '}
+                                    {formatCurrency(item.sellingPrice ?? 0)}
+                                    {belowCost ? ' (thấp hơn giá vốn)' : ''}
+                                </p>
+                            ) : null}
+                        </div>
+                    );
+                })}
+            </div>
+
+            <div className="border-primary/20 bg-secondary flex items-center justify-between gap-4 rounded-lg border p-4">
+                <div>
+                    <p className="text-muted-foreground text-sm">
+                        Tổng tiền nhập
+                    </p>
+                    <p className="text-muted-foreground text-xs">
+                        {values.items.length} dòng hàng
+                    </p>
+                </div>
+                <p className="text-brand-navy text-2xl font-semibold">
+                    {formatCurrency(total)}
+                </p>
+            </div>
+            <p className="text-muted-foreground text-sm">
+                Khi xác nhận, hệ thống tạo lô hàng và cộng ngay vào tồn kho.
+            </p>
+        </div>
+    );
+}
+
 function CreateImportDialog({
     open,
     onOpenChange,
@@ -134,6 +273,12 @@ function CreateImportDialog({
         [items]
     );
     const fields = useFieldArray({ control: form.control, name: 'items' });
+    const [reviewing, setReviewing] = useState(false);
+    const handleOpenChange = (nextOpen: boolean) => {
+        if (!nextOpen) setReviewing(false);
+        onOpenChange(nextOpen);
+    };
+    const supplierId = useWatch({ control: form.control, name: 'supplierId' });
 
     const suppliersQuery = useQuery({
         queryKey: ['workspace', selectedStoreId, 'suppliers', 'options'],
@@ -165,54 +310,87 @@ function CreateImportDialog({
         });
     }, [form, open, selectedStoreId]);
 
+    const buildPayload = (values: ImportFormValues) => ({
+        ...values,
+        supplierId: values.supplierId || null,
+        note: values.note || undefined,
+        items: values.items.map(({ sellingPrice, ...item }) => {
+            const current = medicinesQuery.data?.results.find(
+                (medicine) => medicine.id === item.medicineId
+            )?.sellingPrice;
+            return {
+                ...item,
+                sellingPrice:
+                    sellingPrice != null && sellingPrice !== current
+                        ? sellingPrice
+                        : undefined,
+            };
+        }),
+    });
+
+    // Create then complete; a failed completion leaves the saved draft to finish from the list.
     const mutation = useMutation({
-        mutationFn: (values: ImportFormValues) =>
-            workspaceService.createImport(selectedStoreId, {
-                ...values,
-                supplierId: values.supplierId || null,
-                note: values.note || undefined,
-                items: values.items.map(({ sellingPrice, ...item }) => {
-                    const current = medicinesQuery.data?.results.find(
-                        (medicine) => medicine.id === item.medicineId
-                    )?.sellingPrice;
-                    return {
-                        ...item,
-                        sellingPrice:
-                            sellingPrice != null && sellingPrice !== current
-                                ? sellingPrice
-                                : undefined,
-                    };
-                }),
-            }),
-        onSuccess: () => {
-            toast.success('Đã lưu phiếu nhập nháp');
-            void queryClient.invalidateQueries({
-                queryKey: ['workspace', selectedStoreId, 'imports'],
-            });
+        mutationFn: async (values: ImportFormValues) => {
+            const receipt = await workspaceService.createImport(
+                selectedStoreId,
+                buildPayload(values)
+            );
+            try {
+                await workspaceService.completeImport(
+                    selectedStoreId,
+                    receipt.id
+                );
+                return { completeError: null };
+            } catch (completeError) {
+                return { completeError };
+            }
+        },
+        onSuccess: ({ completeError }) => {
+            if (completeError) {
+                toast.error(
+                    `${getApiErrorMessage(completeError, 'Không thể hoàn tất phiếu nhập.')} Phiếu đã lưu nháp, hãy mở phiếu trong danh sách để hoàn tất.`
+                );
+            } else {
+                toast.success('Đã nhập kho');
+            }
+            for (const key of [
+                'imports',
+                'medicines',
+                'inventory',
+                'dashboard',
+            ]) {
+                void queryClient.invalidateQueries({
+                    queryKey: ['workspace', selectedStoreId, key],
+                });
+            }
             form.reset();
-            onOpenChange(false);
+            handleOpenChange(false);
         },
         onError: (error) =>
             toast.error(getApiErrorMessage(error, 'Không thể tạo phiếu nhập.')),
     });
 
     return (
-        <Dialog open={open} onOpenChange={onOpenChange}>
+        <Dialog open={open} onOpenChange={handleOpenChange}>
             <DialogContent className="max-h-[94vh] overflow-y-auto sm:max-w-5xl">
                 <DialogHeader>
-                    <DialogTitle>Nhập sản phẩm có sẵn</DialogTitle>
+                    <DialogTitle>
+                        {reviewing
+                            ? 'Xác nhận phiếu nhập'
+                            : 'Nhập sản phẩm có sẵn'}
+                    </DialogTitle>
                     <DialogDescription>
-                        Phiếu được lưu ở trạng thái nháp và chưa làm thay đổi
-                        tồn kho.
+                        {reviewing
+                            ? 'Bước 2/2 · Kiểm tra lại thông tin trước khi nhập kho.'
+                            : 'Bước 1/2 · Nhập thông tin lô hàng, sau đó xem lại trước khi nhập kho.'}
                     </DialogDescription>
                 </DialogHeader>
 
                 <form
                     id="import-form"
+                    hidden={reviewing}
                     className="space-y-5"
-                    onSubmit={form.handleSubmit((values) =>
-                        mutation.mutate(values)
-                    )}
+                    onSubmit={form.handleSubmit(() => setReviewing(true))}
                 >
                     <div className="grid gap-4 sm:grid-cols-[minmax(0,1fr)_220px]">
                         <Field
@@ -631,25 +809,59 @@ function CreateImportDialog({
                     </div>
                 </form>
 
+                {reviewing ? (
+                    <ImportReview
+                        values={form.getValues()}
+                        medicines={medicinesQuery.data?.results ?? []}
+                        supplierName={
+                            suppliersQuery.data?.results.find(
+                                (supplier) => supplier.id === supplierId
+                            )?.name ?? null
+                        }
+                    />
+                ) : null}
+
                 <DialogFooter>
-                    <Button
-                        type="button"
-                        variant="outline"
-                        disabled={mutation.isPending}
-                        onClick={() => onOpenChange(false)}
-                    >
-                        Hủy
-                    </Button>
-                    <Button
-                        form="import-form"
-                        type="submit"
-                        disabled={mutation.isPending}
-                    >
-                        {mutation.isPending ? (
-                            <LoaderCircle className="animate-spin" />
-                        ) : null}
-                        Lưu phiếu nháp
-                    </Button>
+                    {reviewing ? (
+                        <>
+                            <Button
+                                type="button"
+                                variant="outline"
+                                disabled={mutation.isPending}
+                                onClick={() => setReviewing(false)}
+                            >
+                                <ArrowLeft />
+                                Quay lại chỉnh sửa
+                            </Button>
+                            <Button
+                                type="button"
+                                disabled={mutation.isPending}
+                                onClick={() =>
+                                    mutation.mutate(form.getValues())
+                                }
+                            >
+                                {mutation.isPending ? (
+                                    <LoaderCircle className="animate-spin" />
+                                ) : (
+                                    <CheckCircle2 />
+                                )}
+                                Xác nhận nhập kho
+                            </Button>
+                        </>
+                    ) : (
+                        <>
+                            <Button
+                                type="button"
+                                variant="outline"
+                                onClick={() => handleOpenChange(false)}
+                            >
+                                Hủy
+                            </Button>
+                            <Button form="import-form" type="submit">
+                                Xem lại phiếu nhập
+                            </Button>
+                        </>
+                    )}
                 </DialogFooter>
             </DialogContent>
         </Dialog>
