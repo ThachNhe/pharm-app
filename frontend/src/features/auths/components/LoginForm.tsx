@@ -76,7 +76,7 @@ export function LoginForm() {
         <CardDescription className="max-w-sm leading-6">
           {challenge
             ? `Mã 6 số đã được gửi tới ${challenge.email}.`
-            : `Truy cập ${APP_NAME} để tiếp tục xử lý đơn thuốc, tồn kho và ca trực.`}
+            : ``}
         </CardDescription>
       </CardHeader>
 
