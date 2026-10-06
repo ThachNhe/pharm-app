@@ -15,8 +15,6 @@ services:
       - '127.0.0.1:${APP_PORT:-8080}:80'
     volumes:
       - ./deploy/prod/nginx.conf:/etc/nginx/conf.d/default.conf:ro
-    secrets:
-      - basic_auth_htpasswd
     depends_on:
       - backend
     networks:
@@ -51,10 +49,6 @@ services:
       - prod_postgres_data:/var/lib/postgresql/data
     networks:
       - prod
-
-secrets:
-  basic_auth_htpasswd:
-    file: ./env/prod/.htpasswd
 
 volumes:
   prod_postgres_data:
