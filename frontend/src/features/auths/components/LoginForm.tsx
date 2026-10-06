@@ -16,7 +16,6 @@ import {
 } from '@/components/ui/form'
 import { Input } from '@/components/ui/input'
 
-import { APP_NAME } from '@/lib/constants'
 import { loginOtpSchema, loginSchema } from '@/lib/validations/auth.schema'
 import { useLogin, useVerifyLoginOtp } from '../hooks/useLogin'
 import type { LoginChallengeResponse, LoginFormValues, LoginOtpFormValues } from '../types/auth.types'
