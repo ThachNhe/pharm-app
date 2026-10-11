@@ -34,6 +34,7 @@ import {
     RowNumberCell,
     RowNumberHead,
 } from '../components/shared';
+import { LIST_PAGE_SIZE } from '../constants/workspace.constants';
 
 const supplierSchema = z.object({
     code: z.string().trim().max(50),
@@ -270,7 +271,7 @@ export function SuppliersPage() {
             workspaceService.getSuppliers(selectedStoreId, {
                 search: debouncedSearch,
                 page,
-                limit: 20,
+                limit: LIST_PAGE_SIZE,
             }),
         enabled: Boolean(selectedStoreId),
     });

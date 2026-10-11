@@ -18,6 +18,7 @@ import {
 import { workspaceService } from '../services/workspace.service';
 import { usePaginatedSearch } from '../hooks/usePaginatedSearch';
 import { useWorkspace } from '../hooks/useWorkspace';
+import { LIST_PAGE_SIZE } from '../constants/workspace.constants';
 
 const showText = (value?: string | null) => value?.trim() || '—';
 const showMoney = (value?: number | null) =>
@@ -45,7 +46,7 @@ export function MedicineLibraryPage() {
             workspaceService.getReferenceProducts(selectedStoreId, {
                 search: debouncedSearch,
                 page,
-                limit: 15,
+                limit: LIST_PAGE_SIZE,
             }),
         enabled: Boolean(selectedStoreId),
         placeholderData: (previous) => previous,

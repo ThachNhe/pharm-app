@@ -24,6 +24,7 @@ import {
     RowNumberCell,
     RowNumberHead,
 } from '../components/shared';
+import { LIST_PAGE_SIZE } from '../constants/workspace.constants';
 
 type AlertFilter = '' | 'low' | 'expiring';
 
@@ -65,7 +66,7 @@ export function InventoryPage({
                 search: debouncedSearch,
                 alert,
                 page,
-                limit: 20,
+                limit: LIST_PAGE_SIZE,
             }),
         enabled: Boolean(selectedStoreId) && view === 'stock',
     });
@@ -75,7 +76,7 @@ export function InventoryPage({
         queryFn: () =>
             workspaceService.getInventoryMovements(selectedStoreId, {
                 page,
-                limit: 20,
+                limit: LIST_PAGE_SIZE,
             }),
         enabled:
             Boolean(selectedStoreId) && view === 'movements' && canViewCosts,

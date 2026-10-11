@@ -18,7 +18,10 @@ import {
 import { Input } from '@/components/ui/input';
 import { adminService } from '@/features/admin/services/admin.service';
 import type { AdminUser, StoreRole } from '@/features/admin/types';
-import { STORE_ROLE_LABELS } from '../constants/workspace.constants';
+import {
+    LIST_PAGE_SIZE,
+    STORE_ROLE_LABELS,
+} from '../constants/workspace.constants';
 import { usePaginatedSearch } from '../hooks/usePaginatedSearch';
 import { useWorkspace } from '../hooks/useWorkspace';
 import { getApiErrorMessage } from '../utils/api-error';
@@ -375,7 +378,7 @@ export function UsersPage({
                 storeId: globalScope ? undefined : scopeStoreId,
                 search: debouncedSearch,
                 page,
-                limit: 20,
+                limit: LIST_PAGE_SIZE,
             }),
         enabled:
             !invalidStore &&

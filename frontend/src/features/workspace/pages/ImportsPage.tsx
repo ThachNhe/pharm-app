@@ -48,6 +48,7 @@ import {
     RowNumberCell,
     RowNumberHead,
 } from '../components/shared';
+import { LIST_PAGE_SIZE } from '../constants/workspace.constants';
 
 const todayDate = new Date();
 const today = toDateInputValue(todayDate);
@@ -1039,7 +1040,7 @@ export function ImportsPage() {
             workspaceService.getImports(selectedStoreId, {
                 status: 'completed',
                 page,
-                limit: 20,
+                limit: LIST_PAGE_SIZE,
             }),
         enabled: Boolean(selectedStoreId) && hasRole('manager'),
     });

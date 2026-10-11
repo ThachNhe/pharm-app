@@ -20,6 +20,7 @@ import { usePaginatedSearch } from '../hooks/usePaginatedSearch';
 import { useWorkspace } from '../hooks/useWorkspace';
 import { workspaceService } from '../services/workspace.service';
 import type { ProductCategory } from '../types';
+import { LIST_PAGE_SIZE } from '../constants/workspace.constants';
 
 export function ProductCategoriesPage() {
     const { search, setSearch, debouncedSearch, page, setPage } =
@@ -41,7 +42,7 @@ export function ProductCategoriesPage() {
             workspaceService.getProductCategories(selectedStoreId, {
                 search: debouncedSearch,
                 page,
-                limit: 20,
+                limit: LIST_PAGE_SIZE,
             }),
         enabled: Boolean(selectedStoreId) && canManage,
     });

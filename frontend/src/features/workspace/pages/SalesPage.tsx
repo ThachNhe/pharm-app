@@ -42,6 +42,7 @@ import {
     RowNumberCell,
     RowNumberHead,
 } from '../components/shared';
+import { LIST_PAGE_SIZE } from '../constants/workspace.constants';
 
 type CartItem = {
     medicine: Medicine;
@@ -1047,7 +1048,10 @@ function SalesHistory({ onOpenSale }: { onOpenSale: (sale: Sale) => void }) {
     const salesQuery = useQuery({
         queryKey: ['workspace', selectedStoreId, 'sales', page],
         queryFn: () =>
-            workspaceService.getSales(selectedStoreId, { page, limit: 20 }),
+            workspaceService.getSales(selectedStoreId, {
+                page,
+                limit: LIST_PAGE_SIZE,
+            }),
         enabled: Boolean(selectedStoreId),
     });
 

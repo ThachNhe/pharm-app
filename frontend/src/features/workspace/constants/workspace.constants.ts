@@ -11,3 +11,6 @@ export const STORE_ROLE_LABELS: Record<StoreRole, string> = {
     manager: 'Quản lý',
     staff: 'Nhân viên',
 };
+
+/** Rows per page for every paginated workspace list. */
+export const LIST_PAGE_SIZE = 12;

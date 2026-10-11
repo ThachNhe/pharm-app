@@ -47,6 +47,7 @@ import {
     SearchInput,
     StatusBadge,
 } from '../components/shared';
+import { LIST_PAGE_SIZE } from '../constants/workspace.constants';
 
 const COMMON_UNIT_NAMES = [
     'Viên',
@@ -1275,7 +1276,7 @@ export function MedicinesPage() {
             workspaceService.getMedicines(selectedStoreId, {
                 search: debouncedSearch,
                 page,
-                limit: 20,
+                limit: LIST_PAGE_SIZE,
             }),
         enabled: Boolean(selectedStoreId),
     });

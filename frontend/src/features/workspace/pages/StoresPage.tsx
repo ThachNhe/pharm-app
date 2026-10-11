@@ -21,6 +21,7 @@ import {
     RowNumberCell,
     RowNumberHead,
 } from '../components/shared';
+import { LIST_PAGE_SIZE } from '../constants/workspace.constants';
 
 export function StoresPage() {
     const { search, setSearch, debouncedSearch, page, setPage } =
@@ -35,7 +36,7 @@ export function StoresPage() {
             adminService.getStores({
                 search: debouncedSearch,
                 page,
-                limit: 20,
+                limit: LIST_PAGE_SIZE,
             }),
         enabled: isSystemAdmin,
     });
