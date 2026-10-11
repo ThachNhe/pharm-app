@@ -205,17 +205,16 @@ Flow chính:
 1. Owner hoặc Manager tạo phiếu nhập.
 2. Chọn nhà cung cấp.
 3. Thêm thuốc, đơn vị nhập, số lượng, giá nhập theo đơn vị đã chọn, số lô và hạn sử dụng.
-4. Kiểm tra dữ liệu.
-5. Hoàn tất phiếu nhập.
+4. Xem lại dữ liệu trước khi xác nhận.
+5. Xác nhận nhập kho.
 6. Hệ thống tăng tồn kho theo đúng thuốc, lô và quầy.
 7. Hệ thống ghi lịch sử biến động tồn kho.
 
 Quy tắc:
 
-- Phiếu `draft` chưa làm thay đổi tồn kho.
-- Chỉ phiếu `completed` mới tăng tồn kho.
-- Phiếu đã hoàn tất không được xóa.
-- Hoàn tất phiếu và tăng tồn phải nằm trong cùng database transaction.
+- Không dùng phiếu nháp: phiếu nhập được lưu ở trạng thái `completed` ngay khi xác nhận.
+- Lưu phiếu, tạo lô, tăng tồn và cập nhật giá bán mới phải nằm trong cùng database transaction.
+- Phiếu đã nhập kho không được xóa hoặc hủy trực tiếp.
 
 MVP chưa cần quy trình duyệt phiếu nhập nhiều cấp.
 
@@ -299,11 +298,10 @@ Không dùng một route `/admin?tab=...` cho toàn bộ module. Mỗi module d�
 
 ### Giai đoạn 3: Nhập hàng và tồn kho
 
-1. Tạo phiếu nhập `draft`.
-2. Hoàn tất phiếu nhập bằng transaction.
-3. Tạo tồn theo lô và hạn sử dụng.
-4. Tạo lịch sử biến động tồn.
-5. Làm màn hình tồn kho và cảnh báo.
+1. Tạo phiếu nhập và nhập kho trong cùng một transaction.
+2. Tạo tồn theo lô và hạn sử dụng.
+3. Tạo lịch sử biến động tồn.
+4. Làm màn hình tồn kho và cảnh báo.
 
 ### Giai đoạn 4: Bán hàng
 

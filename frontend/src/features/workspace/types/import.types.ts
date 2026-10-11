@@ -23,10 +23,8 @@ export interface ImportReceipt {
         unitName: string;
         conversionRate: number;
         expiryDate: string;
-        /** Selling price per base unit applied when the receipt is completed. */
+        /** Selling price per base unit applied by this receipt. */
         newSellingPrice?: number | null;
-        /** Current selling price per base unit; only on the single-receipt endpoint. */
-        currentSellingPrice?: number | null;
         medicine: { id: string; name: string; baseUnitName: string };
     }>;
 }
@@ -42,7 +40,7 @@ export interface ImportPayload {
         importPrice: number;
         expiryDate: string;
         unitId?: string;
-        /** New selling price per base unit, applied when the receipt is completed. */
+        /** New selling price per base unit, applied when the receipt is saved. */
         sellingPrice?: number;
     }>;
 }

@@ -11,7 +11,6 @@ import {
     PackagePlus,
     Plus,
     Trash2,
-    XCircle,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
@@ -34,7 +33,7 @@ import {
 } from '@/lib/utils';
 import { getApiErrorMessage } from '../utils/api-error';
 import { workspaceService } from '../services/workspace.service';
-import type { ImportReceipt, Medicine, ReceiptStatus } from '../types';
+import type { ImportReceipt, Medicine } from '../types';
 import { useWorkspace } from '../hooks/useWorkspace';
 import { MedicineDialog } from './MedicinesPage';
 import {
@@ -46,7 +45,6 @@ import {
     Pager,
     Panel,
     PermissionDenied,
-    StatusBadge,
 } from '../components/shared';
 
 const todayDate = new Date();
@@ -328,31 +326,14 @@ function CreateImportDialog({
         }),
     });
 
-    // Create then complete; a failed completion leaves the saved draft to finish from the list.
     const mutation = useMutation({
-        mutationFn: async (values: ImportFormValues) => {
-            const receipt = await workspaceService.createImport(
+        mutationFn: (values: ImportFormValues) =>
+            workspaceService.createImport(
                 selectedStoreId,
                 buildPayload(values)
-            );
-            try {
-                await workspaceService.completeImport(
-                    selectedStoreId,
-                    receipt.id
-                );
-                return { completeError: null };
-            } catch (completeError) {
-                return { completeError };
-            }
-        },
-        onSuccess: ({ completeError }) => {
-            if (completeError) {
-                toast.error(
-                    `${getApiErrorMessage(completeError, 'Không thể hoàn tất phiếu nhập.')} Phiếu đã lưu nháp, hãy mở phiếu trong danh sách để hoàn tất.`
-                );
-            } else {
-                toast.success('Đã nhập kho');
-            }
+            ),
+        onSuccess: () => {
+            toast.success('Đã nhập kho');
             for (const key of [
                 'imports',
                 'medicines',
@@ -367,7 +348,7 @@ function CreateImportDialog({
             handleOpenChange(false);
         },
         onError: (error) =>
-            toast.error(getApiErrorMessage(error, 'Không thể tạo phiếu nhập.')),
+            toast.error(getApiErrorMessage(error, 'Không thể nhập kho.')),
     });
 
     return (
@@ -496,7 +477,7 @@ function CreateImportDialog({
                                                 ? `lãi ${formatNumber(Math.round(((sellingPrice - costPerBaseUnit) / costPerBaseUnit) * 100))}%`
                                                 : '',
                                           priceChanged
-                                              ? `đổi từ ${formatCurrency(selectedMedicine.sellingPrice)} khi hoàn tất phiếu`
+                                              ? `đổi từ ${formatCurrency(selectedMedicine.sellingPrice)} khi nhập kho`
                                               : '',
                                       ]
                                           .filter(Boolean)
@@ -868,14 +849,31 @@ function CreateImportDialog({
     );
 }
 
-const statusMeta: Record<
-    ReceiptStatus,
-    { label: string; tone: 'warning' | 'success' | 'neutral' }
-> = {
-    draft: { label: 'Phiếu nháp', tone: 'warning' },
-    completed: { label: 'Đã nhập kho', tone: 'success' },
-    cancelled: { label: 'Đã hủy', tone: 'neutral' },
-};
+const PREVIEW_PRODUCT_COUNT = 2;
+
+// Shows the first products of a receipt; long names are truncated and the full list stays in the tooltip.
+function ReceiptProducts({ details }: { details: ImportReceipt['details'] }) {
+    const names = [...new Set(details.map((detail) => detail.medicine.name))];
+    const hiddenCount = names.length - PREVIEW_PRODUCT_COUNT;
+
+    return (
+        <div
+            className="w-56 max-w-56 lg:w-72 lg:max-w-72"
+            title={names.join('\n')}
+        >
+            {names.slice(0, PREVIEW_PRODUCT_COUNT).map((name) => (
+                <p key={name} className="truncate font-medium">
+                    {name}
+                </p>
+            ))}
+            {hiddenCount > 0 ? (
+                <p className="text-muted-foreground text-xs">
+                    +{formatNumber(hiddenCount)} sản phẩm khác
+                </p>
+            ) : null}
+        </div>
+    );
+}
 
 function ImportDetailDialog({
     receipt,
@@ -884,82 +882,15 @@ function ImportDetailDialog({
     receipt: ImportReceipt | null;
     onClose: () => void;
 }) {
-    const { selectedStoreId, canImport } = useWorkspace();
-    const queryClient = useQueryClient();
-
-    // The single-receipt endpoint adds each product's current selling price.
-    const detailQuery = useQuery({
-        queryKey: [
-            'workspace',
-            selectedStoreId,
-            'imports',
-            'detail',
-            receipt?.id,
-        ],
-        queryFn: () =>
-            workspaceService.getImport(selectedStoreId, receipt?.id ?? ''),
-        enabled: Boolean(receipt),
-    });
-
-    const invalidate = () => {
-        void queryClient.invalidateQueries({
-            queryKey: ['workspace', selectedStoreId, 'imports'],
-        });
-        void queryClient.invalidateQueries({
-            queryKey: ['workspace', selectedStoreId, 'medicines'],
-        });
-        void queryClient.invalidateQueries({
-            queryKey: ['workspace', selectedStoreId, 'inventory'],
-        });
-        void queryClient.invalidateQueries({
-            queryKey: ['workspace', selectedStoreId, 'dashboard'],
-        });
-    };
-
-    const completeMutation = useMutation({
-        mutationFn: () =>
-            workspaceService.completeImport(selectedStoreId, receipt?.id ?? ''),
-        onSuccess: () => {
-            toast.success('Đã hoàn tất nhập kho');
-            invalidate();
-            onClose();
-        },
-        onError: (error) =>
-            toast.error(
-                getApiErrorMessage(error, 'Không thể hoàn tất phiếu nhập.')
-            ),
-    });
-    const cancelMutation = useMutation({
-        mutationFn: () =>
-            workspaceService.cancelImport(selectedStoreId, receipt?.id ?? ''),
-        onSuccess: () => {
-            toast.success('Đã hủy phiếu nhập');
-            invalidate();
-            onClose();
-        },
-        onError: (error) =>
-            toast.error(getApiErrorMessage(error, 'Không thể hủy phiếu nhập.')),
-    });
-
     if (!receipt) return null;
-    const meta = statusMeta[receipt.status];
-    const details = detailQuery.data?.details ?? receipt.details;
-    const priceChangeCount = new Set(
-        details
-            .filter((detail) => detail.newSellingPrice != null)
-            .map((detail) => detail.medicineId)
-    ).size;
 
     return (
         <Dialog open onOpenChange={(nextOpen) => !nextOpen && onClose()}>
             <DialogContent className="max-h-[92vh] overflow-y-auto sm:max-w-4xl">
                 <DialogHeader>
-                    <div className="flex flex-wrap items-center gap-3">
-                        <DialogTitle>
-                            Phiếu nhập #{receipt.id.slice(0, 8).toUpperCase()}
-                        </DialogTitle>
-                        <StatusBadge tone={meta.tone}>{meta.label}</StatusBadge>
-                    </div>
+                    <DialogTitle>
+                        Phiếu nhập #{receipt.id.slice(0, 8).toUpperCase()}
+                    </DialogTitle>
                     <DialogDescription>
                         Lập lúc {formatDateTime(receipt.createdAt)} bởi{' '}
                         {receipt.createdByUser.name}
@@ -967,9 +898,9 @@ function ImportDetailDialog({
                 </DialogHeader>
 
                 <div className="bg-muted/45 grid gap-3 rounded-lg p-4 text-sm sm:grid-cols-3">
-                    <div>
+                    <div className="min-w-0">
                         <p className="text-muted-foreground">Nhà cung cấp</p>
-                        <p className="mt-1 font-medium">
+                        <p className="mt-1 font-medium break-words">
                             {receipt.supplier?.name ??
                                 receipt.supplierNameSnapshot ??
                                 'Không ghi nhận'}
@@ -1015,10 +946,12 @@ function ImportDetailDialog({
                             </tr>
                         </thead>
                         <tbody className="divide-border divide-y">
-                            {details.map((detail) => (
+                            {receipt.details.map((detail) => (
                                 <tr key={detail.id}>
                                     <td className="px-4 py-3 font-medium">
-                                        {detail.medicine.name}
+                                        <p className="line-clamp-2 max-w-64 min-w-40 break-words">
+                                            {detail.medicine.name}
+                                        </p>
                                     </td>
                                     <td className="px-4 py-3">
                                         {detail.batchNumber}
@@ -1042,7 +975,7 @@ function ImportDetailDialog({
                                     <td className="px-4 py-3 text-right">
                                         {formatCurrency(detail.importPrice)}
                                     </td>
-                                    <td className="px-4 py-3 text-right">
+                                    <td className="px-4 py-3 text-right whitespace-nowrap">
                                         {detail.newSellingPrice != null ? (
                                             <>
                                                 {formatCurrency(
@@ -1050,18 +983,6 @@ function ImportDetailDialog({
                                                 )}{' '}
                                                 /{' '}
                                                 {detail.medicine.baseUnitName.toLowerCase()}
-                                                {receipt.status === 'draft' &&
-                                                detail.currentSellingPrice !=
-                                                    null &&
-                                                detail.currentSellingPrice !==
-                                                    detail.newSellingPrice ? (
-                                                    <p className="text-muted-foreground text-xs">
-                                                        Hiện tại{' '}
-                                                        {formatCurrency(
-                                                            detail.currentSellingPrice
-                                                        )}
-                                                    </p>
-                                                ) : null}
                                             </>
                                         ) : (
                                             <span className="text-muted-foreground">
@@ -1081,60 +1002,16 @@ function ImportDetailDialog({
                 </div>
 
                 {receipt.note ? (
-                    <p className="border-border rounded-lg border px-4 py-3 text-sm">
+                    <p className="border-border rounded-lg border px-4 py-3 text-sm break-words">
                         <span className="font-medium">Ghi chú:</span>{' '}
                         {receipt.note}
                     </p>
                 ) : null}
 
-                {receipt.status === 'draft' && canImport ? (
-                    <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
-                        Hoàn tất phiếu sẽ tạo lô và tăng tồn kho
-                        {priceChangeCount
-                            ? `, đồng thời cập nhật giá bán cho ${priceChangeCount} sản phẩm`
-                            : ''}
-                        . Thao tác này không thể sửa trực tiếp sau khi xác nhận.
-                    </div>
-                ) : null}
-
                 <DialogFooter>
-                    {receipt.status === 'draft' && canImport ? (
-                        <>
-                            <Button
-                                variant="outline"
-                                disabled={
-                                    cancelMutation.isPending ||
-                                    completeMutation.isPending
-                                }
-                                onClick={() => cancelMutation.mutate()}
-                            >
-                                {cancelMutation.isPending ? (
-                                    <LoaderCircle className="animate-spin" />
-                                ) : (
-                                    <XCircle />
-                                )}
-                                Hủy phiếu
-                            </Button>
-                            <Button
-                                disabled={
-                                    cancelMutation.isPending ||
-                                    completeMutation.isPending
-                                }
-                                onClick={() => completeMutation.mutate()}
-                            >
-                                {completeMutation.isPending ? (
-                                    <LoaderCircle className="animate-spin" />
-                                ) : (
-                                    <CheckCircle2 />
-                                )}
-                                Hoàn tất nhập kho
-                            </Button>
-                        </>
-                    ) : (
-                        <Button variant="outline" onClick={onClose}>
-                            Đóng
-                        </Button>
-                    )}
+                    <Button variant="outline" onClick={onClose}>
+                        Đóng
+                    </Button>
                 </DialogFooter>
             </DialogContent>
         </Dialog>
@@ -1143,7 +1020,6 @@ function ImportDetailDialog({
 
 export function ImportsPage() {
     const [page, setPage] = useState(1);
-    const [status, setStatus] = useState<ReceiptStatus | ''>('');
     const [createOpen, setCreateOpen] = useState(false);
     const [newProductOpen, setNewProductOpen] = useState(false);
     const [selectedReceipt, setSelectedReceipt] =
@@ -1151,10 +1027,10 @@ export function ImportsPage() {
     const { selectedStoreId, hasRole, canImport } = useWorkspace();
 
     const importsQuery = useQuery({
-        queryKey: ['workspace', selectedStoreId, 'imports', status, page],
+        queryKey: ['workspace', selectedStoreId, 'imports', page],
         queryFn: () =>
             workspaceService.getImports(selectedStoreId, {
-                status,
+                status: 'completed',
                 page,
                 limit: 20,
             }),
@@ -1185,29 +1061,8 @@ export function ImportsPage() {
             />
 
             <Panel className="overflow-hidden">
-                <div className="border-border flex flex-col gap-3 border-b p-4 sm:flex-row sm:items-center sm:justify-between">
-                    <div className="flex flex-wrap gap-2">
-                        {[
-                            ['', 'Tất cả'],
-                            ['draft', 'Phiếu nháp'],
-                            ['completed', 'Đã nhập kho'],
-                            ['cancelled', 'Đã hủy'],
-                        ].map(([value, label]) => (
-                            <Button
-                                key={value}
-                                size="sm"
-                                variant={
-                                    status === value ? 'secondary' : 'ghost'
-                                }
-                                onClick={() => {
-                                    setStatus(value as ReceiptStatus | '');
-                                    setPage(1);
-                                }}
-                            >
-                                {label}
-                            </Button>
-                        ))}
-                    </div>
+                <div className="border-border flex items-center justify-between gap-3 border-b p-4">
+                    <h2 className="text-sm font-semibold">Lịch sử nhập kho</h2>
                     <p className="text-muted-foreground text-sm">
                         {formatNumber(importsQuery.data?.totalResults ?? 0)}{' '}
                         phiếu
@@ -1220,11 +1075,9 @@ export function ImportsPage() {
                     <ErrorState onRetry={() => void importsQuery.refetch()} />
                 ) : !importsQuery.data?.results.length ? (
                     <EmptyState
-                        title="Chưa có phiếu nhập phù hợp"
+                        title="Chưa có phiếu nhập"
                         description="Lập phiếu nhập đầu tiên để tiếp nhận lô hàng vào kho."
-                        action={
-                            canImport && !status ? importActions : undefined
-                        }
+                        action={canImport ? importActions : undefined}
                     />
                 ) : (
                     <>
@@ -1241,14 +1094,11 @@ export function ImportsPage() {
                                         <th className="px-4 py-3 font-medium">
                                             Nhà cung cấp
                                         </th>
-                                        <th className="px-4 py-3 text-right font-medium">
-                                            Số dòng
+                                        <th className="px-4 py-3 font-medium">
+                                            Sản phẩm
                                         </th>
                                         <th className="px-4 py-3 text-right font-medium">
                                             Tổng tiền
-                                        </th>
-                                        <th className="px-4 py-3 font-medium">
-                                            Trạng thái
                                         </th>
                                         <th className="w-16 px-4 py-3 text-right font-medium">
                                             Xem
@@ -1258,8 +1108,10 @@ export function ImportsPage() {
                                 <tbody className="divide-border divide-y">
                                     {importsQuery.data.results.map(
                                         (receipt) => {
-                                            const meta =
-                                                statusMeta[receipt.status];
+                                            const supplierName =
+                                                receipt.supplier?.name ??
+                                                receipt.supplierNameSnapshot ??
+                                                'Không ghi nhận';
                                             return (
                                                 <tr
                                                     key={receipt.id}
@@ -1284,28 +1136,24 @@ export function ImportsPage() {
                                                         </p>
                                                     </td>
                                                     <td className="px-4 py-3">
-                                                        {receipt.supplier
-                                                            ?.name ??
-                                                            receipt.supplierNameSnapshot ??
-                                                            'Không ghi nhận'}
+                                                        <p
+                                                            className="line-clamp-2 max-w-56 min-w-36 break-words"
+                                                            title={supplierName}
+                                                        >
+                                                            {supplierName}
+                                                        </p>
                                                     </td>
-                                                    <td className="px-4 py-3 text-right">
-                                                        {formatNumber(
-                                                            receipt.details
-                                                                .length
-                                                        )}
+                                                    <td className="px-4 py-3">
+                                                        <ReceiptProducts
+                                                            details={
+                                                                receipt.details
+                                                            }
+                                                        />
                                                     </td>
                                                     <td className="px-4 py-3 text-right font-medium">
                                                         {formatCurrency(
                                                             receipt.totalAmount
                                                         )}
-                                                    </td>
-                                                    <td className="px-4 py-3">
-                                                        <StatusBadge
-                                                            tone={meta.tone}
-                                                        >
-                                                            {meta.label}
-                                                        </StatusBadge>
                                                     </td>
                                                     <td className="px-4 py-3 text-right">
                                                         <Button

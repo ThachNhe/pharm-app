@@ -67,16 +67,6 @@ router.get(
   validate(operationsValidation.receiptParams),
   operationsController.getImportReceipt,
 );
-router.post(
-  '/:storeId/imports/:receiptId/complete',
-  validate(operationsValidation.receiptParams),
-  operationsController.completeImportReceipt,
-);
-router.post(
-  '/:storeId/imports/:receiptId/cancel',
-  validate(operationsValidation.receiptParams),
-  operationsController.cancelImportReceipt,
-);
 
 router.get('/:storeId/inventory', validate(operationsValidation.getInventory), operationsController.getInventory);
 router.get(

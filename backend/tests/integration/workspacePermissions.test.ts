@@ -47,12 +47,14 @@ test('owner edits only the owned active store; only system admin changes store s
   expect(await prisma.store.findUnique({ where: { id: owned.id } })).toMatchObject({ name: 'Updated', isActive: false });
 });
 
-test('system admin reads imports and sales but cannot create, complete or cancel operations', async () => {
+test('system admin reads imports and sales but cannot create operations', async () => {
   await insertUsers([userOne, { ...admin, isSystemAdmin: true }]);
   const store = await prisma.store.create({ data: { name: 'Read only' } });
   // Even an explicit owner membership must not grant operational writes to System Admin.
   await prisma.userStoreRole.create({ data: { userId: admin.id, storeId: store.id, role: 'owner' } });
-  const receipt = await prisma.importReceipt.create({ data: { storeId: store.id, createdBy: userOne.id } });
+  const receipt = await prisma.importReceipt.create({
+    data: { storeId: store.id, createdBy: userOne.id, status: 'completed' },
+  });
   const base = `/v1/stores/${store.id}`;
   for (const path of ['/imports', `/imports/${receipt.id}`, '/sales']) {
     await request(app)
@@ -67,12 +69,6 @@ test('system admin reads imports and sales but cannot create, complete or cancel
       items: [{ medicineId: userOne.id, batchNumber: 'TEST', quantity: 1, importPrice: 1, expiryDate: '2099-01-01' }],
     })
     .expect(403);
-  for (const action of ['complete', 'cancel']) {
-    await request(app)
-      .post(`${base}/imports/${receipt.id}/${action}`)
-      .set('Authorization', authorization(admin.id))
-      .expect(403);
-  }
   await request(app)
     .post(`${base}/sales`)
     .set('Authorization', authorization(admin.id))
@@ -82,7 +78,7 @@ test('system admin reads imports and sales but cannot create, complete or cancel
     })
     .expect(403);
   expect(await prisma.importReceipt.count()).toBe(1);
-  expect(await prisma.importReceipt.findUnique({ where: { id: receipt.id } })).toMatchObject({ status: 'draft' });
+  expect(await prisma.importReceipt.findUnique({ where: { id: receipt.id } })).toMatchObject({ status: 'completed' });
   expect(await prisma.sale.count()).toBe(0);
   expect(await prisma.stockBatch.count()).toBe(0);
   expect(await prisma.inventoryMovement.count()).toBe(0);

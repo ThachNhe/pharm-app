@@ -1405,6 +1405,15 @@ const getImportTotal = (items: ImportItemPayload[]) =>
     new PrismaRuntime.Decimal(0),
   );
 
+const importReceiptInclude = {
+  supplier: { select: { id: true, name: true } },
+  createdByUser: { select: { id: true, name: true } },
+  details: {
+    include: { medicine: { select: { id: true, name: true, baseUnitName: true } } },
+  },
+} satisfies Prisma.ImportReceiptInclude;
+
+// A receipt is completed on creation: the document, its stock batches and new selling prices commit together.
 const createImportReceipt = async (actor: Actor, storeId: string, body: ImportPayload) => {
   await getStoreOperationAccess(actor, storeId, 'manager');
   const resolvedItems = await validateImportReferences(storeId, body.supplierId, body.items);
@@ -1418,7 +1427,7 @@ const createImportReceipt = async (actor: Actor, storeId: string, body: ImportPa
         createdBy: actor.id,
         supplierId: supplier?.id ?? null,
         supplierNameSnapshot: supplier?.name ?? null,
-        status: 'draft',
+        status: 'completed',
         totalAmount,
         note: asOptionalString(body.note),
         importedAt: body.importedAt ? new Date(body.importedAt) : new Date(),
@@ -1438,20 +1447,47 @@ const createImportReceipt = async (actor: Actor, storeId: string, body: ImportPa
           })),
         },
       },
-      include: {
-        supplier: { select: { id: true, name: true } },
-        createdByUser: { select: { id: true, name: true } },
-        details: {
-          include: { medicine: { select: { id: true, name: true, baseUnitName: true } } },
-        },
-      },
+      include: importReceiptInclude,
     });
+
+    for (const detail of created.details) {
+      await receiveImportDetail(tx, actor, storeId, created.id, detail);
+    }
+
+    const newPrices = new Map(
+      created.details.flatMap((detail) =>
+        detail.newSellingPrice === null ? [] : [[detail.medicineId, detail.newSellingPrice] as const],
+      ),
+    );
+    for (const [medicineId, newSellingPrice] of newPrices) {
+      const storeMedicine = await tx.storeMedicine.findUnique({
+        where: { storeId_medicineId: { storeId, medicineId } },
+        select: { sellingPrice: true },
+      });
+      if (!storeMedicine || storeMedicine.sellingPrice.equals(newSellingPrice)) continue;
+      await tx.storeMedicine.update({
+        where: { storeId_medicineId: { storeId, medicineId } },
+        data: { sellingPrice: newSellingPrice },
+      });
+      await writeAudit(tx, actor, {
+        storeId,
+        action: 'medicine.price_change',
+        targetType: 'medicine',
+        targetId: medicineId,
+        metadata: {
+          from: Number(storeMedicine.sellingPrice),
+          to: Number(newSellingPrice),
+          importReceiptId: created.id,
+        },
+      });
+    }
+
     await writeAudit(tx, actor, {
       storeId,
-      action: 'import.create_draft',
+      action: 'import.complete',
       targetType: 'import_receipt',
       targetId: created.id,
-      metadata: { totalAmount: Number(totalAmount), itemCount: body.items.length },
+      metadata: { totalAmount: Number(totalAmount), itemCount: created.details.length },
     });
     return created;
   });
@@ -1474,13 +1510,7 @@ const queryImportReceipts = async (actor: Actor, storeId: string, query: DateQue
       orderBy: { createdAt: 'desc' },
       skip,
       take: limit,
-      include: {
-        supplier: { select: { id: true, name: true } },
-        createdByUser: { select: { id: true, name: true } },
-        details: {
-          include: { medicine: { select: { id: true, name: true, baseUnitName: true } } },
-        },
-      },
+      include: importReceiptInclude,
     }),
   ]);
   return {
@@ -1496,140 +1526,10 @@ const getImportReceipt = async (actor: Actor, storeId: string, receiptId: string
   await getStoreAccess(actor, storeId, 'manager');
   const receipt = await prisma.importReceipt.findFirst({
     where: { id: receiptId, storeId },
-    include: {
-      supplier: { select: { id: true, name: true } },
-      createdByUser: { select: { id: true, name: true } },
-      details: {
-        include: { medicine: { select: { id: true, name: true, baseUnitName: true } } },
-      },
-    },
+    include: importReceiptInclude,
   });
   if (!receipt) throw new ApiError(httpStatus.NOT_FOUND, 'Không tìm thấy phiếu nhập');
-  const storeMedicines = await prisma.storeMedicine.findMany({
-    where: { storeId, medicineId: { in: receipt.details.map((detail) => detail.medicineId) } },
-    select: { medicineId: true, sellingPrice: true },
-  });
-  const currentPrices = new Map(storeMedicines.map((item) => [item.medicineId, Number(item.sellingPrice)]));
-  const serialized = serializeImportReceipt(receipt);
-  return {
-    ...serialized,
-    details: serialized.details.map((detail) => ({
-      ...detail,
-      currentSellingPrice: currentPrices.get(detail.medicineId) ?? null,
-    })),
-  };
-};
-
-const completeImportReceipt = async (actor: Actor, storeId: string, receiptId: string) => {
-  await getStoreOperationAccess(actor, storeId, 'manager');
-
-  try {
-    const receipt = await prisma.$transaction(
-      async (tx) => {
-        const draft = await tx.importReceipt.findFirst({
-          where: { id: receiptId, storeId },
-          include: {
-            supplier: { select: { id: true, name: true } },
-            createdByUser: { select: { id: true, name: true } },
-            details: {
-              include: { medicine: { select: { id: true, name: true, baseUnitName: true } } },
-            },
-          },
-        });
-        if (!draft) throw new ApiError(httpStatus.NOT_FOUND, 'Không tìm thấy phiếu nhập');
-        if (draft.status !== 'draft') {
-          throw new ApiError(httpStatus.CONFLICT, 'Chỉ phiếu nháp mới có thể hoàn tất');
-        }
-
-        const changed = await tx.importReceipt.updateMany({
-          where: { id: receiptId, storeId, status: 'draft' },
-          data: { status: 'completed' },
-        });
-        if (changed.count !== 1) {
-          throw new ApiError(httpStatus.CONFLICT, 'Phiếu nhập đã được xử lý bởi yêu cầu khác');
-        }
-
-        for (const detail of draft.details) {
-          await receiveImportDetail(tx, actor, storeId, draft.id, detail);
-        }
-
-        // Selling prices set on the receipt take effect only now, together with the new stock.
-        const newPrices = new Map(
-          draft.details.flatMap((detail) =>
-            detail.newSellingPrice === null ? [] : [[detail.medicineId, detail.newSellingPrice] as const],
-          ),
-        );
-        for (const [medicineId, newSellingPrice] of newPrices) {
-          const storeMedicine = await tx.storeMedicine.findUnique({
-            where: { storeId_medicineId: { storeId, medicineId } },
-            select: { sellingPrice: true },
-          });
-          if (!storeMedicine || storeMedicine.sellingPrice.equals(newSellingPrice)) continue;
-          await tx.storeMedicine.update({
-            where: { storeId_medicineId: { storeId, medicineId } },
-            data: { sellingPrice: newSellingPrice },
-          });
-          await writeAudit(tx, actor, {
-            storeId,
-            action: 'medicine.price_change',
-            targetType: 'medicine',
-            targetId: medicineId,
-            metadata: {
-              from: Number(storeMedicine.sellingPrice),
-              to: Number(newSellingPrice),
-              importReceiptId: draft.id,
-            },
-          });
-        }
-
-        await writeAudit(tx, actor, {
-          storeId,
-          action: 'import.complete',
-          targetType: 'import_receipt',
-          targetId: draft.id,
-          metadata: { totalAmount: Number(draft.totalAmount), itemCount: draft.details.length },
-        });
-
-        return tx.importReceipt.findUniqueOrThrow({
-          where: { id: receiptId },
-          include: {
-            supplier: { select: { id: true, name: true } },
-            createdByUser: { select: { id: true, name: true } },
-            details: {
-              include: { medicine: { select: { id: true, name: true, baseUnitName: true } } },
-            },
-          },
-        });
-      },
-      { isolationLevel: 'Serializable' },
-    );
-    return serializeImportReceipt(receipt);
-  } catch (error) {
-    if (error instanceof PrismaRuntime.PrismaClientKnownRequestError && error.code === 'P2034') {
-      throw new ApiError(httpStatus.CONFLICT, 'Dữ liệu tồn kho vừa thay đổi, vui lòng thử lại');
-    }
-    throw error;
-  }
-};
-
-const cancelImportReceipt = async (actor: Actor, storeId: string, receiptId: string) => {
-  await getStoreOperationAccess(actor, storeId, 'manager');
-  return prisma.$transaction(async (tx) => {
-    const changed = await tx.importReceipt.updateMany({
-      where: { id: receiptId, storeId, status: 'draft' },
-      data: { status: 'cancelled' },
-    });
-    if (changed.count !== 1) {
-      throw new ApiError(httpStatus.CONFLICT, 'Chỉ phiếu nháp mới có thể hủy');
-    }
-    await writeAudit(tx, actor, {
-      storeId,
-      action: 'import.cancel',
-      targetType: 'import_receipt',
-      targetId: receiptId,
-    });
-    return { message: 'Đã hủy phiếu nhập' };
-  });
+  return serializeImportReceipt(receipt);
 };
 
 const queryInventory = async (actor: Actor, storeId: string, query: PageQuery & { alert?: 'low' | 'expiring' }) => {
@@ -2197,8 +2097,6 @@ const getProfitReport = async (actor: Actor, storeId: string, query: DateQuery) 
 };
 
 export {
-  cancelImportReceipt,
-  completeImportReceipt,
   createImportReceipt,
   createMedicine,
   createProductCategory,

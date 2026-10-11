@@ -63,10 +63,6 @@ export const API_ENDPOINTS = {
         IMPORTS: (storeId: string) => `/stores/${storeId}/imports`,
         IMPORT: (storeId: string, receiptId: string) =>
             `/stores/${storeId}/imports/${receiptId}`,
-        COMPLETE_IMPORT: (storeId: string, receiptId: string) =>
-            `/stores/${storeId}/imports/${receiptId}/complete`,
-        CANCEL_IMPORT: (storeId: string, receiptId: string) =>
-            `/stores/${storeId}/imports/${receiptId}/cancel`,
         INVENTORY: (storeId: string) => `/stores/${storeId}/inventory`,
         INVENTORY_MOVEMENTS: (storeId: string) =>
             `/stores/${storeId}/inventory/movements`,

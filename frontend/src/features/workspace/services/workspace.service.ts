@@ -111,14 +111,6 @@ export const workspaceService = {
             API_ENDPOINTS.OPERATIONS.IMPORTS(storeId),
             payload
         ),
-    completeImport: (storeId: string, receiptId: string) =>
-        apiPost<ImportReceipt>(
-            API_ENDPOINTS.OPERATIONS.COMPLETE_IMPORT(storeId, receiptId)
-        ),
-    cancelImport: (storeId: string, receiptId: string) =>
-        apiPost<{ message: string }>(
-            API_ENDPOINTS.OPERATIONS.CANCEL_IMPORT(storeId, receiptId)
-        ),
 
     getInventory: (storeId: string, params?: Record<string, unknown>) =>
         apiGet<Paginated<InventoryMedicine>>(

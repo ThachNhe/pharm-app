@@ -74,14 +74,6 @@ const createImportReceipt = catchAsync(async (req, res) => {
   res.status(httpStatus.CREATED).send(result);
 });
 
-const completeImportReceipt = catchAsync(async (req, res) => {
-  res.send(await operationsService.completeImportReceipt(req.user, param(req, 'storeId'), param(req, 'receiptId')));
-});
-
-const cancelImportReceipt = catchAsync(async (req, res) => {
-  res.send(await operationsService.cancelImportReceipt(req.user, param(req, 'storeId'), param(req, 'receiptId')));
-});
-
 const getInventory = catchAsync(async (req, res) => {
   res.send(await operationsService.queryInventory(req.user, param(req, 'storeId'), req.query));
 });
@@ -113,8 +105,6 @@ const getProfitReport = catchAsync(async (req, res) => {
 });
 
 export {
-  cancelImportReceipt,
-  completeImportReceipt,
   createImportReceipt,
   createSaleReturn,
   createMedicine,
