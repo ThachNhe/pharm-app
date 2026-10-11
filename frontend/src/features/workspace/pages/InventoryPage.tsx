@@ -21,6 +21,8 @@ import {
     Panel,
     SearchInput,
     StatusBadge,
+    RowNumberCell,
+    RowNumberHead,
 } from '../components/shared';
 
 type AlertFilter = '' | 'low' | 'expiring';
@@ -232,6 +234,7 @@ export function InventoryPage({
                                 <table className="w-full min-w-[920px] text-left text-sm">
                                     <thead className="bg-muted/55 text-muted-foreground text-xs uppercase">
                                         <tr>
+                                            <RowNumberHead />
                                             <th className="px-4 py-3 font-medium">
                                                 Mặt hàng
                                             </th>
@@ -256,9 +259,15 @@ export function InventoryPage({
                                     </thead>
                                     <tbody className="divide-border divide-y">
                                         {inventoryQuery.data.results.map(
-                                            (medicine) => (
+                                            (medicine, index) => (
                                                 <Fragment key={medicine.id}>
                                                     <tr className="hover:bg-muted/30">
+                                                        <RowNumberCell
+                                                            index={index}
+                                                            pagination={
+                                                                inventoryQuery.data
+                                                            }
+                                                        />
                                                         <td className="px-4 py-3">
                                                             <p className="font-medium">
                                                                 {medicine.name}
@@ -370,8 +379,8 @@ export function InventoryPage({
                                                             <td
                                                                 colSpan={
                                                                     canViewCosts
-                                                                        ? 6
-                                                                        : 5
+                                                                        ? 7
+                                                                        : 6
                                                                 }
                                                             >
                                                                 {renderBatchDetails(
@@ -414,6 +423,7 @@ export function InventoryPage({
                                 <table className="w-full min-w-[780px] text-left text-sm">
                                     <thead className="bg-muted/55 text-muted-foreground text-xs uppercase">
                                         <tr>
+                                            <RowNumberHead />
                                             <th className="px-4 py-3 font-medium">
                                                 Thời gian
                                             </th>
@@ -433,11 +443,17 @@ export function InventoryPage({
                                     </thead>
                                     <tbody className="divide-border divide-y">
                                         {movementsQuery.data.results.map(
-                                            (movement) => (
+                                            (movement, index) => (
                                                 <tr
                                                     key={movement.id}
                                                     className="hover:bg-muted/30"
                                                 >
+                                                    <RowNumberCell
+                                                        index={index}
+                                                        pagination={
+                                                            movementsQuery.data
+                                                        }
+                                                    />
                                                     <td className="px-4 py-3">
                                                         {formatDateTime(
                                                             movement.createdAt

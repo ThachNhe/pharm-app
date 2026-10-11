@@ -103,7 +103,7 @@ export function SaleReturnDialog({
                 </DialogHeader>
 
                 <div className="border-border divide-border divide-y overflow-hidden rounded-lg border">
-                    {sale.details.map((detail) => {
+                    {sale.details.map((detail, index) => {
                         const returnable = getReturnableQuantity(detail);
                         const unitName = detail.unitName.toLowerCase();
                         return (
@@ -112,7 +112,10 @@ export function SaleReturnDialog({
                                 className="grid gap-3 p-4 sm:grid-cols-[minmax(0,1fr)_170px] sm:items-center"
                             >
                                 <div className="min-w-0">
-                                    <p className="font-medium">
+                                    <p className="font-medium break-words">
+                                        <span className="text-muted-foreground mr-1.5 tabular-nums">
+                                            {index + 1}.
+                                        </span>
                                         {detail.medicine.name}
                                     </p>
                                     <p className="text-muted-foreground text-xs">

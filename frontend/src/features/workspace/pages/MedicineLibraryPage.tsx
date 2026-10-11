@@ -10,6 +10,8 @@ import {
     PageHeader,
     Pager,
     Panel,
+    RowNumberCell,
+    RowNumberHead,
     SearchInput,
     StatusBadge,
 } from '../components/shared';
@@ -122,10 +124,11 @@ export function MedicineLibraryPage() {
                             <table className="w-full min-w-[3800px] text-left text-sm">
                                 <thead className="bg-muted/55 text-muted-foreground text-xs uppercase">
                                     <tr>
-                                        <th className="bg-muted sticky left-0 z-20 w-32 min-w-32 px-4 py-3 font-medium">
+                                        <RowNumberHead className="bg-muted z-20 md:sticky md:left-0" />
+                                        <th className="bg-muted z-20 w-32 min-w-32 px-4 py-3 font-medium md:sticky md:left-16">
                                             Mã
                                         </th>
-                                        <th className="bg-muted sticky left-32 z-20 w-80 min-w-80 px-4 py-3 font-medium">
+                                        <th className="bg-muted z-20 w-80 min-w-80 px-4 py-3 font-medium md:sticky md:left-48">
                                             Tên sản phẩm
                                         </th>
                                         <th className="px-4 py-3 font-medium">
@@ -192,15 +195,22 @@ export function MedicineLibraryPage() {
                                 </thead>
                                 <tbody className="divide-border divide-y">
                                     {productsQuery.data.results.map(
-                                        (product) => (
+                                        (product, index) => (
                                             <tr
                                                 key={product.id}
                                                 className="group hover:bg-muted/30"
                                             >
-                                                <td className="bg-card group-hover:bg-muted sticky left-0 z-10 w-32 min-w-32 px-4 py-3 font-mono text-xs whitespace-nowrap transition-colors">
+                                                <RowNumberCell
+                                                    index={index}
+                                                    pagination={
+                                                        productsQuery.data
+                                                    }
+                                                    className="bg-card group-hover:bg-muted z-10 transition-colors md:sticky md:left-0"
+                                                />
+                                                <td className="bg-card group-hover:bg-muted z-10 w-32 min-w-32 px-4 py-3 font-mono text-xs whitespace-nowrap transition-colors md:sticky md:left-16">
                                                     {showText(product.code)}
                                                 </td>
-                                                <td className="bg-card group-hover:bg-muted sticky left-32 z-10 w-80 max-w-80 min-w-80 px-4 py-3 font-medium transition-colors">
+                                                <td className="bg-card group-hover:bg-muted z-10 w-80 max-w-80 min-w-80 px-4 py-3 font-medium transition-colors md:sticky md:left-48">
                                                     <span
                                                         className="line-clamp-2"
                                                         title={product.name}

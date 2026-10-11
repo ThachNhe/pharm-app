@@ -39,6 +39,8 @@ import {
     Pager,
     Panel,
     StatusBadge,
+    RowNumberCell,
+    RowNumberHead,
 } from '../components/shared';
 
 type CartItem = {
@@ -202,6 +204,7 @@ function SaleReceipt({
                         <table className="w-full min-w-[520px] text-sm">
                             <thead className="border-border text-muted-foreground border-b text-left text-xs uppercase">
                                 <tr>
+                                    <RowNumberHead className="w-10 min-w-10 py-2 pr-3 pl-0" />
                                     <th className="py-2 pr-3 font-medium">
                                         Mặt hàng
                                     </th>
@@ -217,8 +220,12 @@ function SaleReceipt({
                                 </tr>
                             </thead>
                             <tbody className="divide-border divide-y">
-                                {receiptLines.map((line) => (
+                                {receiptLines.map((line, index) => (
                                     <tr key={line.key}>
+                                        <RowNumberCell
+                                            index={index}
+                                            className="w-10 min-w-10 py-2 pr-3 pl-0"
+                                        />
                                         <td className="py-2 pr-3">
                                             <p className="font-medium">
                                                 {line.medicineName}
@@ -752,7 +759,7 @@ function PointOfSale({ onCreated }: { onCreated: (sale: Sale) => void }) {
                         />
                     ) : (
                         <div className="divide-border divide-y">
-                            {cart.map((item) => {
+                            {cart.map((item, index) => {
                                 const unit = getCartUnit(item);
                                 const unitLabel = unit.name.toLowerCase();
                                 const unitPrice =
@@ -770,7 +777,10 @@ function PointOfSale({ onCreated }: { onCreated: (sale: Sale) => void }) {
                                     >
                                         <div className="flex items-start gap-3">
                                             <div className="min-w-0 flex-1">
-                                                <p className="font-medium">
+                                                <p className="font-medium break-words">
+                                                    <span className="text-muted-foreground mr-1.5 tabular-nums">
+                                                        {index + 1}.
+                                                    </span>
                                                     {item.medicine.name}
                                                 </p>
                                                 <p className="text-muted-foreground mt-0.5 text-xs">
@@ -1058,6 +1068,7 @@ function SalesHistory({ onOpenSale }: { onOpenSale: (sale: Sale) => void }) {
                         <table className="w-full min-w-[900px] text-left text-sm">
                             <thead className="bg-muted/55 text-muted-foreground text-xs uppercase">
                                 <tr>
+                                    <RowNumberHead />
                                     <th className="px-4 py-3 font-medium">
                                         Mã hóa đơn
                                     </th>
@@ -1085,11 +1096,15 @@ function SalesHistory({ onOpenSale }: { onOpenSale: (sale: Sale) => void }) {
                                 </tr>
                             </thead>
                             <tbody className="divide-border divide-y">
-                                {salesQuery.data.results.map((sale) => (
+                                {salesQuery.data.results.map((sale, index) => (
                                     <tr
                                         key={sale.id}
                                         className="hover:bg-muted/30"
                                     >
+                                        <RowNumberCell
+                                            index={index}
+                                            pagination={salesQuery.data}
+                                        />
                                         <td className="px-4 py-3 font-mono text-xs font-medium">
                                             #{sale.id.slice(0, 8).toUpperCase()}
                                         </td>

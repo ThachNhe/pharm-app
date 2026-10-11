@@ -317,3 +317,40 @@ export function PermissionDenied() {
         </Panel>
     );
 }
+
+export function RowNumberHead({ className }: { className?: string }) {
+    return (
+        <th
+            scope="col"
+            className={cn(
+                'w-16 min-w-16 px-4 py-3 text-right font-medium',
+                className
+            )}
+        >
+            STT
+        </th>
+    );
+}
+
+// Numbering continues across pages when the list is paginated.
+export function RowNumberCell({
+    index,
+    pagination,
+    className,
+}: {
+    index: number;
+    pagination?: { page: number; limit: number };
+    className?: string;
+}) {
+    const offset = pagination ? (pagination.page - 1) * pagination.limit : 0;
+    return (
+        <td
+            className={cn(
+                'text-muted-foreground w-16 min-w-16 px-4 py-3 text-right tabular-nums',
+                className
+            )}
+        >
+            {offset + index + 1}
+        </td>
+    );
+}

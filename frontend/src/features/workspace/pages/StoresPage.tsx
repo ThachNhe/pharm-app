@@ -18,6 +18,8 @@ import {
     PermissionDenied,
     SearchInput,
     StatusBadge,
+    RowNumberCell,
+    RowNumberHead,
 } from '../components/shared';
 
 export function StoresPage() {
@@ -98,6 +100,7 @@ export function StoresPage() {
                             <table className="w-full min-w-[720px] text-left text-sm">
                                 <thead className="bg-muted/55 text-muted-foreground text-xs uppercase">
                                     <tr>
+                                        <RowNumberHead />
                                         <th className="px-4 py-3 font-medium">
                                             Quầy thuốc
                                         </th>
@@ -116,71 +119,81 @@ export function StoresPage() {
                                     </tr>
                                 </thead>
                                 <tbody className="divide-border divide-y">
-                                    {storesQuery.data.results.map((store) => (
-                                        <tr
-                                            key={store.id}
-                                            className="hover:bg-muted/30"
-                                        >
-                                            <td className="px-4 py-3">
-                                                <p className="font-medium">
-                                                    {store.name}
-                                                </p>
-                                                <p className="text-muted-foreground mt-0.5 text-xs">
-                                                    {store.address ||
-                                                        'Chưa có địa chỉ'}
-                                                </p>
-                                            </td>
-                                            <td className="text-muted-foreground px-4 py-3">
-                                                {store.phone || '—'}
-                                            </td>
-                                            <td className="px-4 py-3 text-right">
-                                                <Button
-                                                    asChild
-                                                    size="sm"
-                                                    variant="ghost"
-                                                >
-                                                    <Link
-                                                        to="/admin/users"
-                                                        search={{
-                                                            storeId: store.id,
-                                                        }}
-                                                        aria-label={`Xem ${store._count?.roles ?? 0} nhân sự của ${store.name}`}
+                                    {storesQuery.data.results.map(
+                                        (store, index) => (
+                                            <tr
+                                                key={store.id}
+                                                className="hover:bg-muted/30"
+                                            >
+                                                <RowNumberCell
+                                                    index={index}
+                                                    pagination={
+                                                        storesQuery.data
+                                                    }
+                                                />
+                                                <td className="px-4 py-3">
+                                                    <p className="font-medium">
+                                                        {store.name}
+                                                    </p>
+                                                    <p className="text-muted-foreground mt-0.5 text-xs">
+                                                        {store.address ||
+                                                            'Chưa có địa chỉ'}
+                                                    </p>
+                                                </td>
+                                                <td className="text-muted-foreground px-4 py-3">
+                                                    {store.phone || '—'}
+                                                </td>
+                                                <td className="px-4 py-3 text-right">
+                                                    <Button
+                                                        asChild
+                                                        size="sm"
+                                                        variant="ghost"
                                                     >
-                                                        <Users />
-                                                        {store._count?.roles ??
-                                                            0}{' '}
-                                                        nhân sự
-                                                    </Link>
-                                                </Button>
-                                            </td>
-                                            <td className="px-4 py-3">
-                                                <StatusBadge
-                                                    tone={
-                                                        store.isActive
-                                                            ? 'success'
-                                                            : 'danger'
-                                                    }
-                                                >
-                                                    {store.isActive
-                                                        ? 'Hoạt động'
-                                                        : 'Ngừng hoạt động'}
-                                                </StatusBadge>
-                                            </td>
-                                            <td className="px-4 py-3 text-right">
-                                                <Button
-                                                    size="icon-sm"
-                                                    variant="ghost"
-                                                    onClick={() =>
-                                                        openEdit(store)
-                                                    }
-                                                    aria-label={`Sửa ${store.name}`}
-                                                    title="Sửa quầy thuốc"
-                                                >
-                                                    <Edit3 />
-                                                </Button>
-                                            </td>
-                                        </tr>
-                                    ))}
+                                                        <Link
+                                                            to="/admin/users"
+                                                            search={{
+                                                                storeId:
+                                                                    store.id,
+                                                            }}
+                                                            aria-label={`Xem ${store._count?.roles ?? 0} nhân sự của ${store.name}`}
+                                                        >
+                                                            <Users />
+                                                            {store._count
+                                                                ?.roles ??
+                                                                0}{' '}
+                                                            nhân sự
+                                                        </Link>
+                                                    </Button>
+                                                </td>
+                                                <td className="px-4 py-3">
+                                                    <StatusBadge
+                                                        tone={
+                                                            store.isActive
+                                                                ? 'success'
+                                                                : 'danger'
+                                                        }
+                                                    >
+                                                        {store.isActive
+                                                            ? 'Hoạt động'
+                                                            : 'Ngừng hoạt động'}
+                                                    </StatusBadge>
+                                                </td>
+                                                <td className="px-4 py-3 text-right">
+                                                    <Button
+                                                        size="icon-sm"
+                                                        variant="ghost"
+                                                        onClick={() =>
+                                                            openEdit(store)
+                                                        }
+                                                        aria-label={`Sửa ${store.name}`}
+                                                        title="Sửa quầy thuốc"
+                                                    >
+                                                        <Edit3 />
+                                                    </Button>
+                                                </td>
+                                            </tr>
+                                        )
+                                    )}
                                 </tbody>
                             </table>
                         </div>

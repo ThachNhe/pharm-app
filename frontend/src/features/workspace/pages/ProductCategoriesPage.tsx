@@ -13,6 +13,8 @@ import {
     Panel,
     SearchInput,
     StatusBadge,
+    RowNumberCell,
+    RowNumberHead,
 } from '../components/shared';
 import { usePaginatedSearch } from '../hooks/usePaginatedSearch';
 import { useWorkspace } from '../hooks/useWorkspace';
@@ -131,6 +133,7 @@ export function ProductCategoriesPage() {
                             <table className="w-full min-w-[760px] text-left text-sm">
                                 <thead className="bg-muted/55 text-muted-foreground text-xs uppercase">
                                     <tr>
+                                        <RowNumberHead />
                                         <th className="px-4 py-3 font-medium">
                                             Tên nhóm
                                         </th>
@@ -150,11 +153,17 @@ export function ProductCategoriesPage() {
                                 </thead>
                                 <tbody className="divide-border divide-y">
                                     {categoriesQuery.data.results.map(
-                                        (category) => (
+                                        (category, index) => (
                                             <tr
                                                 key={category.id}
                                                 className="hover:bg-muted/30"
                                             >
+                                                <RowNumberCell
+                                                    index={index}
+                                                    pagination={
+                                                        categoriesQuery.data
+                                                    }
+                                                />
                                                 <td className="px-4 py-3 font-medium">
                                                     {category.name}
                                                 </td>

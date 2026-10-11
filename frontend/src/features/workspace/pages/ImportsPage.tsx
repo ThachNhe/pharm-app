@@ -45,6 +45,8 @@ import {
     Pager,
     Panel,
     PermissionDenied,
+    RowNumberCell,
+    RowNumberHead,
 } from '../components/shared';
 
 const todayDate = new Date();
@@ -176,7 +178,10 @@ function ImportReview({
                         >
                             <div className="flex items-start justify-between gap-3">
                                 <div className="min-w-0">
-                                    <p className="font-medium">
+                                    <p className="font-medium break-words">
+                                        <span className="text-muted-foreground mr-1.5 tabular-nums">
+                                            {index + 1}.
+                                        </span>
                                         {medicine?.name ?? 'Sản phẩm'}
                                     </p>
                                     <p className="text-muted-foreground text-xs">
@@ -924,6 +929,7 @@ function ImportDetailDialog({
                     <table className="w-full min-w-[800px] text-left text-sm">
                         <thead className="bg-muted/55 text-muted-foreground text-xs uppercase">
                             <tr>
+                                <RowNumberHead />
                                 <th className="px-4 py-3 font-medium">
                                     Sản phẩm
                                 </th>
@@ -946,8 +952,9 @@ function ImportDetailDialog({
                             </tr>
                         </thead>
                         <tbody className="divide-border divide-y">
-                            {receipt.details.map((detail) => (
+                            {receipt.details.map((detail, index) => (
                                 <tr key={detail.id}>
+                                    <RowNumberCell index={index} />
                                     <td className="px-4 py-3 font-medium">
                                         <p className="line-clamp-2 max-w-64 min-w-40 break-words">
                                             {detail.medicine.name}
@@ -959,7 +966,7 @@ function ImportDetailDialog({
                                     <td className="px-4 py-3">
                                         {formatDate(detail.expiryDate)}
                                     </td>
-                                    <td className="px-4 py-3 text-right">
+                                    <td className="px-4 py-3 text-right whitespace-nowrap">
                                         {formatNumber(detail.quantity)}{' '}
                                         {detail.unitName.toLowerCase()}
                                         {detail.conversionRate !== 1 ? (
@@ -1085,6 +1092,7 @@ export function ImportsPage() {
                             <table className="w-full min-w-[820px] text-left text-sm">
                                 <thead className="bg-muted/55 text-muted-foreground text-xs uppercase">
                                     <tr>
+                                        <RowNumberHead />
                                         <th className="px-4 py-3 font-medium">
                                             Mã phiếu
                                         </th>
@@ -1107,7 +1115,7 @@ export function ImportsPage() {
                                 </thead>
                                 <tbody className="divide-border divide-y">
                                     {importsQuery.data.results.map(
-                                        (receipt) => {
+                                        (receipt, index) => {
                                             const supplierName =
                                                 receipt.supplier?.name ??
                                                 receipt.supplierNameSnapshot ??
@@ -1117,6 +1125,12 @@ export function ImportsPage() {
                                                     key={receipt.id}
                                                     className="hover:bg-muted/30"
                                                 >
+                                                    <RowNumberCell
+                                                        index={index}
+                                                        pagination={
+                                                            importsQuery.data
+                                                        }
+                                                    />
                                                     <td className="px-4 py-3 font-mono text-xs font-medium">
                                                         #
                                                         {receipt.id

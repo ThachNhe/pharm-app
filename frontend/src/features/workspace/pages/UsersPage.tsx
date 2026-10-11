@@ -33,6 +33,8 @@ import {
     PermissionDenied,
     SearchInput,
     StatusBadge,
+    RowNumberCell,
+    RowNumberHead,
 } from '../components/shared';
 
 const userSchema = z.object({
@@ -491,6 +493,7 @@ export function UsersPage({
                             <table className="w-full min-w-[900px] text-left text-sm">
                                 <thead className="bg-muted/55 text-muted-foreground text-xs uppercase">
                                     <tr>
+                                        <RowNumberHead />
                                         <th className="px-4 py-3 font-medium">
                                             Nhân sự
                                         </th>
@@ -509,115 +512,128 @@ export function UsersPage({
                                     </tr>
                                 </thead>
                                 <tbody className="divide-border divide-y">
-                                    {usersQuery.data.results.map((user) => {
-                                        const memberships = globalScope
-                                            ? user.storeRoles
-                                            : user.storeRoles.filter(
-                                                  (item) =>
-                                                      item.store.id ===
-                                                      scopeStoreId
-                                              );
-                                        const membership = memberships[0];
-                                        const isActive =
-                                            user.isActive &&
-                                            (globalScope ||
-                                                Boolean(membership?.isActive));
-                                        const manageable = canManageUser(user);
-                                        return (
-                                            <tr
-                                                key={user.id}
-                                                className="hover:bg-muted/30"
-                                            >
-                                                <td className="px-4 py-3">
-                                                    <p className="font-medium">
-                                                        {user.name}
-                                                    </p>
-                                                    <p className="text-muted-foreground mt-0.5 text-xs">
-                                                        {user.email}
-                                                    </p>
-                                                </td>
-                                                <td className="text-muted-foreground px-4 py-3">
-                                                    {user.phone || '—'}
-                                                </td>
-                                                <td className="px-4 py-3">
-                                                    {user.isSystemAdmin ? (
-                                                        <StatusBadge tone="info">
-                                                            System Admin
-                                                        </StatusBadge>
-                                                    ) : memberships.length ? (
-                                                        <div className="space-y-2">
-                                                            {memberships.map(
-                                                                (item) => (
-                                                                    <div
-                                                                        key={
-                                                                            item
-                                                                                .store
-                                                                                .id
-                                                                        }
-                                                                        className="flex flex-wrap items-center gap-2"
-                                                                    >
-                                                                        <span className="font-medium">
-                                                                            {
+                                    {usersQuery.data.results.map(
+                                        (user, index) => {
+                                            const memberships = globalScope
+                                                ? user.storeRoles
+                                                : user.storeRoles.filter(
+                                                      (item) =>
+                                                          item.store.id ===
+                                                          scopeStoreId
+                                                  );
+                                            const membership = memberships[0];
+                                            const isActive =
+                                                user.isActive &&
+                                                (globalScope ||
+                                                    Boolean(
+                                                        membership?.isActive
+                                                    ));
+                                            const manageable =
+                                                canManageUser(user);
+                                            return (
+                                                <tr
+                                                    key={user.id}
+                                                    className="hover:bg-muted/30"
+                                                >
+                                                    <RowNumberCell
+                                                        index={index}
+                                                        pagination={
+                                                            usersQuery.data
+                                                        }
+                                                    />
+                                                    <td className="px-4 py-3">
+                                                        <p className="font-medium">
+                                                            {user.name}
+                                                        </p>
+                                                        <p className="text-muted-foreground mt-0.5 text-xs">
+                                                            {user.email}
+                                                        </p>
+                                                    </td>
+                                                    <td className="text-muted-foreground px-4 py-3">
+                                                        {user.phone || '—'}
+                                                    </td>
+                                                    <td className="px-4 py-3">
+                                                        {user.isSystemAdmin ? (
+                                                            <StatusBadge tone="info">
+                                                                System Admin
+                                                            </StatusBadge>
+                                                        ) : memberships.length ? (
+                                                            <div className="space-y-2">
+                                                                {memberships.map(
+                                                                    (item) => (
+                                                                        <div
+                                                                            key={
                                                                                 item
                                                                                     .store
-                                                                                    .name
+                                                                                    .id
                                                                             }
-                                                                        </span>
-                                                                        <StatusBadge tone="neutral">
-                                                                            {
-                                                                                STORE_ROLE_LABELS[
+                                                                            className="flex flex-wrap items-center gap-2"
+                                                                        >
+                                                                            <span className="font-medium">
+                                                                                {
                                                                                     item
-                                                                                        .role
-                                                                                ]
-                                                                            }
-                                                                        </StatusBadge>
-                                                                    </div>
-                                                                )
-                                                            )}
-                                                        </div>
-                                                    ) : (
-                                                        <span className="text-muted-foreground">
-                                                            Chưa gán quầy
-                                                        </span>
-                                                    )}
-                                                </td>
-                                                <td className="px-4 py-3">
-                                                    <StatusBadge
-                                                        tone={
-                                                            isActive
-                                                                ? 'success'
-                                                                : 'danger'
-                                                        }
-                                                    >
-                                                        {isActive
-                                                            ? 'Hoạt động'
-                                                            : !user.isActive
-                                                              ? 'Khóa toàn hệ thống'
-                                                              : 'Tạm khóa tại quầy'}
-                                                    </StatusBadge>
-                                                </td>
-                                                <td className="px-4 py-3 text-right">
-                                                    {manageable ? (
-                                                        <Button
-                                                            size="icon-sm"
-                                                            variant="ghost"
-                                                            onClick={() =>
-                                                                openEdit(user)
+                                                                                        .store
+                                                                                        .name
+                                                                                }
+                                                                            </span>
+                                                                            <StatusBadge tone="neutral">
+                                                                                {
+                                                                                    STORE_ROLE_LABELS[
+                                                                                        item
+                                                                                            .role
+                                                                                    ]
+                                                                                }
+                                                                            </StatusBadge>
+                                                                        </div>
+                                                                    )
+                                                                )}
+                                                            </div>
+                                                        ) : (
+                                                            <span className="text-muted-foreground">
+                                                                Chưa gán quầy
+                                                            </span>
+                                                        )}
+                                                    </td>
+                                                    <td className="px-4 py-3">
+                                                        <StatusBadge
+                                                            tone={
+                                                                isActive
+                                                                    ? 'success'
+                                                                    : 'danger'
                                                             }
-                                                            aria-label={`Sửa ${user.name}`}
-                                                            title="Sửa tài khoản"
                                                         >
-                                                            <Edit3 />
-                                                        </Button>
-                                                    ) : (
-                                                        <span className="text-muted-foreground">
-                                                            —
-                                                        </span>
-                                                    )}
-                                                </td>
-                                            </tr>
-                                        );
-                                    })}
+                                                            {isActive
+                                                                ? 'Hoạt động'
+                                                                : !user.isActive
+                                                                  ? 'Khóa toàn hệ thống'
+                                                                  : 'Tạm khóa tại quầy'}
+                                                        </StatusBadge>
+                                                    </td>
+                                                    <td className="px-4 py-3 text-right">
+                                                        {manageable ? (
+                                                            <Button
+                                                                size="icon-sm"
+                                                                variant="ghost"
+                                                                onClick={() =>
+                                                                    openEdit(
+                                                                        user
+                                                                    )
+                                                                }
+                                                                aria-label={`Sửa ${user.name}`}
+                                                                title="Sửa tài khoản"
+                                                            >
+                                                                <Edit3 />
+                                                            </Button>
+                                                        ) : (
+                                                            <span className="text-muted-foreground">
+                                                                —
+                                                            </span>
+                                                        )}
+                                                    </td>
+                                                </tr>
+                                            );
+                                        }
+                                    )}
                                 </tbody>
                             </table>
                         </div>

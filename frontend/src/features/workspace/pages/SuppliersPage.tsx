@@ -31,6 +31,8 @@ import {
     Panel,
     SearchInput,
     StatusBadge,
+    RowNumberCell,
+    RowNumberHead,
 } from '../components/shared';
 
 const supplierSchema = z.object({
@@ -333,6 +335,7 @@ export function SuppliersPage() {
                             <table className="w-full min-w-[820px] text-left text-sm">
                                 <thead className="bg-muted/55 text-muted-foreground text-xs uppercase">
                                     <tr>
+                                        <RowNumberHead />
                                         <th className="px-4 py-3 font-medium">
                                             Nhà cung cấp
                                         </th>
@@ -352,11 +355,17 @@ export function SuppliersPage() {
                                 </thead>
                                 <tbody className="divide-border divide-y">
                                     {suppliersQuery.data.results.map(
-                                        (supplier) => (
+                                        (supplier, index) => (
                                             <tr
                                                 key={supplier.id}
                                                 className="hover:bg-muted/30"
                                             >
+                                                <RowNumberCell
+                                                    index={index}
+                                                    pagination={
+                                                        suppliersQuery.data
+                                                    }
+                                                />
                                                 <td className="px-4 py-3">
                                                     <p className="font-medium">
                                                         {supplier.name}
