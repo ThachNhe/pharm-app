@@ -149,12 +149,15 @@ const medicineSchema = z
         }
     );
 
+type ImportFieldsMode = 'none' | 'receiptLine' | 'initialImport';
+
 // New products created by an importer are received into stock in the same request.
+// From an import receipt, only quantity and price are collected; the batch is entered on the receipt line.
 // `when` keeps these checks running while other fields are invalid, so every missing field shows at once.
-const createMedicineSchema = (requireInitialImport: boolean) => {
-    if (!requireInitialImport) return medicineSchema;
+const createMedicineSchema = (mode: ImportFieldsMode) => {
+    if (mode === 'none') return medicineSchema;
     const always = () => true;
-    return medicineSchema
+    const withAmounts = medicineSchema
         .refine((values) => values.importPrice != null, {
             path: ['importPrice'],
             message: 'Nhập giá nhập',
@@ -164,7 +167,30 @@ const createMedicineSchema = (requireInitialImport: boolean) => {
             path: ['quantity'],
             message: 'Nhập số lượng',
             when: always,
-        })
+        });
+    if (mode === 'receiptLine') {
+        return withAmounts
+            .refine(
+                (values) =>
+                    values.importPrice == null ||
+                    Number.isInteger(values.importPrice),
+                {
+                    path: ['importPrice'],
+                    message: 'Giá nhập phải là số nguyên',
+                    when: always,
+                }
+            )
+            .refine(
+                (values) =>
+                    values.quantity == null || Number.isInteger(values.quantity),
+                {
+                    path: ['quantity'],
+                    message: 'Số lượng phải là số nguyên',
+                    when: always,
+                }
+            );
+    }
+    return withAmounts
         .refine((values) => Boolean(values.batchNumber?.trim()), {
             path: ['batchNumber'],
             message: 'Nhập số lô',
@@ -281,17 +307,32 @@ export function MedicineDialog({
     open,
     onOpenChange,
     medicine,
+    initialName,
+    onCreated,
 }: {
     open: boolean;
     onOpenChange: (open: boolean) => void;
     medicine: Medicine | null;
+    initialName?: string;
+    // Set by an import receipt: the product is only created, and its stock is received on that receipt's line.
+    onCreated?: (
+        medicine: Medicine,
+        receiptLine: { quantity: number; importPrice: number }
+    ) => void;
 }) {
     const queryClient = useQueryClient();
     const { selectedStoreId, canImport } = useWorkspace();
-    const requireInitialImport = !medicine && canImport;
+    const requireInitialImport = !medicine && canImport && !onCreated;
+    const fillsReceiptLine = !medicine && Boolean(onCreated);
+    const importFieldsMode: ImportFieldsMode = requireInitialImport
+        ? 'initialImport'
+        : fillsReceiptLine
+            ? 'receiptLine'
+            : 'none';
+    const showImportFields = importFieldsMode !== 'none';
     const schema = useMemo(
-        () => createMedicineSchema(requireInitialImport),
-        [requireInitialImport]
+        () => createMedicineSchema(importFieldsMode),
+        [importFieldsMode]
     );
     const [sourceMode, setSourceMode] = useState<'manual' | 'library'>(
         'manual'
@@ -306,7 +347,9 @@ export function MedicineDialog({
     const debouncedLibrarySearch = useDebounce(librarySearch, 350);
     const form = useForm<MedicineFormValues>({
         resolver: zodResolver(schema),
-        defaultValues: medicine ? getMedicineValues(medicine) : emptyValues,
+        defaultValues: medicine
+            ? getMedicineValues(medicine)
+            : { ...emptyValues, name: initialName ?? '' },
     });
     const requiresPrescription = useWatch({
         control: form.control,
@@ -401,10 +444,11 @@ export function MedicineDialog({
 
     const chooseSourceMode = (mode: 'manual' | 'library') => {
         setSourceMode(mode);
-        setLibrarySearch('');
+        setLibrarySearch(mode === 'library' ? (initialName ?? '') : '');
         setSelectedReferenceProduct(null);
         form.reset({
             ...emptyValues,
+            name: initialName ?? '',
             code: form.getValues('code'),
         });
     };
@@ -542,7 +586,7 @@ export function MedicineDialog({
                 )
                 : workspaceService.createMedicine(selectedStoreId, payload);
         },
-        onSuccess: () => {
+        onSuccess: (savedMedicine, values) => {
             toast.success(
                 medicine
                     ? 'Đã cập nhật sản phẩm'
@@ -565,6 +609,12 @@ export function MedicineDialog({
             form.reset(emptyValues);
             setSelectedReferenceProduct(null);
             onOpenChange(false);
+            if (!medicine) {
+                onCreated?.(savedMedicine, {
+                    quantity: values.quantity ?? 1,
+                    importPrice: values.importPrice ?? 0,
+                });
+            }
         },
         onError: (error) => {
             const message = getApiErrorMessage(
@@ -613,7 +663,9 @@ export function MedicineDialog({
                             ? 'Thông tin thuốc từ thư viện được dùng chung; mã hàng hóa, nhóm, vị trí, giá và tồn tối thiểu được cấu hình riêng cho quầy.'
                             : requireInitialImport
                                 ? 'Sản phẩm được thêm vào danh mục và nhập kho ngay, kèm một phiếu nhập đã hoàn tất.'
-                                : 'Mã hàng hóa được gợi ý tự động và có thể chỉnh sửa; vị trí, giá và định mức tồn được áp dụng riêng cho quầy đang chọn.'}
+                                : fillsReceiptLine
+                                    ? 'Sản phẩm được thêm vào danh mục quầy rồi điền vào dòng đang nhập cùng số lượng và giá nhập.'
+                                    : 'Mã hàng hóa được gợi ý tự động và có thể chỉnh sửa; vị trí, giá và định mức tồn được áp dụng riêng cho quầy đang chọn.'}
                     </DialogDescription>
                 </DialogHeader>
                 {!medicine ? (
@@ -1039,7 +1091,7 @@ export function MedicineDialog({
                                 {...form.register('usageInstructions')}
                             />
                         </Field>
-                        {requireInitialImport ? (
+                        {showImportFields ? (
                             <>
                                 <div className="border-border border-t pt-4 sm:col-span-2">
                                     <h3 className="text-sm font-semibold">
@@ -1048,6 +1100,9 @@ export function MedicineDialog({
                                     <p className="text-muted-foreground text-xs">
                                         Giá và số lượng tính theo {unitLabel},
                                         đơn vị nhỏ nhất của sản phẩm.
+                                        {fillsReceiptLine
+                                            ? ' Số lô và hạn dùng nhập tiếp trên phiếu nhập.'
+                                            : ''}
                                     </p>
                                 </div>
                                 <NumberField
@@ -1068,16 +1123,18 @@ export function MedicineDialog({
                             required
                             error={errors.sellingPrice?.message}
                         />
+                        {showImportFields ? (
+                            <NumberField
+                                control={form.control}
+                                name="quantity"
+                                label="Số lượng"
+                                suffix={unitLabel}
+                                required
+                                error={errors.quantity?.message}
+                            />
+                        ) : null}
                         {requireInitialImport ? (
                             <>
-                                <NumberField
-                                    control={form.control}
-                                    name="quantity"
-                                    label="Số lượng"
-                                    suffix={unitLabel}
-                                    required
-                                    error={errors.quantity?.message}
-                                />
                                 <Field
                                     label="Số lô"
                                     required
@@ -1105,17 +1162,19 @@ export function MedicineDialog({
                                         {...form.register('expiryDate')}
                                     />
                                 </Field>
-                                <div className="border-primary/20 bg-secondary self-end rounded-lg border px-3 py-2">
-                                    <p className="text-muted-foreground text-xs">
-                                        Tổng tiền nhập
-                                    </p>
-                                    <p className="text-brand-navy text-base font-semibold">
-                                        {formatCurrency(
-                                            (importPrice ?? 0) * (quantity ?? 0)
-                                        )}
-                                    </p>
-                                </div>
                             </>
+                        ) : null}
+                        {showImportFields ? (
+                            <div className="border-primary/20 bg-secondary self-end rounded-lg border px-3 py-2">
+                                <p className="text-muted-foreground text-xs">
+                                    Tổng tiền nhập
+                                </p>
+                                <p className="text-brand-navy text-base font-semibold">
+                                    {formatCurrency(
+                                        (importPrice ?? 0) * (quantity ?? 0)
+                                    )}
+                                </p>
+                            </div>
                         ) : null}
                         <Field
                             label="Ghi chú"
@@ -1189,7 +1248,9 @@ export function MedicineDialog({
                                 ? 'Lưu thay đổi'
                                 : requireInitialImport
                                     ? 'Thêm và nhập kho'
-                                    : 'Thêm sản phẩm'}
+                                    : fillsReceiptLine
+                                        ? 'Thêm vào phiếu nhập'
+                                        : 'Thêm sản phẩm'}
                         </Button>
                     ) : null}
                 </DialogFooter>

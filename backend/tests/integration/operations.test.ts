@@ -411,6 +411,53 @@ describe('Store operations flow', () => {
       .expect(httpStatus.FORBIDDEN);
   });
 
+  test('should search store medicines by registration number without leaking other stores', async () => {
+    await insertUsers([userOne]);
+    const [store, otherStore] = await Promise.all([
+      prisma.store.create({ data: { name: 'Search store' } }),
+      prisma.store.create({ data: { name: 'Other search store' } }),
+    ]);
+    await prisma.userStoreRole.createMany({
+      data: [
+        { userId: userOne.id, storeId: store.id, role: 'manager' },
+        { userId: userOne.id, storeId: otherStore.id, role: 'manager' },
+      ],
+    });
+    const token = accessToken(userOne.id);
+    const registrationNumber = `VD-${faker.random.alphaNumeric(10)}`;
+
+    const createProduct = async (storeId: string, name: string, productRegistrationNumber?: string) => {
+      const categoryRes = await request(app)
+        .post(`/v1/stores/${storeId}/product-categories`)
+        .set('Authorization', `Bearer ${token}`)
+        .send({ name: `Nhóm ${faker.random.alphaNumeric(6)}` })
+        .expect(httpStatus.CREATED);
+      return request(app)
+        .post(`/v1/stores/${storeId}/medicines`)
+        .set('Authorization', `Bearer ${token}`)
+        .send({
+          categoryId: categoryRes.body.id,
+          name,
+          baseUnitName: 'Viên',
+          registrationNumber: productRegistrationNumber,
+          sellingPrice: 1000,
+        })
+        .expect(httpStatus.CREATED);
+    };
+
+    const matchRes = await createProduct(store.id, 'Amoxicillin 500mg', registrationNumber);
+    await createProduct(store.id, 'Vitamin C 500mg');
+    await createProduct(otherStore.id, 'Amoxicillin khác', `${registrationNumber}-X`);
+
+    const searchRes = await request(app)
+      .get(`/v1/stores/${store.id}/medicines`)
+      .query({ search: registrationNumber.toLowerCase(), page: 1, limit: 20 })
+      .set('Authorization', `Bearer ${token}`)
+      .expect(httpStatus.OK);
+    expect(searchRes.body.totalResults).toBe(1);
+    expect(searchRes.body.results[0]).toMatchObject({ id: matchRes.body.id, registrationNumber });
+  });
+
   test('should generate the next store-scoped product code for managers', async () => {
     await insertUsers([userOne, userTwo]);
     const [managedStore, otherStore] = await Promise.all([

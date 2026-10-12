@@ -8,7 +8,6 @@ import {
     CheckCircle2,
     Eye,
     LoaderCircle,
-    PackagePlus,
     Plus,
     Trash2,
 } from 'lucide-react';
@@ -36,6 +35,7 @@ import { workspaceService } from '../services/workspace.service';
 import type { ImportReceipt, Medicine } from '../types';
 import { useWorkspace } from '../hooks/useWorkspace';
 import { MedicineDialog } from './MedicinesPage';
+import { ImportMedicinePicker } from '../components/ImportMedicinePicker';
 import {
     EmptyState,
     ErrorState,
@@ -107,13 +107,15 @@ const emptyItem: ImportFormValues['items'][number] = {
     sellingPrice: null,
 };
 
+type MedicineById = Record<string, Medicine>;
+
 function ImportReview({
     values,
-    medicines,
+    medicineById,
     supplierName,
 }: {
     values: ImportFormValues;
-    medicines: Medicine[];
+    medicineById: MedicineById;
     supplierName: string | null;
 }) {
     const total = values.items.reduce(
@@ -148,9 +150,7 @@ function ImportReview({
 
             <div className="border-border divide-border divide-y overflow-hidden rounded-lg border">
                 {values.items.map((item, index) => {
-                    const medicine = medicines.find(
-                        (entry) => entry.id === item.medicineId
-                    );
+                    const medicine = medicineById[item.medicineId];
                     const unit = medicine?.units.find(
                         (entry) => entry.id === item.unitId
                     );
@@ -278,8 +278,18 @@ function CreateImportDialog({
     );
     const fields = useFieldArray({ control: form.control, name: 'items' });
     const [reviewing, setReviewing] = useState(false);
+    // Picker results are paged by search, so the selected products are kept here for pricing and review.
+    const [medicineById, setMedicineById] = useState<MedicineById>({});
+    const [newProductRow, setNewProductRow] = useState<{
+        index: number;
+        name: string;
+    } | null>(null);
     const handleOpenChange = (nextOpen: boolean) => {
-        if (!nextOpen) setReviewing(false);
+        if (!nextOpen) {
+            setReviewing(false);
+            setNewProductRow(null);
+            setMedicineById({});
+        }
         onOpenChange(nextOpen);
     };
     const supplierId = useWatch({ control: form.control, name: 'supplierId' });
@@ -290,16 +300,6 @@ function CreateImportDialog({
             workspaceService.getSuppliers(selectedStoreId, {
                 page: 1,
                 limit: 100,
-            }),
-        enabled: open && Boolean(selectedStoreId),
-    });
-    const medicinesQuery = useQuery({
-        queryKey: ['workspace', selectedStoreId, 'medicines', 'options'],
-        queryFn: () =>
-            workspaceService.getMedicines(selectedStoreId, {
-                page: 1,
-                limit: 100,
-                active: true,
             }),
         enabled: open && Boolean(selectedStoreId),
     });
@@ -314,14 +314,40 @@ function CreateImportDialog({
         });
     }, [form, open, selectedStoreId]);
 
+    const selectMedicine = (
+        index: number,
+        medicine: Medicine,
+        amounts?: { quantity: number; importPrice: number }
+    ) => {
+        setMedicineById((current) => ({ ...current, [medicine.id]: medicine }));
+        form.setValue(`items.${index}.medicineId`, medicine.id, {
+            shouldDirty: true,
+            shouldValidate: true,
+        });
+        form.setValue(
+            `items.${index}.unitId`,
+            medicine.units.find((unit) => unit.isBaseUnit)?.id ?? '',
+            { shouldDirty: true, shouldValidate: true }
+        );
+        form.setValue(`items.${index}.sellingPrice`, medicine.sellingPrice);
+        if (amounts) {
+            form.setValue(`items.${index}.quantity`, amounts.quantity, {
+                shouldDirty: true,
+                shouldValidate: true,
+            });
+            form.setValue(`items.${index}.importPrice`, amounts.importPrice, {
+                shouldDirty: true,
+                shouldValidate: true,
+            });
+        }
+    };
+
     const buildPayload = (values: ImportFormValues) => ({
         ...values,
         supplierId: values.supplierId || null,
         note: values.note || undefined,
         items: values.items.map(({ sellingPrice, ...item }) => {
-            const current = medicinesQuery.data?.results.find(
-                (medicine) => medicine.id === item.medicineId
-            )?.sellingPrice;
+            const current = medicineById[item.medicineId]?.sellingPrice;
             return {
                 ...item,
                 sellingPrice:
@@ -362,9 +388,7 @@ function CreateImportDialog({
             <DialogContent className="max-h-[94vh] overflow-y-auto sm:max-w-5xl">
                 <DialogHeader>
                     <DialogTitle>
-                        {reviewing
-                            ? 'Xác nhận phiếu nhập'
-                            : 'Nhập sản phẩm có sẵn'}
+                        {reviewing ? 'Xác nhận phiếu nhập' : 'Tạo phiếu nhập'}
                     </DialogTitle>
                     <DialogDescription>
                         {reviewing
@@ -440,11 +464,9 @@ function CreateImportDialog({
                                 const itemErrors =
                                     form.formState.errors.items?.[index];
                                 const selectedMedicine =
-                                    medicinesQuery.data?.results.find(
-                                        (medicine) =>
-                                            medicine.id ===
-                                            items[index]?.medicineId
-                                    );
+                                    medicineById[
+                                        items[index]?.medicineId ?? ''
+                                    ];
                                 const selectedUnit =
                                     selectedMedicine?.units.find(
                                         (unit) =>
@@ -502,64 +524,25 @@ function CreateImportDialog({
                                                         ?.message
                                                 }
                                             >
-                                                <select
-                                                    className="border-input bg-input-background focus:border-ring focus:ring-ring/20 h-9 w-full min-w-0 rounded-md border px-3 text-sm outline-none focus:ring-3"
-                                                    {...form.register(
-                                                        `items.${index}.medicineId`,
-                                                        {
-                                                            onChange: (
-                                                                event
-                                                            ) => {
-                                                                const medicine =
-                                                                    medicinesQuery.data?.results.find(
-                                                                        (
-                                                                            item
-                                                                        ) =>
-                                                                            item.id ===
-                                                                            event
-                                                                                .target
-                                                                                .value
-                                                                    );
-                                                                form.setValue(
-                                                                    `items.${index}.unitId`,
-                                                                    medicine?.units.find(
-                                                                        (
-                                                                            unit
-                                                                        ) =>
-                                                                            unit.isBaseUnit
-                                                                    )?.id ?? '',
-                                                                    {
-                                                                        shouldDirty: true,
-                                                                        shouldValidate: true,
-                                                                    }
-                                                                );
-                                                                form.setValue(
-                                                                    `items.${index}.sellingPrice`,
-                                                                    medicine?.sellingPrice ??
-                                                                        null
-                                                                );
-                                                            },
-                                                        }
+                                                <ImportMedicinePicker
+                                                    value={selectedMedicine}
+                                                    rowLabel={`dòng ${index + 1}`}
+                                                    invalid={Boolean(
+                                                        itemErrors?.medicineId
                                                     )}
-                                                >
-                                                    <option value="">
-                                                        Chọn sản phẩm
-                                                    </option>
-                                                    {medicinesQuery.data?.results.map(
-                                                        (medicine) => (
-                                                            <option
-                                                                key={
-                                                                    medicine.id
-                                                                }
-                                                                value={
-                                                                    medicine.id
-                                                                }
-                                                            >
-                                                                {medicine.name}
-                                                            </option>
+                                                    onSelect={(medicine) =>
+                                                        selectMedicine(
+                                                            index,
+                                                            medicine
                                                         )
-                                                    )}
-                                                </select>
+                                                    }
+                                                    onCreateNew={(name) =>
+                                                        setNewProductRow({
+                                                            index,
+                                                            name,
+                                                        })
+                                                    }
+                                                />
                                             </Field>
                                             <Field
                                                 label="ĐVT"
@@ -568,30 +551,44 @@ function CreateImportDialog({
                                                     itemErrors?.unitId?.message
                                                 }
                                             >
-                                                <select
-                                                    className="border-input bg-input-background focus:border-ring focus:ring-ring/20 h-9 w-full rounded-md border px-2 text-sm outline-none focus:ring-3"
-                                                    disabled={!selectedMedicine}
-                                                    {...form.register(
-                                                        `items.${index}.unitId`
-                                                    )}
-                                                >
-                                                    <option value="">
-                                                        Chọn ĐVT
-                                                    </option>
-                                                    {selectedMedicine?.units.map(
-                                                        (unit) => (
-                                                            <option
-                                                                key={unit.id}
-                                                                value={unit.id}
-                                                            >
-                                                                {unit.name}
-                                                                {unit.isBaseUnit
-                                                                    ? ''
-                                                                    : ` (x${formatNumber(unit.conversionRate)})`}
+                                                <Controller
+                                                    control={form.control}
+                                                    name={`items.${index}.unitId`}
+                                                    render={({
+                                                        field: unitField,
+                                                    }) => (
+                                                        <select
+                                                            className="border-input bg-input-background focus:border-ring focus:ring-ring/20 h-9 w-full rounded-md border px-2 text-sm outline-none focus:ring-3"
+                                                            disabled={
+                                                                !selectedMedicine
+                                                            }
+                                                            {...unitField}
+                                                        >
+                                                            <option value="">
+                                                                Chọn ĐVT
                                                             </option>
-                                                        )
+                                                            {selectedMedicine?.units.map(
+                                                                (unit) => (
+                                                                    <option
+                                                                        key={
+                                                                            unit.id
+                                                                        }
+                                                                        value={
+                                                                            unit.id
+                                                                        }
+                                                                    >
+                                                                        {
+                                                                            unit.name
+                                                                        }
+                                                                        {unit.isBaseUnit
+                                                                            ? ''
+                                                                            : ` (x${formatNumber(unit.conversionRate)})`}
+                                                                    </option>
+                                                                )
+                                                            )}
+                                                        </select>
                                                     )}
-                                                </select>
+                                                />
                                             </Field>
                                             <Field
                                                 label="Số lô"
@@ -799,7 +796,7 @@ function CreateImportDialog({
                 {reviewing ? (
                     <ImportReview
                         values={form.getValues()}
-                        medicines={medicinesQuery.data?.results ?? []}
+                        medicineById={medicineById}
                         supplierName={
                             suppliersQuery.data?.results.find(
                                 (supplier) => supplier.id === supplierId
@@ -851,6 +848,25 @@ function CreateImportDialog({
                     )}
                 </DialogFooter>
             </DialogContent>
+            {newProductRow ? (
+                <MedicineDialog
+                    open
+                    onOpenChange={(nextOpen) => {
+                        if (!nextOpen) setNewProductRow(null);
+                    }}
+                    medicine={null}
+                    initialName={newProductRow.name}
+                    onCreated={(medicine, amounts) => {
+                        if (!medicine.isActive) {
+                            toast.warning(
+                                'Sản phẩm đang ở trạng thái ngừng bán nên chưa thể nhập kho.'
+                            );
+                            return;
+                        }
+                        selectMedicine(newProductRow.index, medicine, amounts);
+                    }}
+                />
+            ) : null}
         </Dialog>
     );
 }
@@ -1029,7 +1045,6 @@ function ImportDetailDialog({
 export function ImportsPage() {
     const [page, setPage] = useState(1);
     const [createOpen, setCreateOpen] = useState(false);
-    const [newProductOpen, setNewProductOpen] = useState(false);
     const [selectedReceipt, setSelectedReceipt] =
         useState<ImportReceipt | null>(null);
     const { selectedStoreId, hasRole, canImport } = useWorkspace();
@@ -1048,23 +1063,17 @@ export function ImportsPage() {
     if (!hasRole('manager')) return <PermissionDenied />;
 
     const importActions = (
-        <div className="flex flex-wrap gap-2">
-            <Button variant="outline" onClick={() => setNewProductOpen(true)}>
-                <PackagePlus />
-                Nhập sản phẩm mới
-            </Button>
-            <Button onClick={() => setCreateOpen(true)}>
-                <Plus />
-                Nhập sản phẩm có sẵn
-            </Button>
-        </div>
+        <Button onClick={() => setCreateOpen(true)}>
+            <Plus />
+            Nhập hàng
+        </Button>
     );
 
     return (
         <div className="space-y-5">
             <PageHeader
                 title="Nhập hàng"
-                description="Nhập thêm sản phẩm đã có trong danh mục hoặc nhập sản phẩm mới vào kho của quầy."
+                description="Tìm sản phẩm đã có trong quầy để nhập thêm; nếu chưa có, thêm sản phẩm mới ngay trên phiếu nhập."
                 actions={canImport ? importActions : undefined}
             />
 
@@ -1208,13 +1217,6 @@ export function ImportsPage() {
                     onOpenChange={setCreateOpen}
                 />
             )}
-            {canImport && newProductOpen ? (
-                <MedicineDialog
-                    open
-                    onOpenChange={setNewProductOpen}
-                    medicine={null}
-                />
-            ) : null}
             <ImportDetailDialog
                 receipt={selectedReceipt}
                 onClose={() => setSelectedReceipt(null)}

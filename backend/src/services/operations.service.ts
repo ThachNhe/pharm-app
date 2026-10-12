@@ -497,6 +497,7 @@ const buildInventoryRows = async (storeId: string, search?: string) => {
                     { name: { contains: search, mode: 'insensitive' } },
                     { barcode: { contains: search, mode: 'insensitive' } },
                     { secondaryBarcode: { contains: search, mode: 'insensitive' } },
+                    { registrationNumber: { contains: search, mode: 'insensitive' } },
                     { activeIngredient: { contains: search, mode: 'insensitive' } },
                   ],
                 },
