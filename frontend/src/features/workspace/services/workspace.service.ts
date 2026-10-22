@@ -1,4 +1,4 @@
-import { apiGet, apiPatch, apiPost } from '@/services/api';
+import { apiDelete, apiGet, apiPatch, apiPost } from '@/services/api';
 import { API_ENDPOINTS } from '@/services/endpoints';
 import type {
     ImportPayload,
@@ -91,6 +91,8 @@ export const workspaceService = {
             API_ENDPOINTS.OPERATIONS.MEDICINE(storeId, medicineId),
             payload
         ),
+    deleteMedicine: (storeId: string, medicineId: string) =>
+        apiDelete<void>(API_ENDPOINTS.OPERATIONS.MEDICINE(storeId, medicineId)),
     getReferenceProducts: (storeId: string, params?: Record<string, unknown>) =>
         apiGet<Paginated<ReferenceProduct>>(
             API_ENDPOINTS.OPERATIONS.REFERENCE_PRODUCTS(storeId),

@@ -176,6 +176,13 @@ const updateMedicine = {
     .min(1),
 };
 
+const deleteMedicine = {
+  params: Joi.object().keys({
+    ...storeParams,
+    medicineId: Joi.string().required().custom(objectId),
+  }),
+};
+
 const importItem = Joi.object().keys({
   medicineId: Joi.string().required().custom(objectId),
   batchNumber: Joi.string().trim().required().max(100),
@@ -294,6 +301,7 @@ export {
   createSale,
   createSaleReturn,
   createSupplier,
+  deleteMedicine,
   getContext,
   getDashboard,
   getImportReceipts,

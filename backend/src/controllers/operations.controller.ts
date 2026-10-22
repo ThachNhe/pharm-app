@@ -61,6 +61,11 @@ const updateMedicine = catchAsync(async (req, res) => {
   res.send(await operationsService.updateMedicine(req.user, param(req, 'storeId'), param(req, 'medicineId'), req.body));
 });
 
+const deleteMedicine = catchAsync(async (req, res) => {
+  await operationsService.deleteMedicine(req.user, param(req, 'storeId'), param(req, 'medicineId'));
+  res.status(httpStatus.NO_CONTENT).send();
+});
+
 const getImportReceipts = catchAsync(async (req, res) => {
   res.send(await operationsService.queryImportReceipts(req.user, param(req, 'storeId'), req.query));
 });
@@ -111,6 +116,7 @@ export {
   createProductCategory,
   createSale,
   createSupplier,
+  deleteMedicine,
   getContext,
   getDashboard,
   getImportReceipt,

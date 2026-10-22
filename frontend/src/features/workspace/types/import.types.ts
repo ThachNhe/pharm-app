@@ -23,7 +23,7 @@ export interface ImportReceipt {
         unitName: string;
         conversionRate: number;
         expiryDate: string;
-        /** Selling price per base unit applied by this receipt. */
+        /** Selling price per base unit in effect after this receipt. */
         newSellingPrice?: number | null;
         medicine: { id: string; name: string; baseUnitName: string };
     }>;

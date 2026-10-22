@@ -1128,6 +1128,7 @@ const createMedicine = async (actor: Actor, storeId: string, body: MedicinePaylo
             unitNameSnapshot: medicine.baseUnitName,
             conversionRateSnapshot: toDecimal(1),
             expiryDate: toDateOnly(initialImport.expiryDate),
+            newSellingPrice: storeMedicine.sellingPrice,
           },
         },
       },
@@ -1326,6 +1327,58 @@ const updateMedicine = async (
   });
 };
 
+// Only a product without stock or sales history can be removed; otherwise it must be set to "Ngừng bán".
+const deleteMedicine = async (actor: Actor, storeId: string, medicineId: string) => {
+  await getStoreAccess(actor, storeId, 'manager');
+
+  await prisma.$transaction(async (tx) => {
+    const assigned = await tx.storeMedicine.findUnique({
+      where: { storeId_medicineId: { storeId, medicineId } },
+      include: { medicine: { select: { name: true } } },
+    });
+    if (!assigned) {
+      throw new ApiError(httpStatus.NOT_FOUND, 'Thuốc chưa được cấu hình tại quầy này');
+    }
+
+    const [importDetailCount, saleDetailCount, stockBatchCount, movementCount] = await Promise.all([
+      tx.importDetail.count({ where: { storeId, medicineId } }),
+      tx.saleDetail.count({ where: { storeId, medicineId } }),
+      tx.stockBatch.count({ where: { storeId, medicineId } }),
+      tx.inventoryMovement.count({ where: { storeId, medicineId } }),
+    ]);
+    if (importDetailCount || saleDetailCount || stockBatchCount || movementCount) {
+      throw new ApiError(
+        httpStatus.CONFLICT,
+        'Sản phẩm đã phát sinh nhập hàng hoặc bán hàng nên không thể xóa. Hãy chuyển sang trạng thái Ngừng bán.',
+      );
+    }
+
+    await tx.storeMedicine.delete({ where: { id: assigned.id } });
+
+    // The shared medicine row is removed only when no store uses it and nothing references it.
+    const [otherStoreCount, referenceCount] = await Promise.all([
+      tx.storeMedicine.count({ where: { medicineId } }),
+      Promise.all([
+        tx.importDetail.count({ where: { medicineId } }),
+        tx.saleDetail.count({ where: { medicineId } }),
+        tx.stockBatch.count({ where: { medicineId } }),
+        tx.inventoryMovement.count({ where: { medicineId } }),
+      ]).then((counts) => counts.reduce((sum, count) => sum + count, 0)),
+    ]);
+    if (!otherStoreCount && !referenceCount) {
+      await tx.medicine.delete({ where: { id: medicineId } });
+    }
+
+    await writeAudit(tx, actor, {
+      storeId,
+      action: 'medicine.delete',
+      targetType: 'medicine',
+      targetId: medicineId,
+      metadata: { code: assigned.code, name: assigned.medicine.name },
+    });
+  });
+};
+
 const validateImportReferences = async (
   storeId: string,
   supplierId: string | null | undefined,
@@ -1381,7 +1434,8 @@ const validateImportReferences = async (
     const unit = item.unitId
       ? configured?.medicine.units.find((candidate) => candidate.id === item.unitId)
       : configured?.medicine.units.find((candidate) => candidate.isBaseUnit);
-    if (!unit) throw new ApiError(httpStatus.BAD_REQUEST, 'Đơn vị nhập không hợp lệ cho thuốc đã chọn');
+    if (!configured || !unit) throw new ApiError(httpStatus.BAD_REQUEST, 'Đơn vị nhập không hợp lệ cho thuốc đã chọn');
+    const newSellingPrice = sellingPriceByMedicine.get(item.medicineId);
     const enteredQuantity = toDecimal(item.quantity);
     const enteredImportPrice = toDecimal(item.importPrice);
     const quantity = enteredQuantity.mul(unit.conversionRate);
@@ -1394,7 +1448,8 @@ const validateImportReferences = async (
       enteredImportPrice,
       quantity,
       importPrice: enteredImportPrice.div(unit.conversionRate),
-      newSellingPrice: item.sellingPrice === undefined ? null : toDecimal(item.sellingPrice),
+      // Every line records the product's selling price after this import, whether it changed or not.
+      newSellingPrice: newSellingPrice === undefined ? configured.sellingPrice : toDecimal(newSellingPrice),
       unit,
     };
   });
@@ -2104,6 +2159,7 @@ export {
   createSale,
   createSaleReturn,
   createSupplier,
+  deleteMedicine,
   getContext,
   getDashboard,
   getImportReceipt,

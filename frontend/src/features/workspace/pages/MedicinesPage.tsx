@@ -9,7 +9,14 @@ import {
     type DefaultValues,
 } from 'react-hook-form';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { CheckCircle2, Edit3, Library, LoaderCircle, Plus } from 'lucide-react';
+import {
+    CheckCircle2,
+    Edit3,
+    Library,
+    LoaderCircle,
+    Plus,
+    Trash2,
+} from 'lucide-react';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -54,6 +61,7 @@ const COMMON_UNIT_NAMES = [
     'Vỉ',
     'Hộp',
     'Chai',
+    'Lon',
     'Gói',
     'Ống',
     'Lọ',
@@ -152,7 +160,7 @@ const medicineSchema = z
 type ImportFieldsMode = 'none' | 'receiptLine' | 'initialImport';
 
 // New products created by an importer are received into stock in the same request.
-// From an import receipt, only quantity and price are collected; the batch is entered on the receipt line.
+// From an import receipt, quantity, price and expiry date are collected; the batch number is entered on the receipt line.
 // `when` keeps these checks running while other fields are invalid, so every missing field shows at once.
 const createMedicineSchema = (mode: ImportFieldsMode) => {
     if (mode === 'none') return medicineSchema;
@@ -166,6 +174,16 @@ const createMedicineSchema = (mode: ImportFieldsMode) => {
         .refine((values) => values.quantity != null, {
             path: ['quantity'],
             message: 'Nhập số lượng',
+            when: always,
+        })
+        .refine((values) => Boolean(values.expiryDate), {
+            path: ['expiryDate'],
+            message: 'Chọn hạn dùng',
+            when: always,
+        })
+        .refine((values) => !values.expiryDate || values.expiryDate > today, {
+            path: ['expiryDate'],
+            message: 'Hạn dùng phải sau hôm nay',
             when: always,
         });
     if (mode === 'receiptLine') {
@@ -190,22 +208,11 @@ const createMedicineSchema = (mode: ImportFieldsMode) => {
                 }
             );
     }
-    return withAmounts
-        .refine((values) => Boolean(values.batchNumber?.trim()), {
-            path: ['batchNumber'],
-            message: 'Nhập số lô',
-            when: always,
-        })
-        .refine((values) => Boolean(values.expiryDate), {
-            path: ['expiryDate'],
-            message: 'Chọn hạn dùng',
-            when: always,
-        })
-        .refine((values) => !values.expiryDate || values.expiryDate > today, {
-            path: ['expiryDate'],
-            message: 'Hạn dùng phải sau hôm nay',
-            when: always,
-        });
+    return withAmounts.refine((values) => Boolean(values.batchNumber?.trim()), {
+        path: ['batchNumber'],
+        message: 'Nhập số lô',
+        when: always,
+    });
 };
 
 type MedicineFormValues = z.infer<typeof medicineSchema>;
@@ -317,7 +324,11 @@ export function MedicineDialog({
     // Set by an import receipt: the product is only created, and its stock is received on that receipt's line.
     onCreated?: (
         medicine: Medicine,
-        receiptLine: { quantity: number; importPrice: number }
+        receiptLine: {
+            quantity: number;
+            importPrice: number;
+            expiryDate: string;
+        }
     ) => void;
 }) {
     const queryClient = useQueryClient();
@@ -613,6 +624,7 @@ export function MedicineDialog({
                 onCreated?.(savedMedicine, {
                     quantity: values.quantity ?? 1,
                     importPrice: values.importPrice ?? 0,
+                    expiryDate: values.expiryDate,
                 });
             }
         },
@@ -664,7 +676,7 @@ export function MedicineDialog({
                             : requireInitialImport
                                 ? 'Sản phẩm được thêm vào danh mục và nhập kho ngay, kèm một phiếu nhập đã hoàn tất.'
                                 : fillsReceiptLine
-                                    ? 'Sản phẩm được thêm vào danh mục quầy rồi điền vào dòng đang nhập cùng số lượng và giá nhập.'
+                                    ? 'Sản phẩm được thêm vào danh mục quầy rồi điền vào dòng đang nhập cùng số lượng, giá nhập và hạn sử dụng.'
                                     : 'Mã hàng hóa được gợi ý tự động và có thể chỉnh sửa; vị trí, giá và định mức tồn được áp dụng riêng cho quầy đang chọn.'}
                     </DialogDescription>
                 </DialogHeader>
@@ -1101,7 +1113,7 @@ export function MedicineDialog({
                                         Giá và số lượng tính theo {unitLabel},
                                         đơn vị nhỏ nhất của sản phẩm.
                                         {fillsReceiptLine
-                                            ? ' Số lô và hạn dùng nhập tiếp trên phiếu nhập.'
+                                            ? ' Số lô nhập tiếp trên phiếu nhập.'
                                             : ''}
                                     </p>
                                 </div>
@@ -1134,35 +1146,31 @@ export function MedicineDialog({
                             />
                         ) : null}
                         {requireInitialImport ? (
-                            <>
-                                <Field
-                                    label="Số lô"
-                                    required
-                                    error={errors.batchNumber?.message}
-                                >
-                                    <Input
-                                        placeholder="LO-2026-01"
-                                        aria-invalid={Boolean(
-                                            errors.batchNumber
-                                        )}
-                                        {...form.register('batchNumber')}
-                                    />
-                                </Field>
-                                <Field
-                                    label="Hạn sử dụng"
-                                    required
-                                    error={errors.expiryDate?.message}
-                                >
-                                    <Input
-                                        type="date"
-                                        min={tomorrow}
-                                        aria-invalid={Boolean(
-                                            errors.expiryDate
-                                        )}
-                                        {...form.register('expiryDate')}
-                                    />
-                                </Field>
-                            </>
+                            <Field
+                                label="Số lô"
+                                required
+                                error={errors.batchNumber?.message}
+                            >
+                                <Input
+                                    placeholder="LO-2026-01"
+                                    aria-invalid={Boolean(errors.batchNumber)}
+                                    {...form.register('batchNumber')}
+                                />
+                            </Field>
+                        ) : null}
+                        {showImportFields ? (
+                            <Field
+                                label="Hạn sử dụng"
+                                required
+                                error={errors.expiryDate?.message}
+                            >
+                                <Input
+                                    type="date"
+                                    min={tomorrow}
+                                    aria-invalid={Boolean(errors.expiryDate)}
+                                    {...form.register('expiryDate')}
+                                />
+                            </Field>
                         ) : null}
                         {showImportFields ? (
                             <div className="border-primary/20 bg-secondary self-end rounded-lg border px-3 py-2">
@@ -1315,11 +1323,92 @@ export function MedicineDialog({
     );
 }
 
+function DeleteMedicineDialog({
+    medicine,
+    onClose,
+}: {
+    medicine: Medicine | null;
+    onClose: () => void;
+}) {
+    const queryClient = useQueryClient();
+    const { selectedStoreId } = useWorkspace();
+    const mutation = useMutation({
+        mutationFn: (target: Medicine) =>
+            workspaceService.deleteMedicine(selectedStoreId, target.id),
+        onSuccess: () => {
+            toast.success('Đã xóa sản phẩm khỏi danh mục');
+            for (const key of ['medicines', 'inventory', 'reference-products']) {
+                void queryClient.invalidateQueries({
+                    queryKey: ['workspace', selectedStoreId, key],
+                });
+            }
+            onClose();
+        },
+        onError: (error) =>
+            toast.error(getApiErrorMessage(error, 'Không thể xóa sản phẩm.')),
+    });
+
+    if (!medicine) return null;
+
+    return (
+        <Dialog
+            open
+            onOpenChange={(nextOpen) => {
+                if (!nextOpen && !mutation.isPending) onClose();
+            }}
+        >
+            <DialogContent className="sm:max-w-md">
+                <DialogHeader>
+                    <DialogTitle>Xóa sản phẩm?</DialogTitle>
+                    <DialogDescription>
+                        Sản phẩm{' '}
+                        <span className="text-foreground font-medium break-words">
+                            {medicine.name}
+                        </span>{' '}
+                        ({medicine.code}) sẽ bị xóa khỏi danh mục của quầy.
+                    </DialogDescription>
+                </DialogHeader>
+                <p className="bg-muted/45 text-muted-foreground rounded-lg px-3 py-2 text-sm">
+                    Chỉ xóa được sản phẩm chưa phát sinh nhập hàng hoặc bán
+                    hàng. Sản phẩm đã có lịch sử hãy chuyển sang trạng thái
+                    Ngừng bán.
+                </p>
+                <DialogFooter>
+                    <Button
+                        type="button"
+                        variant="outline"
+                        disabled={mutation.isPending}
+                        onClick={onClose}
+                    >
+                        Hủy
+                    </Button>
+                    <Button
+                        type="button"
+                        variant="destructive"
+                        disabled={mutation.isPending}
+                        onClick={() => mutation.mutate(medicine)}
+                    >
+                        {mutation.isPending ? (
+                            <LoaderCircle className="animate-spin" />
+                        ) : (
+                            <Trash2 />
+                        )}
+                        Xóa sản phẩm
+                    </Button>
+                </DialogFooter>
+            </DialogContent>
+        </Dialog>
+    );
+}
+
 export function MedicinesPage() {
     const { search, setSearch, debouncedSearch, page, setPage } =
         usePaginatedSearch();
     const [dialogOpen, setDialogOpen] = useState(false);
     const [editingMedicine, setEditingMedicine] = useState<Medicine | null>(
+        null
+    );
+    const [deletingMedicine, setDeletingMedicine] = useState<Medicine | null>(
         null
     );
     const { selectedStoreId, hasRole } = useWorkspace();
@@ -1461,8 +1550,8 @@ export function MedicinesPage() {
                                             Trạng thái
                                         </th>
                                         {canManage ? (
-                                            <th className="bg-muted sticky right-0 z-20 w-16 px-4 py-3 text-right font-medium shadow-[inset_1px_0_0_var(--color-border)]">
-                                                Sửa
+                                            <th className="bg-muted sticky right-0 z-20 w-24 px-4 py-3 text-right font-medium shadow-[inset_1px_0_0_var(--color-border)]">
+                                                Thao tác
                                             </th>
                                         ) : null}
                                     </tr>
@@ -1644,7 +1733,7 @@ export function MedicinesPage() {
                                                         </StatusBadge>
                                                     </td>
                                                     {canManage ? (
-                                                        <td className="bg-card group-hover:bg-muted sticky right-0 z-10 px-4 py-3 text-right shadow-[inset_1px_0_0_var(--color-border)] transition-colors">
+                                                        <td className="bg-card group-hover:bg-muted sticky right-0 z-10 px-4 py-3 text-right whitespace-nowrap shadow-[inset_1px_0_0_var(--color-border)] transition-colors">
                                                             <Button
                                                                 size="icon-sm"
                                                                 variant="ghost"
@@ -1657,6 +1746,19 @@ export function MedicinesPage() {
                                                                 title="Sửa sản phẩm"
                                                             >
                                                                 <Edit3 />
+                                                            </Button>
+                                                            <Button
+                                                                size="icon-sm"
+                                                                variant="ghost"
+                                                                onClick={() =>
+                                                                    setDeletingMedicine(
+                                                                        medicine
+                                                                    )
+                                                                }
+                                                                aria-label={`Xóa ${medicine.name}`}
+                                                                title="Xóa sản phẩm"
+                                                            >
+                                                                <Trash2 className="text-destructive" />
                                                             </Button>
                                                         </td>
                                                     ) : null}
@@ -1682,6 +1784,12 @@ export function MedicinesPage() {
                     open
                     onOpenChange={setDialogOpen}
                     medicine={editingMedicine}
+                />
+            ) : null}
+            {canManage ? (
+                <DeleteMedicineDialog
+                    medicine={deletingMedicine}
+                    onClose={() => setDeletingMedicine(null)}
                 />
             ) : null}
         </div>

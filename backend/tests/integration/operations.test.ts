@@ -913,6 +913,15 @@ describe('Store operations flow', () => {
     // Re-importing with the current price is not a price change.
     await createImport([line('LO-D', { sellingPrice: 2500 })]).expect(httpStatus.CREATED);
     expect(await prisma.auditLog.count({ where: { storeId: store.id, action: 'medicine.price_change' } })).toBe(1);
+
+    // A line that keeps the price still records the price in effect.
+    const keptPrice = await createImport([line('LO-E')]).expect(httpStatus.CREATED);
+    expect(keptPrice.body.details[0].newSellingPrice).toBe(2500);
+
+    // A new price on one line applies to every line of the same product.
+    const mixed = await createImport([line('LO-F', { sellingPrice: 2700 }), line('LO-G')]).expect(httpStatus.CREATED);
+    expect(mixed.body.details.map((detail: { newSellingPrice: number }) => detail.newSellingPrice)).toEqual([2700, 2700]);
+    expect(await currentPrice()).toBe(2700);
   });
 
   test('should create a new product together with its first completed import', async () => {
@@ -950,6 +959,7 @@ describe('Store operations flow', () => {
       quantity: 120,
       importPrice: 1500,
       unitName: 'Viên',
+      newSellingPrice: 2500,
     });
 
     const batch = await prisma.stockBatch.findFirstOrThrow({ where: { storeId: store.id, medicineId: res.body.id } });
@@ -975,6 +985,52 @@ describe('Store operations flow', () => {
 
     expect(await prisma.storeMedicine.count({ where: { storeId: store.id } })).toBe(1);
     expect(await prisma.importReceipt.count({ where: { storeId: store.id } })).toBe(1);
+  });
+
+  test('should delete only unused store products and keep store boundaries', async () => {
+    await insertUsers([userOne, userTwo]);
+    const [store, otherStore] = await Promise.all([
+      prisma.store.create({ data: { name: 'Delete product store' } }),
+      prisma.store.create({ data: { name: 'Other delete store' } }),
+    ]);
+    await prisma.userStoreRole.createMany({
+      data: [
+        { userId: userOne.id, storeId: store.id, role: 'manager' },
+        { userId: userTwo.id, storeId: store.id, role: 'staff' },
+        { userId: userTwo.id, storeId: otherStore.id, role: 'manager' },
+      ],
+    });
+    const managerToken = accessToken(userOne.id);
+    const otherManagerToken = accessToken(userTwo.id);
+    const category = await prisma.productCategory.create({ data: { storeId: store.id, name: 'Dược phẩm' } });
+    const createProduct = (name: string, extra: Record<string, unknown> = {}) =>
+      request(app)
+        .post(`/v1/stores/${store.id}/medicines`)
+        .set('Authorization', `Bearer ${managerToken}`)
+        .send({ categoryId: category.id, name, baseUnitName: 'Viên', sellingPrice: 1000, ...extra })
+        .expect(httpStatus.CREATED);
+    const deleteProduct = (storeId: string, medicineId: string, token: string) =>
+      request(app).delete(`/v1/stores/${storeId}/medicines/${medicineId}`).set('Authorization', `Bearer ${token}`);
+
+    const unused = await createProduct('Sản phẩm tạo nhầm');
+    const imported = await createProduct('Sản phẩm đã nhập', {
+      initialImport: { quantity: 10, importPrice: 500, batchNumber: 'LO-DEL', expiryDate: futureDate(365) },
+    });
+
+    // Staff in this store and a manager of another store may not delete.
+    await deleteProduct(store.id, unused.body.id, otherManagerToken).expect(httpStatus.FORBIDDEN);
+    await deleteProduct(otherStore.id, unused.body.id, otherManagerToken).expect(httpStatus.NOT_FOUND);
+    expect(await prisma.storeMedicine.count({ where: { storeId: store.id } })).toBe(2);
+
+    await deleteProduct(store.id, imported.body.id, managerToken).expect(httpStatus.CONFLICT);
+    expect(await prisma.stockBatch.count({ where: { storeId: store.id, medicineId: imported.body.id } })).toBe(1);
+
+    await deleteProduct(store.id, unused.body.id, managerToken).expect(httpStatus.NO_CONTENT);
+    expect(await prisma.storeMedicine.count({ where: { storeId: store.id, medicineId: unused.body.id } })).toBe(0);
+    expect(await prisma.medicine.count({ where: { id: unused.body.id } })).toBe(0);
+    expect(await prisma.auditLog.count({ where: { storeId: store.id, action: 'medicine.delete' } })).toBe(1);
+
+    await deleteProduct(store.id, unused.body.id, managerToken).expect(httpStatus.NOT_FOUND);
   });
 
   test('should list in-stock products before sold-out ones when requested', async () => {

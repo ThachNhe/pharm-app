@@ -45,11 +45,10 @@ router
   .get(validate(operationsValidation.getMedicines), operationsController.getMedicines)
   .post(validate(operationsValidation.createMedicine), operationsController.createMedicine);
 
-router.patch(
-  '/:storeId/medicines/:medicineId',
-  validate(operationsValidation.updateMedicine),
-  operationsController.updateMedicine,
-);
+router
+  .route('/:storeId/medicines/:medicineId')
+  .patch(validate(operationsValidation.updateMedicine), operationsController.updateMedicine)
+  .delete(validate(operationsValidation.deleteMedicine), operationsController.deleteMedicine);
 
 router.get(
   '/:storeId/reference-products',

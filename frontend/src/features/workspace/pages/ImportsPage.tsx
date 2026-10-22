@@ -317,7 +317,7 @@ function CreateImportDialog({
     const selectMedicine = (
         index: number,
         medicine: Medicine,
-        amounts?: { quantity: number; importPrice: number }
+        amounts?: { quantity: number; importPrice: number; expiryDate: string }
     ) => {
         setMedicineById((current) => ({ ...current, [medicine.id]: medicine }));
         form.setValue(`items.${index}.medicineId`, medicine.id, {
@@ -336,6 +336,10 @@ function CreateImportDialog({
                 shouldValidate: true,
             });
             form.setValue(`items.${index}.importPrice`, amounts.importPrice, {
+                shouldDirty: true,
+                shouldValidate: true,
+            });
+            form.setValue(`items.${index}.expiryDate`, amounts.expiryDate, {
                 shouldDirty: true,
                 shouldValidate: true,
             });
@@ -961,7 +965,7 @@ function ImportDetailDialog({
                                     Giá nhập
                                 </th>
                                 <th className="px-4 py-3 text-right font-medium">
-                                    Giá bán mới
+                                    Giá bán
                                 </th>
                                 <th className="px-4 py-3 text-right font-medium">
                                     Thành tiền
@@ -1010,7 +1014,7 @@ function ImportDetailDialog({
                                             </>
                                         ) : (
                                             <span className="text-muted-foreground">
-                                                Giữ nguyên
+                                                —
                                             </span>
                                         )}
                                     </td>
