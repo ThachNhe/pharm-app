@@ -929,8 +929,8 @@ function ImportDetailDialog({
                 </div>
 
                 <div className="border-border overflow-x-auto rounded-lg border">
-                    <table className="w-full min-w-[700px] text-left text-sm">
-                        <thead className="bg-muted/55 text-muted-foreground text-xs uppercase">
+                    <table className="data-table w-full min-w-[700px] text-left text-sm">
+                        <thead className="text-xs uppercase">
                             <tr>
                                 <RowNumberHead />
                                 <th className="px-4 py-3 font-medium">
@@ -1081,8 +1081,8 @@ export function ImportsPage() {
                 ) : (
                     <>
                         <div className="overflow-x-auto">
-                            <table className="w-full min-w-[820px] text-left text-sm">
-                                <thead className="bg-muted/55 text-muted-foreground text-xs uppercase">
+                            <table className="data-table w-full min-w-[820px] text-left text-sm">
+                                <thead className="text-xs uppercase">
                                     <tr>
                                         <RowNumberHead />
                                         <th className="px-4 py-3 font-medium">
@@ -1113,10 +1113,7 @@ export function ImportsPage() {
                                                 receipt.supplierNameSnapshot ??
                                                 'Không ghi nhận';
                                             return (
-                                                <tr
-                                                    key={receipt.id}
-                                                    className="hover:bg-muted/30"
-                                                >
+                                                <tr key={receipt.id}>
                                                     <RowNumberCell
                                                         index={index}
                                                         pagination={

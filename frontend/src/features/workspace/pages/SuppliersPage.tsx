@@ -333,8 +333,8 @@ export function SuppliersPage() {
                 ) : (
                     <>
                         <div className="overflow-x-auto">
-                            <table className="w-full min-w-[820px] text-left text-sm">
-                                <thead className="bg-muted/55 text-muted-foreground text-xs uppercase">
+                            <table className="data-table w-full min-w-[820px] text-left text-sm">
+                                <thead className="text-xs uppercase">
                                     <tr>
                                         <RowNumberHead />
                                         <th className="px-4 py-3 font-medium">
@@ -357,10 +357,7 @@ export function SuppliersPage() {
                                 <tbody className="divide-border divide-y">
                                     {suppliersQuery.data.results.map(
                                         (supplier, index) => (
-                                            <tr
-                                                key={supplier.id}
-                                                className="hover:bg-muted/30"
-                                            >
+                                            <tr key={supplier.id}>
                                                 <RowNumberCell
                                                     index={index}
                                                     pagination={

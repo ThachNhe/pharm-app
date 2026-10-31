@@ -1472,16 +1472,16 @@ export function MedicinesPage() {
                             tabIndex={0}
                             aria-label="Bảng sản phẩm đang bán tại quầy"
                         >
-                            <table className="w-full min-w-[2460px] text-left text-sm">
-                                <thead className="bg-muted/55 text-muted-foreground text-xs uppercase">
+                            <table className="data-table w-full min-w-[2460px] text-left text-sm">
+                                <thead className="text-xs uppercase">
                                     <tr>
-                                        <th className="bg-muted z-20 w-16 min-w-16 px-4 py-3 text-right font-medium md:sticky md:left-0">
+                                        <th className="bg-table-head z-20 w-16 min-w-16 px-4 py-3 text-right font-medium md:sticky md:left-0">
                                             STT
                                         </th>
-                                        <th className="bg-muted z-20 w-32 min-w-32 px-4 py-3 font-medium md:sticky md:left-16">
+                                        <th className="bg-table-head z-20 w-32 min-w-32 px-4 py-3 font-medium md:sticky md:left-16">
                                             Mã
                                         </th>
-                                        <th className="bg-muted z-20 w-80 min-w-80 px-4 py-3 font-medium md:sticky md:left-48">
+                                        <th className="bg-table-head z-20 w-80 min-w-80 px-4 py-3 font-medium md:sticky md:left-48">
                                             Tên sản phẩm
                                         </th>
                                         <th className="px-4 py-3 font-medium">
@@ -1526,7 +1526,7 @@ export function MedicinesPage() {
                                             Trạng thái
                                         </th>
                                         {canManage ? (
-                                            <th className="bg-muted sticky right-0 z-20 w-24 px-4 py-3 text-right font-medium shadow-[inset_1px_0_0_var(--color-border)]">
+                                            <th className="bg-table-head sticky right-0 z-20 w-24 px-4 py-3 text-right font-medium shadow-[inset_1px_0_0_var(--color-border)]">
                                                 Thao tác
                                             </th>
                                         ) : null}
@@ -1540,9 +1540,9 @@ export function MedicinesPage() {
                                             return (
                                                 <tr
                                                     key={medicine.id}
-                                                    className="group hover:bg-muted/30"
+                                                    className="group"
                                                 >
-                                                    <td className="bg-card group-hover:bg-muted z-10 w-16 min-w-16 px-4 py-3 text-right transition-colors md:sticky md:left-0">
+                                                    <td className="z-10 w-16 min-w-16 bg-inherit px-4 py-3 text-right transition-colors md:sticky md:left-0">
                                                         {(medicinesQuery.data
                                                             .page -
                                                             1) *
@@ -1552,12 +1552,12 @@ export function MedicinesPage() {
                                                             1}
                                                     </td>
                                                     <td
-                                                        className="bg-card group-hover:bg-muted z-10 w-32 max-w-32 min-w-32 truncate px-4 py-3 font-mono text-xs transition-colors md:sticky md:left-16"
+                                                        className="z-10 w-32 max-w-32 min-w-32 truncate bg-inherit px-4 py-3 font-mono text-xs transition-colors md:sticky md:left-16"
                                                         title={medicine.code}
                                                     >
                                                         {medicine.code}
                                                     </td>
-                                                    <td className="bg-card group-hover:bg-muted z-10 w-80 max-w-80 min-w-80 px-4 py-3 transition-colors md:sticky md:left-48">
+                                                    <td className="z-10 w-80 max-w-80 min-w-80 bg-inherit px-4 py-3 transition-colors md:sticky md:left-48">
                                                         <p
                                                             className="line-clamp-2 font-medium"
                                                             title={
@@ -1705,7 +1705,7 @@ export function MedicinesPage() {
                                                         </StatusBadge>
                                                     </td>
                                                     {canManage ? (
-                                                        <td className="bg-card group-hover:bg-muted sticky right-0 z-10 px-4 py-3 text-right whitespace-nowrap shadow-[inset_1px_0_0_var(--color-border)] transition-colors">
+                                                        <td className="sticky right-0 z-10 bg-inherit px-4 py-3 text-right whitespace-nowrap shadow-[inset_1px_0_0_var(--color-border)] transition-colors">
                                                             <Button
                                                                 size="icon-sm"
                                                                 variant="ghost"

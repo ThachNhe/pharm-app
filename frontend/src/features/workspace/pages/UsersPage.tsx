@@ -493,8 +493,8 @@ export function UsersPage({
                 ) : (
                     <>
                         <div className="overflow-x-auto">
-                            <table className="w-full min-w-[900px] text-left text-sm">
-                                <thead className="bg-muted/55 text-muted-foreground text-xs uppercase">
+                            <table className="data-table w-full min-w-[900px] text-left text-sm">
+                                <thead className="text-xs uppercase">
                                     <tr>
                                         <RowNumberHead />
                                         <th className="px-4 py-3 font-medium">
@@ -534,10 +534,7 @@ export function UsersPage({
                                             const manageable =
                                                 canManageUser(user);
                                             return (
-                                                <tr
-                                                    key={user.id}
-                                                    className="hover:bg-muted/30"
-                                                >
+                                                <tr key={user.id}>
                                                     <RowNumberCell
                                                         index={index}
                                                         pagination={

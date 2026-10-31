@@ -734,8 +734,8 @@ export function AdminPage() {
                   </div>
                   <Panel>
                     <div className="overflow-x-auto">
-                      <table className="w-full text-left text-sm">
-                        <thead className="text-xs uppercase text-muted-foreground">
+                      <table className="data-table w-full text-left text-sm">
+                        <thead className="text-xs uppercase">
                           <tr>
                             <th className="px-3 py-2">Tên</th>
                             <th className="px-3 py-2">Điện thoại</th>
@@ -851,8 +851,8 @@ export function AdminPage() {
                   </div>
                   <Panel>
                     <div className="overflow-x-auto">
-                      <table className="w-full text-left text-sm">
-                        <thead className="text-xs uppercase text-muted-foreground">
+                      <table className="data-table w-full text-left text-sm">
+                        <thead className="text-xs uppercase">
                           <tr>
                             <th className="px-3 py-2">Nhân sự</th>
                             <th className="px-3 py-2">Quầy/role</th>
@@ -1034,8 +1034,8 @@ export function AdminPage() {
                   </div>
                   <Panel>
                     <div className="overflow-x-auto">
-                      <table className="w-full text-left text-sm">
-                        <thead className="text-xs uppercase text-muted-foreground">
+                      <table className="data-table w-full text-left text-sm">
+                        <thead className="text-xs uppercase">
                           <tr>
                             <th className="px-3 py-2">Thuốc</th>
                             <th className="px-3 py-2">Đơn vị</th>
@@ -1201,8 +1201,8 @@ export function AdminPage() {
                 {activeTab === 'receipts' ? (
                   <Panel>
                     <div className="overflow-x-auto">
-                      <table className="w-full text-left text-sm">
-                        <thead className="text-xs uppercase text-muted-foreground">
+                      <table className="data-table w-full text-left text-sm">
+                        <thead className="text-xs uppercase">
                           <tr>
                             <th className="px-3 py-2">Ngày nhập</th>
                             <th className="px-3 py-2">Quầy</th>
@@ -1234,8 +1234,8 @@ export function AdminPage() {
                 {activeTab === 'sales' ? (
                   <Panel>
                     <div className="overflow-x-auto">
-                      <table className="w-full text-left text-sm">
-                        <thead className="text-xs uppercase text-muted-foreground">
+                      <table className="data-table w-full text-left text-sm">
+                        <thead className="text-xs uppercase">
                           <tr>
                             <th className="px-3 py-2">Ngày bán</th>
                             <th className="px-3 py-2">Quầy</th>

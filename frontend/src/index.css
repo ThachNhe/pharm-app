@@ -46,6 +46,7 @@
     --color-brand-lavender: var(--brand-lavender);
     --color-brand-pistachio: var(--brand-pistachio);
     --color-illus-tint: var(--illus-tint);
+    --color-table-head: var(--table-head);
     --color-illus-soft: var(--illus-soft);
     --color-illus-butter: var(--illus-butter);
     --color-illus-lavender: var(--illus-lavender);
@@ -272,6 +273,50 @@
     #root {
         min-height: 100vh;
     }
+}
+
+/* Shared table look. Colors are mixed from the active palette so every theme and mode follows.
+   Rows marked with data-row (totals, expanded details) are excluded from striping and hover.
+   Kept outside @layer so these rules win over per-cell utilities such as font-medium. */
+:root {
+    --table-head: color-mix(in oklab, var(--primary) 11%, var(--card));
+    --table-head-foreground: var(--secondary-foreground);
+    --table-head-border: color-mix(in oklab, var(--primary) 35%, var(--card));
+    --table-stripe: color-mix(in oklab, var(--primary) 4%, var(--card));
+    --table-hover: color-mix(in oklab, var(--primary) 12%, var(--card));
+    --table-total: color-mix(in oklab, var(--brand-highlight) 24%, var(--card));
+}
+
+.data-table {
+    font-variant-numeric: tabular-nums;
+}
+.data-table > thead > tr > th {
+    background-color: var(--table-head);
+    color: var(--table-head-foreground);
+    font-weight: 800;
+    letter-spacing: 0.03em;
+    white-space: nowrap;
+    border-bottom: 2px solid var(--table-head-border);
+}
+.data-table > tbody > tr {
+    background-color: var(--card);
+    transition: background-color 120ms ease;
+}
+.data-table > tbody > tr:nth-child(even of :not([data-row])) {
+    background-color: var(--table-stripe);
+}
+.data-table > tbody > tr:not([data-row]):hover {
+    background-color: var(--table-hover);
+}
+.data-table > tbody > tr:not([data-row]):hover > td:first-child {
+    box-shadow: inset 3px 0 0 var(--primary);
+}
+.data-table > tbody > tr[data-row='total'] {
+    background-color: var(--table-total);
+    font-weight: 800;
+}
+.data-table > tbody > tr[data-row='total'] > td {
+    border-bottom: 2px solid var(--table-head-border);
 }
 
 @media print {

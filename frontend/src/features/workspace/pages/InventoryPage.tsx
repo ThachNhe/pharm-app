@@ -3,6 +3,7 @@ import { useQuery } from '@tanstack/react-query';
 import { ChevronDown, ChevronUp, History, PackageSearch } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import {
+    cn,
     formatCurrency,
     formatDate,
     formatDateTime,
@@ -230,13 +231,13 @@ export function InventoryPage({
                         <>
                             <div className="overflow-x-auto">
                                 <table
-                                    className={`w-full text-left text-sm ${
+                                    className={`data-table w-full text-left text-sm ${
                                         canViewCosts
                                             ? 'min-w-[1280px]'
                                             : 'min-w-[1040px]'
                                     }`}
                                 >
-                                    <thead className="bg-muted/55 text-muted-foreground text-xs uppercase">
+                                    <thead className="text-xs uppercase">
                                         <tr>
                                             <RowNumberHead />
                                             <th className="px-4 py-3 font-medium whitespace-nowrap">
@@ -279,7 +280,7 @@ export function InventoryPage({
                                         </tr>
                                     </thead>
                                     <tbody className="divide-border divide-y">
-                                        <tr className="bg-muted/30 font-semibold">
+                                        <tr data-row="total">
                                             <td />
                                             <td />
                                             <td className="px-4 py-3 uppercase">
@@ -303,7 +304,7 @@ export function InventoryPage({
                                                     )}
                                                 </td>
                                             ) : null}
-                                            <td className="px-4 py-3 text-right tabular-nums">
+                                            <td className="text-primary px-4 py-3 text-right tabular-nums">
                                                 {formatNumber(
                                                     inventoryQuery.data.summary
                                                         .saleValue
@@ -316,7 +317,7 @@ export function InventoryPage({
                                         {inventoryQuery.data.results.map(
                                             (medicine, index) => (
                                                 <Fragment key={medicine.id}>
-                                                    <tr className="hover:bg-muted/30">
+                                                    <tr>
                                                         <RowNumberCell
                                                             index={index}
                                                             pagination={
@@ -327,14 +328,14 @@ export function InventoryPage({
                                                             {medicine.code}
                                                         </td>
                                                         <td className="px-4 py-3">
-                                                            <p className="font-medium">
+                                                            <p className="font-semibold">
                                                                 {medicine.name}
                                                             </p>
                                                             {medicine.isLowStock ||
                                                             medicine.hasExpiringBatch ? (
                                                                 <div className="mt-1 flex flex-wrap gap-1.5">
                                                                     {medicine.isLowStock ? (
-                                                                        <StatusBadge tone="neutral">
+                                                                        <StatusBadge tone="warning">
                                                                             Tồn
                                                                             thấp
                                                                         </StatusBadge>
@@ -353,7 +354,16 @@ export function InventoryPage({
                                                                 medicine.baseUnitName
                                                             }
                                                         </td>
-                                                        <td className="px-4 py-3 text-right font-semibold tabular-nums">
+                                                        <td
+                                                            className={cn(
+                                                                'px-4 py-3 text-right font-bold tabular-nums',
+                                                                medicine.totalStock <=
+                                                                    0
+                                                                    ? 'text-destructive'
+                                                                    : medicine.isLowStock &&
+                                                                          'text-amber-700 dark:text-amber-400'
+                                                            )}
+                                                        >
                                                             {formatNumber(
                                                                 medicine.totalStock
                                                             )}
@@ -374,14 +384,14 @@ export function InventoryPage({
                                                             )}
                                                         </td>
                                                         {canViewCosts ? (
-                                                            <td className="px-4 py-3 text-right tabular-nums">
+                                                            <td className="px-4 py-3 text-right font-semibold tabular-nums">
                                                                 {formatNumber(
                                                                     medicine.inventoryValue ??
                                                                         0
                                                                 )}
                                                             </td>
                                                         ) : null}
-                                                        <td className="px-4 py-3 text-right tabular-nums">
+                                                        <td className="text-primary px-4 py-3 text-right font-bold tabular-nums">
                                                             {formatNumber(
                                                                 medicine.saleValue
                                                             )}
@@ -428,7 +438,7 @@ export function InventoryPage({
                                                     </tr>
                                                     {expandedId ===
                                                     medicine.id ? (
-                                                        <tr>
+                                                        <tr data-row="detail">
                                                             <td
                                                                 colSpan={
                                                                     canViewCosts
@@ -473,8 +483,8 @@ export function InventoryPage({
                     ) : (
                         <>
                             <div className="overflow-x-auto">
-                                <table className="w-full min-w-[780px] text-left text-sm">
-                                    <thead className="bg-muted/55 text-muted-foreground text-xs uppercase">
+                                <table className="data-table w-full min-w-[780px] text-left text-sm">
+                                    <thead className="text-xs uppercase">
                                         <tr>
                                             <RowNumberHead />
                                             <th className="px-4 py-3 font-medium">
@@ -497,10 +507,7 @@ export function InventoryPage({
                                     <tbody className="divide-border divide-y">
                                         {movementsQuery.data.results.map(
                                             (movement, index) => (
-                                                <tr
-                                                    key={movement.id}
-                                                    className="hover:bg-muted/30"
-                                                >
+                                                <tr key={movement.id}>
                                                     <RowNumberCell
                                                         index={index}
                                                         pagination={

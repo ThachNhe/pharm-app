@@ -1052,8 +1052,8 @@ function SalesHistory({ onOpenSale }: { onOpenSale: (sale: Sale) => void }) {
             ) : (
                 <>
                     <div className="overflow-x-auto">
-                        <table className="w-full min-w-[900px] text-left text-sm">
-                            <thead className="bg-muted/55 text-muted-foreground text-xs uppercase">
+                        <table className="data-table w-full min-w-[900px] text-left text-sm">
+                            <thead className="text-xs uppercase">
                                 <tr>
                                     <RowNumberHead />
                                     <th className="px-4 py-3 font-medium">
@@ -1084,10 +1084,7 @@ function SalesHistory({ onOpenSale }: { onOpenSale: (sale: Sale) => void }) {
                             </thead>
                             <tbody className="divide-border divide-y">
                                 {salesQuery.data.results.map((sale, index) => (
-                                    <tr
-                                        key={sale.id}
-                                        className="hover:bg-muted/30"
-                                    >
+                                    <tr key={sale.id}>
                                         <RowNumberCell
                                             index={index}
                                             pagination={salesQuery.data}

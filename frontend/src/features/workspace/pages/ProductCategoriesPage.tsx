@@ -131,8 +131,8 @@ export function ProductCategoriesPage() {
                 ) : (
                     <>
                         <div className="overflow-x-auto">
-                            <table className="w-full min-w-[760px] text-left text-sm">
-                                <thead className="bg-muted/55 text-muted-foreground text-xs uppercase">
+                            <table className="data-table w-full min-w-[760px] text-left text-sm">
+                                <thead className="text-xs uppercase">
                                     <tr>
                                         <RowNumberHead />
                                         <th className="px-4 py-3 font-medium">
@@ -155,10 +155,7 @@ export function ProductCategoriesPage() {
                                 <tbody className="divide-border divide-y">
                                     {categoriesQuery.data.results.map(
                                         (category, index) => (
-                                            <tr
-                                                key={category.id}
-                                                className="hover:bg-muted/30"
-                                            >
+                                            <tr key={category.id}>
                                                 <RowNumberCell
                                                     index={index}
                                                     pagination={

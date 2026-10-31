@@ -98,8 +98,8 @@ export function StoresPage() {
                 ) : (
                     <>
                         <div className="overflow-x-auto">
-                            <table className="w-full min-w-[720px] text-left text-sm">
-                                <thead className="bg-muted/55 text-muted-foreground text-xs uppercase">
+                            <table className="data-table w-full min-w-[720px] text-left text-sm">
+                                <thead className="text-xs uppercase">
                                     <tr>
                                         <RowNumberHead />
                                         <th className="px-4 py-3 font-medium">
@@ -122,10 +122,7 @@ export function StoresPage() {
                                 <tbody className="divide-border divide-y">
                                     {storesQuery.data.results.map(
                                         (store, index) => (
-                                            <tr
-                                                key={store.id}
-                                                className="hover:bg-muted/30"
-                                            >
+                                            <tr key={store.id}>
                                                 <RowNumberCell
                                                     index={index}
                                                     pagination={

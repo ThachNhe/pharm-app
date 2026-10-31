@@ -122,14 +122,14 @@ export function MedicineLibraryPage() {
                             tabIndex={0}
                             aria-label="Bảng thông tin chi tiết thư viện thuốc"
                         >
-                            <table className="w-full min-w-[3800px] text-left text-sm">
-                                <thead className="bg-muted/55 text-muted-foreground text-xs uppercase">
+                            <table className="data-table w-full min-w-[3800px] text-left text-sm">
+                                <thead className="text-xs uppercase">
                                     <tr>
-                                        <RowNumberHead className="bg-muted z-20 md:sticky md:left-0" />
-                                        <th className="bg-muted z-20 w-32 min-w-32 px-4 py-3 font-medium md:sticky md:left-16">
+                                        <RowNumberHead className="bg-table-head z-20 md:sticky md:left-0" />
+                                        <th className="bg-table-head z-20 w-32 min-w-32 px-4 py-3 font-medium md:sticky md:left-16">
                                             Mã
                                         </th>
-                                        <th className="bg-muted z-20 w-80 min-w-80 px-4 py-3 font-medium md:sticky md:left-48">
+                                        <th className="bg-table-head z-20 w-80 min-w-80 px-4 py-3 font-medium md:sticky md:left-48">
                                             Tên sản phẩm
                                         </th>
                                         <th className="px-4 py-3 font-medium">
@@ -199,19 +199,19 @@ export function MedicineLibraryPage() {
                                         (product, index) => (
                                             <tr
                                                 key={product.id}
-                                                className="group hover:bg-muted/30"
+                                                className="group"
                                             >
                                                 <RowNumberCell
                                                     index={index}
                                                     pagination={
                                                         productsQuery.data
                                                     }
-                                                    className="bg-card group-hover:bg-muted z-10 transition-colors md:sticky md:left-0"
+                                                    className="z-10 bg-inherit transition-colors md:sticky md:left-0"
                                                 />
-                                                <td className="bg-card group-hover:bg-muted z-10 w-32 min-w-32 px-4 py-3 font-mono text-xs whitespace-nowrap transition-colors md:sticky md:left-16">
+                                                <td className="z-10 w-32 min-w-32 bg-inherit px-4 py-3 font-mono text-xs whitespace-nowrap transition-colors md:sticky md:left-16">
                                                     {showText(product.code)}
                                                 </td>
-                                                <td className="bg-card group-hover:bg-muted z-10 w-80 max-w-80 min-w-80 px-4 py-3 font-medium transition-colors md:sticky md:left-48">
+                                                <td className="z-10 w-80 max-w-80 min-w-80 bg-inherit px-4 py-3 font-medium transition-colors md:sticky md:left-48">
                                                     <span
                                                         className="line-clamp-2"
                                                         title={product.name}
