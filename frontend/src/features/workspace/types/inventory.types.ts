@@ -10,7 +10,6 @@ export interface InventoryMedicine extends Medicine {
     hasExpiringBatch: boolean;
     batches: Array<{
         id: string;
-        batchNumber: string;
         expiryDate: string;
         importPrice?: number;
         quantityRemaining: number;
@@ -45,7 +44,6 @@ export interface InventoryMovement {
     medicine: { id: string; name: string; baseUnitName: string };
     stockBatch?: {
         id: string;
-        batchNumber: string;
         expiryDate: string;
     } | null;
     createdByUser?: { id: string; name: string } | null;

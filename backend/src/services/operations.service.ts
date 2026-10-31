@@ -27,7 +27,6 @@ type MedicineUnitPayload = {
 type InitialImportPayload = {
   quantity: number | string;
   importPrice: number | string;
-  batchNumber: string;
   expiryDate: string | Date;
 };
 
@@ -66,7 +65,6 @@ type ProductCategoryPayload = {
 
 type ImportItemPayload = {
   medicineId: string;
-  batchNumber: string;
   quantity: number | string;
   importPrice: number | string;
   expiryDate: string | Date;
@@ -291,7 +289,6 @@ const receiveImportDetail = async (
   detail: {
     id: string;
     medicineId: string;
-    batchNumber: string;
     importPrice: Prisma.Decimal;
     expiryDate: Date;
     quantity: Prisma.Decimal;
@@ -302,7 +299,6 @@ const receiveImportDetail = async (
       storeId,
       medicineId: detail.medicineId,
       importDetailId: detail.id,
-      batchNumber: detail.batchNumber,
       importPrice: detail.importPrice,
       expiryDate: detail.expiryDate,
       quantityRemaining: detail.quantity,
@@ -435,7 +431,6 @@ const saleReturnsInclude = {
             unitNameSnapshot: true,
             conversionRateSnapshot: true,
             medicine: { select: { name: true } },
-            stockBatch: { select: { batchNumber: true } },
           },
         },
       },
@@ -460,7 +455,6 @@ const serializeSale = (sale, includeCosts = true) => ({
       id: detail.id,
       saleDetailId: detail.saleDetailId,
       medicineName: detail.saleDetail.medicine.name,
-      batchNumber: detail.saleDetail.stockBatch.batchNumber,
       unitName: detail.saleDetail.unitNameSnapshot,
       displayQuantity: Number(detail.quantity.div(detail.saleDetail.conversionRateSnapshot)),
       refundAmount: Number(detail.refundAmount),
@@ -556,7 +550,6 @@ const buildInventoryRows = async (storeId: string, search?: string) => {
       hasExpiringBatch,
       batches: medicineBatches.map((batch) => ({
         id: batch.id,
-        batchNumber: batch.batchNumber,
         expiryDate: batch.expiryDate,
         importPrice: Number(batch.importPrice),
         quantityRemaining: Number(batch.quantityRemaining),
@@ -1125,7 +1118,6 @@ const createMedicine = async (actor: Actor, storeId: string, body: MedicinePaylo
           create: {
             storeId,
             medicineId: medicine.id,
-            batchNumber: initialImport.batchNumber.trim(),
             quantity,
             importPrice,
             enteredQuantity: quantity,
@@ -1412,11 +1404,6 @@ const validateImportReferences = async (
     throw new ApiError(httpStatus.BAD_REQUEST, 'Có thuốc chưa được cấu hình hoặc đã ngừng bán tại quầy');
   }
 
-  const duplicateKeys = items.map((item) => `${item.medicineId}:${item.batchNumber.trim().toLowerCase()}`);
-  if (new Set(duplicateKeys).size !== duplicateKeys.length) {
-    throw new ApiError(httpStatus.BAD_REQUEST, 'Không được nhập trùng thuốc và số lô trong cùng phiếu');
-  }
-
   const today = currentBusinessDateOnly();
   if (items.some((item) => toDateOnly(item.expiryDate) <= today)) {
     throw new ApiError(httpStatus.BAD_REQUEST, 'Hạn sử dụng phải sau ngày hiện tại');
@@ -1496,7 +1483,6 @@ const createImportReceipt = async (actor: Actor, storeId: string, body: ImportPa
           create: resolvedItems.map((item) => ({
             storeId,
             medicineId: item.medicineId,
-            batchNumber: item.batchNumber.trim(),
             quantity: item.quantity,
             importPrice: item.importPrice,
             enteredQuantity: item.enteredQuantity,
@@ -1629,7 +1615,7 @@ const queryInventoryMovements = async (actor: Actor, storeId: string, query: Dat
       take: limit,
       include: {
         medicine: { select: { id: true, name: true, baseUnitName: true } },
-        stockBatch: { select: { id: true, batchNumber: true, expiryDate: true } },
+        stockBatch: { select: { id: true, expiryDate: true } },
         createdByUser: { select: { id: true, name: true } },
       },
     }),
@@ -1667,7 +1653,7 @@ const querySales = async (actor: Actor, storeId: string, query: DateQuery) => {
         details: {
           include: {
             medicine: { select: { id: true, name: true, baseUnitName: true } },
-            stockBatch: { select: { id: true, batchNumber: true, expiryDate: true } },
+            stockBatch: { select: { id: true, expiryDate: true } },
           },
         },
         returns: saleReturnsInclude,
@@ -1698,7 +1684,7 @@ const getSale = async (actor: Actor, storeId: string, saleId: string) => {
       details: {
         include: {
           medicine: { select: { id: true, name: true, baseUnitName: true } },
-          stockBatch: { select: { id: true, batchNumber: true, expiryDate: true } },
+          stockBatch: { select: { id: true, expiryDate: true } },
         },
       },
       returns: saleReturnsInclude,
@@ -1871,7 +1857,7 @@ const createSale = async (actor: Actor, storeId: string, body: SalePayload) => {
             details: {
               include: {
                 medicine: { select: { id: true, name: true, baseUnitName: true } },
-                stockBatch: { select: { id: true, batchNumber: true, expiryDate: true } },
+                stockBatch: { select: { id: true, expiryDate: true } },
               },
             },
           },
@@ -2018,7 +2004,7 @@ const createSaleReturn = async (actor: Actor, storeId: string, saleId: string, b
         details: {
           include: {
             medicine: { select: { id: true, name: true, baseUnitName: true } },
-            stockBatch: { select: { id: true, batchNumber: true, expiryDate: true } },
+            stockBatch: { select: { id: true, expiryDate: true } },
           },
         },
         returns: saleReturnsInclude,

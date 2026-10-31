@@ -93,9 +93,6 @@ export function InventoryPage({
                         <div className="flex items-start justify-between gap-3">
                             <div>
                                 <p className="font-medium">
-                                    Lô {batch.batchNumber}
-                                </p>
-                                <p className="text-muted-foreground mt-1 text-xs">
                                     HSD {formatDate(batch.expiryDate)}
                                 </p>
                             </div>
@@ -487,7 +484,7 @@ export function InventoryPage({
                                                 Loại
                                             </th>
                                             <th className="px-4 py-3 font-medium">
-                                                Sản phẩm / Lô
+                                                Sản phẩm
                                             </th>
                                             <th className="px-4 py-3 text-right font-medium">
                                                 Thay đổi
@@ -542,7 +539,7 @@ export function InventoryPage({
                                                         </p>
                                                         <p className="text-muted-foreground text-xs">
                                                             {movement.stockBatch
-                                                                ? `Lô ${movement.stockBatch.batchNumber}`
+                                                                ? `HSD ${formatDate(movement.stockBatch.expiryDate)}`
                                                                 : 'Không gắn lô'}
                                                         </p>
                                                     </td>

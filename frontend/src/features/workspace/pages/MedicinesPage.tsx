@@ -101,17 +101,17 @@ const toUnits = (
     baseUnitName: string,
     tabletsPerBlister: number | null | undefined
 ): MedicineUnitValue[] => [
-        { name: baseUnitName, conversionRate: 1, isBaseUnit: true },
-        ...(baseUnitName === TABLET_UNIT_NAME && tabletsPerBlister
-            ? [
-                {
-                    name: BLISTER_UNIT_NAME,
-                    conversionRate: tabletsPerBlister,
-                    isBaseUnit: false,
-                },
-            ]
-            : []),
-    ];
+    { name: baseUnitName, conversionRate: 1, isBaseUnit: true },
+    ...(baseUnitName === TABLET_UNIT_NAME && tabletsPerBlister
+        ? [
+              {
+                  name: BLISTER_UNIT_NAME,
+                  conversionRate: tabletsPerBlister,
+                  isBaseUnit: false,
+              },
+          ]
+        : []),
+];
 
 const medicineSchema = z
     .object({
@@ -135,7 +135,6 @@ const medicineSchema = z
             .min(0, 'Giá bán không được âm'),
         importPrice: z.number().min(0, 'Giá nhập không được âm').nullish(),
         quantity: z.number().positive('Số lượng phải lớn hơn 0').nullish(),
-        batchNumber: z.string().trim().max(100),
         expiryDate: z.string(),
         requiresPrescription: z.boolean(),
         description: z.string().trim().max(2000),
@@ -160,7 +159,7 @@ const medicineSchema = z
 type ImportFieldsMode = 'none' | 'receiptLine' | 'initialImport';
 
 // New products created by an importer are received into stock in the same request.
-// From an import receipt, quantity, price and expiry date are collected; the batch number is entered on the receipt line.
+// From an import receipt, quantity, price and expiry date are collected and copied to the receipt line.
 // `when` keeps these checks running while other fields are invalid, so every missing field shows at once.
 const createMedicineSchema = (mode: ImportFieldsMode) => {
     if (mode === 'none') return medicineSchema;
@@ -200,7 +199,8 @@ const createMedicineSchema = (mode: ImportFieldsMode) => {
             )
             .refine(
                 (values) =>
-                    values.quantity == null || Number.isInteger(values.quantity),
+                    values.quantity == null ||
+                    Number.isInteger(values.quantity),
                 {
                     path: ['quantity'],
                     message: 'Số lượng phải là số nguyên',
@@ -208,11 +208,7 @@ const createMedicineSchema = (mode: ImportFieldsMode) => {
                 }
             );
     }
-    return withAmounts.refine((values) => Boolean(values.batchNumber?.trim()), {
-        path: ['batchNumber'],
-        message: 'Nhập số lô',
-        when: always,
-    });
+    return withAmounts;
 };
 
 type MedicineFormValues = z.infer<typeof medicineSchema>;
@@ -236,7 +232,6 @@ const emptyValues: DefaultValues<MedicineFormValues> = {
     sellingPrice: undefined,
     importPrice: undefined,
     quantity: undefined,
-    batchNumber: '',
     expiryDate: '',
     requiresPrescription: false,
     description: '',
@@ -263,7 +258,6 @@ const getMedicineValues = (medicine: Medicine): MedicineFormValues => ({
     sellingPrice: medicine.sellingPrice,
     importPrice: undefined,
     quantity: undefined,
-    batchNumber: '',
     expiryDate: '',
     requiresPrescription: medicine.requiresPrescription,
     description: medicine.description ?? '',
@@ -338,8 +332,8 @@ export function MedicineDialog({
     const importFieldsMode: ImportFieldsMode = requireInitialImport
         ? 'initialImport'
         : fillsReceiptLine
-            ? 'receiptLine'
-            : 'none';
+          ? 'receiptLine'
+          : 'none';
     const showImportFields = importFieldsMode !== 'none';
     const schema = useMemo(
         () => createMedicineSchema(importFieldsMode),
@@ -485,7 +479,7 @@ export function MedicineDialog({
             barcode: product.barcode ?? product.secondaryBarcode ?? '',
             secondaryBarcode:
                 product.secondaryBarcode &&
-                    product.secondaryBarcode !== product.barcode
+                product.secondaryBarcode !== product.barcode
                     ? product.secondaryBarcode
                     : '',
             registrationNumber: product.registrationNumber ?? '',
@@ -544,9 +538,9 @@ export function MedicineDialog({
                         isActive: values.isActive,
                         units: unitsChanged
                             ? toUnits(
-                                values.baseUnitName,
-                                values.tabletsPerBlister
-                            )
+                                  values.baseUnitName,
+                                  values.tabletsPerBlister
+                              )
                             : undefined,
                     }
                 );
@@ -554,7 +548,6 @@ export function MedicineDialog({
             const {
                 importPrice: enteredImportPrice,
                 quantity: enteredQuantity,
-                batchNumber,
                 expiryDate,
                 tabletsPerBlister,
                 ...productValues
@@ -579,22 +572,21 @@ export function MedicineDialog({
                 description: values.description || undefined,
                 initialImport:
                     requireInitialImport &&
-                        enteredImportPrice != null &&
-                        enteredQuantity != null
+                    enteredImportPrice != null &&
+                    enteredQuantity != null
                         ? {
-                            importPrice: enteredImportPrice,
-                            quantity: enteredQuantity,
-                            batchNumber,
-                            expiryDate,
-                        }
+                              importPrice: enteredImportPrice,
+                              quantity: enteredQuantity,
+                              expiryDate,
+                          }
                         : undefined,
             };
             return medicine
                 ? workspaceService.updateMedicine(
-                    selectedStoreId,
-                    medicine.id,
-                    payload
-                )
+                      selectedStoreId,
+                      medicine.id,
+                      payload
+                  )
                 : workspaceService.createMedicine(selectedStoreId, payload);
         },
         onSuccess: (savedMedicine, values) => {
@@ -602,8 +594,8 @@ export function MedicineDialog({
                 medicine
                     ? 'Đã cập nhật sản phẩm'
                     : requireInitialImport
-                        ? 'Đã thêm sản phẩm và nhập kho'
-                        : 'Đã thêm sản phẩm vào quầy'
+                      ? 'Đã thêm sản phẩm và nhập kho'
+                      : 'Đã thêm sản phẩm vào quầy'
             );
             void queryClient.invalidateQueries({
                 queryKey: ['workspace', selectedStoreId, 'medicines'],
@@ -667,17 +659,17 @@ export function MedicineDialog({
                         {medicine
                             ? 'Cập nhật sản phẩm'
                             : requireInitialImport
-                                ? 'Nhập hàng sản phẩm mới'
-                                : 'Thêm sản phẩm mới'}
+                              ? 'Nhập hàng sản phẩm mới'
+                              : 'Thêm sản phẩm mới'}
                     </DialogTitle>
                     <DialogDescription>
                         {sharedDetailsLocked
                             ? 'Thông tin thuốc từ thư viện được dùng chung; mã hàng hóa, nhóm, vị trí, giá và tồn tối thiểu được cấu hình riêng cho quầy.'
                             : requireInitialImport
-                                ? 'Sản phẩm được thêm vào danh mục và nhập kho ngay, kèm một phiếu nhập đã hoàn tất.'
-                                : fillsReceiptLine
-                                    ? 'Sản phẩm được thêm vào danh mục quầy rồi điền vào dòng đang nhập cùng số lượng, giá nhập và hạn sử dụng.'
-                                    : 'Mã hàng hóa được gợi ý tự động và có thể chỉnh sửa; vị trí, giá và định mức tồn được áp dụng riêng cho quầy đang chọn.'}
+                              ? 'Sản phẩm được thêm vào danh mục và nhập kho ngay, kèm một phiếu nhập đã hoàn tất.'
+                              : fillsReceiptLine
+                                ? 'Sản phẩm được thêm vào danh mục quầy rồi điền vào dòng đang nhập cùng số lượng, giá nhập và hạn sử dụng.'
+                                : 'Mã hàng hóa được gợi ý tự động và có thể chỉnh sửa; vị trí, giá và định mức tồn được áp dụng riêng cho quầy đang chọn.'}
                     </DialogDescription>
                 </DialogHeader>
                 {!medicine ? (
@@ -712,8 +704,8 @@ export function MedicineDialog({
                 ) : null}
 
                 {!medicine &&
-                    sourceMode === 'library' &&
-                    !selectedReferenceProduct ? (
+                sourceMode === 'library' &&
+                !selectedReferenceProduct ? (
                     <div className="border-border space-y-3 rounded-lg border p-4">
                         <div>
                             <p className="text-sm font-medium">
@@ -1112,9 +1104,6 @@ export function MedicineDialog({
                                     <p className="text-muted-foreground text-xs">
                                         Giá và số lượng tính theo {unitLabel},
                                         đơn vị nhỏ nhất của sản phẩm.
-                                        {fillsReceiptLine
-                                            ? ' Số lô nhập tiếp trên phiếu nhập.'
-                                            : ''}
                                     </p>
                                 </div>
                                 <NumberField
@@ -1144,19 +1133,6 @@ export function MedicineDialog({
                                 required
                                 error={errors.quantity?.message}
                             />
-                        ) : null}
-                        {requireInitialImport ? (
-                            <Field
-                                label="Số lô"
-                                required
-                                error={errors.batchNumber?.message}
-                            >
-                                <Input
-                                    placeholder="LO-2026-01"
-                                    aria-invalid={Boolean(errors.batchNumber)}
-                                    {...form.register('batchNumber')}
-                                />
-                            </Field>
                         ) : null}
                         {showImportFields ? (
                             <Field
@@ -1255,10 +1231,10 @@ export function MedicineDialog({
                             {medicine
                                 ? 'Lưu thay đổi'
                                 : requireInitialImport
-                                    ? 'Thêm và nhập kho'
-                                    : fillsReceiptLine
-                                        ? 'Thêm vào phiếu nhập'
-                                        : 'Thêm sản phẩm'}
+                                  ? 'Thêm và nhập kho'
+                                  : fillsReceiptLine
+                                    ? 'Thêm vào phiếu nhập'
+                                    : 'Thêm sản phẩm'}
                         </Button>
                     ) : null}
                 </DialogFooter>
@@ -1337,7 +1313,11 @@ function DeleteMedicineDialog({
             workspaceService.deleteMedicine(selectedStoreId, target.id),
         onSuccess: () => {
             toast.success('Đã xóa sản phẩm khỏi danh mục');
-            for (const key of ['medicines', 'inventory', 'reference-products']) {
+            for (const key of [
+                'medicines',
+                'inventory',
+                'reference-products',
+            ]) {
                 void queryClient.invalidateQueries({
                     queryKey: ['workspace', selectedStoreId, key],
                 });
@@ -1443,7 +1423,6 @@ export function MedicinesPage() {
 
     return (
         <div className="space-y-5">
-
             <Panel className="overflow-hidden">
                 <div className="border-border flex flex-col gap-3 border-b p-4 sm:flex-row sm:items-center sm:justify-between">
                     <SearchInput
@@ -1457,8 +1436,8 @@ export function MedicinesPage() {
                     </p>
                 </div>
                 <div className="bg-secondary/35 text-muted-foreground border-border border-b px-4 py-2.5 text-xs">
-                    Lô và hạn dùng hiển thị theo lô còn hạn được ưu tiên bán
-                    trước (FEFO). Số lượng là tổng tồn khả dụng tại quầy.
+                    Hạn dùng hiển thị theo lô còn hạn được ưu tiên bán trước
+                    (FEFO). Số lượng là tổng tồn khả dụng tại quầy.
                 </div>
 
                 {medicinesQuery.isPending ? (
@@ -1493,23 +1472,20 @@ export function MedicinesPage() {
                             tabIndex={0}
                             aria-label="Bảng sản phẩm đang bán tại quầy"
                         >
-                            <table className="w-full min-w-[2600px] text-left text-sm">
+                            <table className="w-full min-w-[2460px] text-left text-sm">
                                 <thead className="bg-muted/55 text-muted-foreground text-xs uppercase">
                                     <tr>
-                                        <th className="bg-muted z-20 w-16 min-w-16 md:sticky md:left-0 px-4 py-3 text-right font-medium">
+                                        <th className="bg-muted z-20 w-16 min-w-16 px-4 py-3 text-right font-medium md:sticky md:left-0">
                                             STT
                                         </th>
-                                        <th className="bg-muted z-20 w-32 min-w-32 md:sticky md:left-16 px-4 py-3 font-medium">
+                                        <th className="bg-muted z-20 w-32 min-w-32 px-4 py-3 font-medium md:sticky md:left-16">
                                             Mã
                                         </th>
-                                        <th className="bg-muted z-20 w-80 min-w-80 md:sticky md:left-48 px-4 py-3 font-medium">
+                                        <th className="bg-muted z-20 w-80 min-w-80 px-4 py-3 font-medium md:sticky md:left-48">
                                             Tên sản phẩm
                                         </th>
                                         <th className="px-4 py-3 font-medium">
                                             ĐVT
-                                        </th>
-                                        <th className="px-4 py-3 font-medium">
-                                            Lô bán trước
                                         </th>
                                         <th className="px-4 py-3 font-medium">
                                             Hạn dùng
@@ -1566,7 +1542,7 @@ export function MedicinesPage() {
                                                     key={medicine.id}
                                                     className="group hover:bg-muted/30"
                                                 >
-                                                    <td className="bg-card group-hover:bg-muted z-10 w-16 min-w-16 md:sticky md:left-0 px-4 py-3 text-right transition-colors">
+                                                    <td className="bg-card group-hover:bg-muted z-10 w-16 min-w-16 px-4 py-3 text-right transition-colors md:sticky md:left-0">
                                                         {(medicinesQuery.data
                                                             .page -
                                                             1) *
@@ -1576,12 +1552,12 @@ export function MedicinesPage() {
                                                             1}
                                                     </td>
                                                     <td
-                                                        className="bg-card group-hover:bg-muted z-10 w-32 max-w-32 min-w-32 md:sticky md:left-16 truncate px-4 py-3 font-mono text-xs transition-colors"
+                                                        className="bg-card group-hover:bg-muted z-10 w-32 max-w-32 min-w-32 truncate px-4 py-3 font-mono text-xs transition-colors md:sticky md:left-16"
                                                         title={medicine.code}
                                                     >
                                                         {medicine.code}
                                                     </td>
-                                                    <td className="bg-card group-hover:bg-muted z-10 w-80 max-w-80 min-w-80 md:sticky md:left-48 px-4 py-3 transition-colors">
+                                                    <td className="bg-card group-hover:bg-muted z-10 w-80 max-w-80 min-w-80 px-4 py-3 transition-colors md:sticky md:left-48">
                                                         <p
                                                             className="line-clamp-2 font-medium"
                                                             title={
@@ -1607,7 +1583,7 @@ export function MedicinesPage() {
                                                             }
                                                         </p>
                                                         {medicine.units.length >
-                                                            1 ? (
+                                                        1 ? (
                                                             <p className="text-muted-foreground mt-0.5 text-xs">
                                                                 {medicine.units
                                                                     .filter(
@@ -1628,15 +1604,11 @@ export function MedicinesPage() {
                                                             </p>
                                                         ) : null}
                                                     </td>
-                                                    <td className="px-4 py-3 font-mono text-xs whitespace-nowrap">
-                                                        {nextBatch?.batchNumber ??
-                                                            '—'}
-                                                    </td>
                                                     <td className="px-4 py-3 whitespace-nowrap">
                                                         {nextBatch
                                                             ? formatDate(
-                                                                nextBatch.expiryDate
-                                                            )
+                                                                  nextBatch.expiryDate
+                                                              )
                                                             : '—'}
                                                     </td>
                                                     <td className="px-4 py-3 text-right whitespace-nowrap">
@@ -1658,11 +1630,11 @@ export function MedicinesPage() {
                                                     {canManage ? (
                                                         <td className="px-4 py-3 text-right whitespace-nowrap">
                                                             {nextBatch?.importPrice ==
-                                                                null
+                                                            null
                                                                 ? '—'
                                                                 : formatCurrency(
-                                                                    nextBatch.importPrice
-                                                                )}
+                                                                      nextBatch.importPrice
+                                                                  )}
                                                         </td>
                                                     ) : null}
                                                     <td className="px-4 py-3 text-right font-medium whitespace-nowrap">

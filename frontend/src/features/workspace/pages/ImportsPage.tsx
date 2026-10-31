@@ -69,7 +69,6 @@ const importSchema = z.object({
             z.object({
                 medicineId: z.string().min(1, 'Chọn sản phẩm'),
                 unitId: z.string().min(1, 'Chọn đơn vị'),
-                batchNumber: z.string().trim().min(1, 'Nhập số lô').max(100),
                 quantity: z
                     .number({ error: 'Nhập số lượng' })
                     .int('Số lượng phải là số nguyên')
@@ -100,7 +99,6 @@ type ImportFormValues = z.infer<typeof importSchema>;
 const emptyItem: ImportFormValues['items'][number] = {
     medicineId: '',
     unitId: '',
-    batchNumber: '',
     quantity: 1,
     importPrice: 0,
     expiryDate: '',
@@ -174,7 +172,7 @@ function ImportReview({
 
                     return (
                         <div
-                            key={`${item.medicineId}-${item.batchNumber}-${index}`}
+                            key={`${item.medicineId}-${index}`}
                             className="space-y-1.5 p-4"
                         >
                             <div className="flex items-start justify-between gap-3">
@@ -186,8 +184,7 @@ function ImportReview({
                                         {medicine?.name ?? 'Sản phẩm'}
                                     </p>
                                     <p className="text-muted-foreground text-xs">
-                                        Lô {item.batchNumber} · HSD{' '}
-                                        {formatDate(item.expiryDate)}
+                                        HSD {formatDate(item.expiryDate)}
                                     </p>
                                 </div>
                                 <p className="shrink-0 font-semibold">
@@ -450,7 +447,7 @@ function CreateImportDialog({
                                     Chi tiết lô hàng
                                 </h3>
                                 <p className="text-muted-foreground text-xs">
-                                    Mỗi sản phẩm và số lô chỉ xuất hiện một lần.
+                                    Mỗi dòng tạo một lô tồn theo hạn sử dụng.
                                 </p>
                             </div>
                             <Button
@@ -519,7 +516,7 @@ function CreateImportDialog({
                                         key={field.id}
                                         className="space-y-3 p-4"
                                     >
-                                        <div className="grid items-start gap-3 lg:grid-cols-[minmax(180px,1.6fr)_120px_minmax(120px,1fr)_155px_36px]">
+                                        <div className="grid items-start gap-3 lg:grid-cols-[minmax(180px,1fr)_140px_155px_36px]">
                                             <Field
                                                 label="Sản phẩm"
                                                 required
@@ -591,21 +588,6 @@ function CreateImportDialog({
                                                                 )
                                                             )}
                                                         </select>
-                                                    )}
-                                                />
-                                            </Field>
-                                            <Field
-                                                label="Số lô"
-                                                required
-                                                error={
-                                                    itemErrors?.batchNumber
-                                                        ?.message
-                                                }
-                                            >
-                                                <Input
-                                                    placeholder="LO-2026-01"
-                                                    {...form.register(
-                                                        `items.${index}.batchNumber`
                                                     )}
                                                 />
                                             </Field>
@@ -947,14 +929,13 @@ function ImportDetailDialog({
                 </div>
 
                 <div className="border-border overflow-x-auto rounded-lg border">
-                    <table className="w-full min-w-[800px] text-left text-sm">
+                    <table className="w-full min-w-[700px] text-left text-sm">
                         <thead className="bg-muted/55 text-muted-foreground text-xs uppercase">
                             <tr>
                                 <RowNumberHead />
                                 <th className="px-4 py-3 font-medium">
                                     Sản phẩm
                                 </th>
-                                <th className="px-4 py-3 font-medium">Số lô</th>
                                 <th className="px-4 py-3 font-medium">
                                     Hạn dùng
                                 </th>
@@ -980,9 +961,6 @@ function ImportDetailDialog({
                                         <p className="line-clamp-2 max-w-64 min-w-40 break-words">
                                             {detail.medicine.name}
                                         </p>
-                                    </td>
-                                    <td className="px-4 py-3">
-                                        {detail.batchNumber}
                                     </td>
                                     <td className="px-4 py-3">
                                         {formatDate(detail.expiryDate)}

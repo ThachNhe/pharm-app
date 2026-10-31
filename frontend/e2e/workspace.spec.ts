@@ -105,9 +105,7 @@ test('owner can use the operational workspace across desktop and mobile', async 
     await page.goto('/admin/medicine-library');
     await expect(page.getByText(/\d[\d.]* sản phẩm/)).toBeVisible();
     await expect(page.getByRole('columnheader')).toHaveCount(22);
-    await expect(
-        page.getByText(/Số lô, hạn dùng và số lượng thực tế/)
-    ).toBeVisible();
+    await expect(page.getByText(/Hạn dùng và số lượng thực tế/)).toBeVisible();
     await page.getByRole('button', { name: 'Trang 2', exact: true }).click();
     await expect(
         page.getByRole('button', { name: 'Trang 2', exact: true })
@@ -129,7 +127,7 @@ test('owner can use the operational workspace across desktop and mobile', async 
     await expect(storeProductsTable).toBeVisible();
     await expect(
         storeProductsTable.getByRole('columnheader', { name: 'Lô bán trước' })
-    ).toBeVisible();
+    ).toHaveCount(0);
     await expect(
         storeProductsTable.getByRole('columnheader', { name: 'Hạn dùng' })
     ).toBeVisible();
@@ -260,17 +258,11 @@ test('owner can use the operational workspace across desktop and mobile', async 
         .click();
     await importDialog.getByLabel('Sản phẩm').selectOption({ index: 1 });
     const inputTops = await Promise.all(
-        [
-            'medicineId',
-            'unitId',
-            'batchNumber',
-            'quantity',
-            'importPrice',
-            'expiryDate',
-        ].map((name) =>
-            importDialog
-                .locator(`[name="items.0.${name}"]`)
-                .evaluate((element) => element.getBoundingClientRect().top)
+        ['medicineId', 'unitId', 'quantity', 'importPrice', 'expiryDate'].map(
+            (name) =>
+                importDialog
+                    .locator(`[name="items.0.${name}"]`)
+                    .evaluate((element) => element.getBoundingClientRect().top)
         )
     );
     expect(Math.max(...inputTops) - Math.min(...inputTops)).toBeLessThanOrEqual(

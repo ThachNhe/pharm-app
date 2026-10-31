@@ -33,7 +33,6 @@ export interface Sale {
         medicine: { id: string; name: string; baseUnitName: string };
         stockBatch?: {
             id: string;
-            batchNumber: string;
             expiryDate: string;
         } | null;
     }>;
@@ -49,7 +48,6 @@ export interface SaleReturn {
         id: string;
         saleDetailId: string;
         medicineName: string;
-        batchNumber: string;
         unitName: string;
         displayQuantity: number;
         refundAmount: number;

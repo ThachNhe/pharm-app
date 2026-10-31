@@ -111,7 +111,6 @@ export interface ImportReceipt {
     createdByUser: { id: string; name: string };
     details: Array<{
         id: string;
-        batchNumber: string;
         quantity: number;
         importPrice: number;
         expiryDate: string;

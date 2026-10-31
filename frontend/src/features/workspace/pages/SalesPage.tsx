@@ -116,9 +116,6 @@ function SaleReceipt({
                     if (current) {
                         current.quantity += detail.displayQuantity;
                         current.amount += detail.quantity * detail.salePrice;
-                        if (detail.stockBatch?.batchNumber) {
-                            current.batches.add(detail.stockBatch.batchNumber);
-                        }
                     } else {
                         lines.set(key, {
                             key,
@@ -127,11 +124,6 @@ function SaleReceipt({
                             quantity: detail.displayQuantity,
                             unitPrice: detail.displaySalePrice,
                             amount: detail.quantity * detail.salePrice,
-                            batches: new Set(
-                                detail.stockBatch?.batchNumber
-                                    ? [detail.stockBatch.batchNumber]
-                                    : []
-                            ),
                         });
                     }
                     return lines;
@@ -145,7 +137,6 @@ function SaleReceipt({
                         quantity: number;
                         unitPrice: number;
                         amount: number;
-                        batches: Set<string>;
                     }
                 >()
             )
@@ -227,15 +218,8 @@ function SaleReceipt({
                                             index={index}
                                             className="w-10 min-w-10 py-2 pr-3 pl-0"
                                         />
-                                        <td className="py-2 pr-3">
-                                            <p className="font-medium">
-                                                {line.medicineName}
-                                            </p>
-                                            <p className="text-muted-foreground text-xs">
-                                                Lô{' '}
-                                                {[...line.batches].join(', ') ||
-                                                    '—'}
-                                            </p>
+                                        <td className="py-2 pr-3 font-medium">
+                                            {line.medicineName}
                                         </td>
                                         <td className="px-2 py-2 text-right">
                                             {formatNumber(line.quantity)}{' '}
@@ -327,8 +311,7 @@ function SaleReceipt({
                                     <ul className="text-xs">
                                         {saleReturn.details.map((detail) => (
                                             <li key={detail.id}>
-                                                {detail.medicineName} · lô{' '}
-                                                {detail.batchNumber} ·{' '}
+                                                {detail.medicineName} ·{' '}
                                                 {formatNumber(
                                                     detail.displayQuantity
                                                 )}{' '}

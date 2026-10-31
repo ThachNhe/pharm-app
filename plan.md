@@ -204,7 +204,7 @@ Flow chính:
 
 1. Owner hoặc Manager tạo phiếu nhập.
 2. Chọn nhà cung cấp.
-3. Thêm thuốc, đơn vị nhập, số lượng, giá nhập theo đơn vị đã chọn, số lô và hạn sử dụng.
+3. Thêm thuốc, đơn vị nhập, số lượng, giá nhập theo đơn vị đã chọn và hạn sử dụng (không quản lý số lô; tồn được tách theo hạn sử dụng).
 4. Xem lại dữ liệu trước khi xác nhận.
 5. Xác nhận nhập kho.
 6. Hệ thống tăng tồn kho theo đúng thuốc, lô và quầy.

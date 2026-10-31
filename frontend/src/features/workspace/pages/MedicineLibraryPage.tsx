@@ -90,8 +90,8 @@ export function MedicineLibraryPage() {
                     </p>
                 </div>
                 <div className="bg-secondary/35 text-muted-foreground border-border border-b px-4 py-2.5 text-xs">
-                    Số lô, hạn dùng và số lượng thực tế được quản lý tại Tồn kho
-                    theo từng quầy sau khi nhập hàng. Bảng chi tiết có thể cuộn
+                    Hạn dùng và số lượng thực tế được quản lý tại Tồn kho theo
+                    từng quầy sau khi nhập hàng. Bảng chi tiết có thể cuộn
                     ngang.
                 </div>
 

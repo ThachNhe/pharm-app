@@ -12,7 +12,7 @@ import {
     DialogTitle,
 } from '@/components/ui/dialog';
 import { NumberInput } from '@/components/ui/number-input';
-import { formatCurrency, formatNumber } from '@/lib/utils';
+import { formatCurrency, formatDate, formatNumber } from '@/lib/utils';
 import { getApiErrorMessage } from '../utils/api-error';
 import { workspaceService } from '../services/workspace.service';
 import type { Sale } from '../types';
@@ -119,9 +119,10 @@ export function SaleReturnDialog({
                                         {detail.medicine.name}
                                     </p>
                                     <p className="text-muted-foreground text-xs">
-                                        Lô{' '}
-                                        {detail.stockBatch?.batchNumber ?? '—'}{' '}
-                                        · Đã bán{' '}
+                                        {detail.stockBatch
+                                            ? `HSD ${formatDate(detail.stockBatch.expiryDate)} · `
+                                            : ''}
+                                        Đã bán{' '}
                                         {formatNumber(detail.displayQuantity)}{' '}
                                         {unitName}
                                         {detail.returnedQuantity > 0
@@ -152,7 +153,7 @@ export function SaleReturnDialog({
                                             suffix={unitName}
                                             placeholder="0"
                                             disabled={mutation.isPending}
-                                            aria-label={`Số lượng trả ${detail.medicine.name} lô ${detail.stockBatch?.batchNumber ?? ''}`}
+                                            aria-label={`Số lượng trả ${detail.medicine.name}${detail.stockBatch ? ` HSD ${formatDate(detail.stockBatch.expiryDate)}` : ''}`}
                                         />
                                     </Field>
                                 ) : (

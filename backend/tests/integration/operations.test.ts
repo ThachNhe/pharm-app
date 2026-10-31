@@ -102,7 +102,6 @@ describe('Store operations flow', () => {
           items: [
             {
               medicineId: medicineRes.body.id,
-              batchNumber: 'LO-GAN',
               quantity: 3,
               importPrice: 8000,
               unitId: blisterUnitId,
@@ -110,7 +109,6 @@ describe('Store operations flow', () => {
             },
             {
               medicineId: medicineRes.body.id,
-              batchNumber: 'LO-XA',
               quantity: 70,
               importPrice: 1000,
               unitId: baseUnitId,
@@ -147,11 +145,9 @@ describe('Store operations flow', () => {
         nearestExpiry: expect.any(String),
         batches: [
           expect.objectContaining({
-            batchNumber: 'LO-GAN',
             quantityRemaining: 30,
           }),
           expect.objectContaining({
-            batchNumber: 'LO-XA',
             quantityRemaining: 70,
           }),
         ],
@@ -165,7 +161,6 @@ describe('Store operations flow', () => {
         .expect(httpStatus.OK);
       expect(ownerMedicinesRes.body.results[0].inventoryValue).toBe(94000);
       expect(ownerMedicinesRes.body.results[0].batches[0]).toMatchObject({
-        batchNumber: 'LO-GAN',
         importPrice: 800,
       });
 
@@ -876,10 +871,9 @@ describe('Store operations flow', () => {
       .expect(httpStatus.CREATED);
     const medicineId = medicineRes.body.id;
     const blisterUnitId = medicineRes.body.units.find((unit: { name: string }) => unit.name === 'Vỉ').id;
-    const line = (batchNumber: string, extra: Record<string, unknown> = {}) => ({
+    const line = (extra: Record<string, unknown> = {}) => ({
       medicineId,
       unitId: blisterUnitId,
-      batchNumber,
       quantity: 5,
       importPrice: 15000,
       expiryDate: futureDate(365),
@@ -896,16 +890,14 @@ describe('Store operations flow', () => {
         ).sellingPrice,
       );
 
-    await createImport([line('LO-A', { sellingPrice: 2500 }), line('LO-B', { sellingPrice: 2600 })]).expect(
-      httpStatus.BAD_REQUEST,
-    );
-    await createImport([line('LO-A', { quantity: 1.5 })]).expect(httpStatus.BAD_REQUEST);
-    await createImport([line('LO-A', { sellingPrice: 2500.5 })]).expect(httpStatus.BAD_REQUEST);
+    await createImport([line({ sellingPrice: 2500 }), line({ sellingPrice: 2600 })]).expect(httpStatus.BAD_REQUEST);
+    await createImport([line({ quantity: 1.5 })]).expect(httpStatus.BAD_REQUEST);
+    await createImport([line({ sellingPrice: 2500.5 })]).expect(httpStatus.BAD_REQUEST);
 
     expect(await prisma.importReceipt.count({ where: { storeId: store.id } })).toBe(0);
     expect(await currentPrice()).toBe(2000);
 
-    const receipt = await createImport([line('LO-A', { sellingPrice: 2500 }), line('LO-B', { sellingPrice: 2500 })]).expect(
+    const receipt = await createImport([line({ sellingPrice: 2500 }), line({ sellingPrice: 2500 })]).expect(
       httpStatus.CREATED,
     );
     expect(receipt.body.status).toBe('completed');
@@ -925,15 +917,15 @@ describe('Store operations flow', () => {
     expect(priceAudits[0].metadata).toMatchObject({ from: 2000, to: 2500, importReceiptId: receipt.body.id });
 
     // Re-importing with the current price is not a price change.
-    await createImport([line('LO-D', { sellingPrice: 2500 })]).expect(httpStatus.CREATED);
+    await createImport([line({ sellingPrice: 2500 })]).expect(httpStatus.CREATED);
     expect(await prisma.auditLog.count({ where: { storeId: store.id, action: 'medicine.price_change' } })).toBe(1);
 
     // A line that keeps the price still records the price in effect.
-    const keptPrice = await createImport([line('LO-E')]).expect(httpStatus.CREATED);
+    const keptPrice = await createImport([line()]).expect(httpStatus.CREATED);
     expect(keptPrice.body.details[0].newSellingPrice).toBe(2500);
 
     // A new price on one line applies to every line of the same product.
-    const mixed = await createImport([line('LO-F', { sellingPrice: 2700 }), line('LO-G')]).expect(httpStatus.CREATED);
+    const mixed = await createImport([line({ sellingPrice: 2700 }), line()]).expect(httpStatus.CREATED);
     expect(mixed.body.details.map((detail: { newSellingPrice: number }) => detail.newSellingPrice)).toEqual([2700, 2700]);
     expect(await currentPrice()).toBe(2700);
   });
@@ -950,7 +942,7 @@ describe('Store operations flow', () => {
       name,
       baseUnitName: 'Viên',
       sellingPrice: 2500,
-      initialImport: { quantity: 120, importPrice: 1500, batchNumber: 'LO-NEW-01', expiryDate },
+      initialImport: { quantity: 120, importPrice: 1500, expiryDate },
     });
 
     const res = await request(app)
@@ -969,7 +961,6 @@ describe('Store operations flow', () => {
     expect(importsRes.body.results[0]).toMatchObject({ status: 'completed', totalAmount: 180000 });
     expect(importsRes.body.results[0].details[0]).toMatchObject({
       medicineId: res.body.id,
-      batchNumber: 'LO-NEW-01',
       quantity: 120,
       importPrice: 1500,
       unitName: 'Viên',
@@ -1028,7 +1019,7 @@ describe('Store operations flow', () => {
 
     const unused = await createProduct('Sản phẩm tạo nhầm');
     const imported = await createProduct('Sản phẩm đã nhập', {
-      initialImport: { quantity: 10, importPrice: 500, batchNumber: 'LO-DEL', expiryDate: futureDate(365) },
+      initialImport: { quantity: 10, importPrice: 500, expiryDate: futureDate(365) },
     });
 
     // Staff in this store and a manager of another store may not delete.
@@ -1062,9 +1053,7 @@ describe('Store operations flow', () => {
           name,
           baseUnitName: 'Viên',
           sellingPrice: 1000,
-          ...(stocked
-            ? { initialImport: { quantity: 20, importPrice: 500, batchNumber: 'LO-1', expiryDate: futureDate(365) } }
-            : {}),
+          ...(stocked ? { initialImport: { quantity: 20, importPrice: 500, expiryDate: futureDate(365) } } : {}),
         })
         .expect(httpStatus.CREATED);
     await create('Aaa hết hàng', false);
@@ -1108,7 +1097,7 @@ describe('Store operations flow', () => {
             name,
             baseUnitName: 'Viên',
             sellingPrice,
-            initialImport: { quantity, importPrice: 500, batchNumber: 'LO-1', expiryDate: futureDate(365) },
+            initialImport: { quantity, importPrice: 500, expiryDate: futureDate(365) },
           })
           .expect(httpStatus.CREATED)
       ).body;
@@ -1239,7 +1228,7 @@ describe('Store operations flow', () => {
           name: 'Thuốc làm tròn',
           baseUnitName: 'Viên',
           sellingPrice: 2500,
-          initialImport: { quantity: 100, importPrice: 500, batchNumber: 'LO-1', expiryDate: futureDate(365) },
+          initialImport: { quantity: 100, importPrice: 500, expiryDate: futureDate(365) },
         })
         .expect(httpStatus.CREATED)
     ).body;

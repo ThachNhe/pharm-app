@@ -149,7 +149,6 @@ const createMedicine = {
     initialImport: Joi.object().keys({
       quantity: Joi.number().positive().precision(2).required(),
       importPrice: Joi.number().min(0).required(),
-      batchNumber: Joi.string().trim().required().max(100),
       expiryDate: Joi.date().iso().required(),
     }),
   }),
@@ -185,7 +184,6 @@ const deleteMedicine = {
 
 const importItem = Joi.object().keys({
   medicineId: Joi.string().required().custom(objectId),
-  batchNumber: Joi.string().trim().required().max(100),
   quantity: Joi.number().integer().positive().required(),
   importPrice: Joi.number().integer().min(0).required(),
   expiryDate: Joi.date().iso().required(),

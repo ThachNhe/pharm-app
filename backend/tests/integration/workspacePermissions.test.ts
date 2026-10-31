@@ -66,7 +66,7 @@ test('system admin reads imports and sales but cannot create operations', async 
     .post(`${base}/imports`)
     .set('Authorization', authorization(admin.id))
     .send({
-      items: [{ medicineId: userOne.id, batchNumber: 'TEST', quantity: 1, importPrice: 1, expiryDate: '2099-01-01' }],
+      items: [{ medicineId: userOne.id, quantity: 1, importPrice: 1, expiryDate: '2099-01-01' }],
     })
     .expect(403);
   await request(app)

@@ -15,7 +15,6 @@ export interface ImportReceipt {
     details: Array<{
         id: string;
         medicineId: string;
-        batchNumber: string;
         quantity: number;
         importPrice: number;
         baseQuantity: number;
@@ -35,7 +34,6 @@ export interface ImportPayload {
     note?: string;
     items: Array<{
         medicineId: string;
-        batchNumber: string;
         quantity: number;
         importPrice: number;
         expiryDate: string;
