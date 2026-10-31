@@ -1153,7 +1153,7 @@ export function MedicineDialog({
                                 <p className="text-muted-foreground text-xs">
                                     Tổng tiền nhập
                                 </p>
-                                <p className="text-brand-forest text-base font-semibold">
+                                <p className="text-brand-deep dark:text-foreground text-base font-semibold">
                                     {formatCurrency(
                                         (importPrice ?? 0) * (quantity ?? 0)
                                     )}

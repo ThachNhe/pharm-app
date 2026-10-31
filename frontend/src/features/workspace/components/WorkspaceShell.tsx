@@ -10,6 +10,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import { BrandLogo } from '@/components/BrandLogo';
 import { CapsuleIllustration } from '@/components/illustrations';
+import { ThemeSwitcher } from '@/components/ThemeSwitcher';
 import { Button } from '@/components/ui/button';
 import { ROUTES } from '@/lib/constants';
 import { cn, getInitials } from '@/lib/utils';
@@ -143,7 +144,7 @@ function WorkspaceShellContent() {
                 <div className="mt-auto pt-6">
                     <div className="bg-sidebar-accent relative overflow-hidden rounded-2xl p-4">
                         <CapsuleIllustration className="absolute top-3 right-3 size-12" />
-                        <p className="text-brand-lime text-xs font-bold tracking-wide uppercase">
+                        <p className="text-brand-highlight text-xs font-bold tracking-wide uppercase">
                             FEFO
                         </p>
                         <p className="mt-1 pr-12 text-sm leading-5 font-semibold text-white">
@@ -246,8 +247,10 @@ function WorkspaceShellContent() {
                             </Button>
                         </div>
 
+                        <ThemeSwitcher />
+
                         <div className="border-border hidden min-w-0 items-center gap-2 border-l pl-3 md:flex">
-                            <div className="bg-brand-forest ring-brand-mint grid size-9 shrink-0 place-items-center rounded-full text-xs font-bold text-white ring-2">
+                            <div className="bg-brand-deep ring-brand-mint grid size-9 shrink-0 place-items-center rounded-full text-xs font-bold text-white ring-2">
                                 {getInitials(contextQuery.data.user.name)}
                             </div>
                             <div className="min-w-0">

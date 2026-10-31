@@ -65,13 +65,13 @@ export function BrandLogo({
         <p
           className={cn(
             'truncate text-lg font-extrabold tracking-[-0.02em]',
-            inverse ? 'text-white' : 'text-brand-forest dark:text-foreground',
+            inverse ? 'text-white' : 'text-brand-deep dark:text-foreground',
             nameClassName,
           )}
         >
           <span>{brandName}</span>
           {appSuffix ? (
-            <span className={inverse ? 'text-brand-lime' : 'text-primary'}>{appSuffix}</span>
+            <span className={inverse ? 'text-brand-highlight' : 'text-primary'}>{appSuffix}</span>
           ) : null}
         </p>
         {subtitle ? (

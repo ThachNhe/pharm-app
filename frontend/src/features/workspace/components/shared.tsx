@@ -71,10 +71,14 @@ export function StatusBadge({
         <span
             className={cn(
                 'inline-flex min-h-6 items-center rounded-full px-2.5 py-0.5 text-xs font-semibold',
-                tone === 'success' && 'bg-brand-mint text-green-800',
-                tone === 'warning' && 'bg-amber-100 text-amber-800',
-                tone === 'danger' && 'bg-rose-100 text-rose-800',
-                tone === 'info' && 'bg-sky-100 text-sky-800',
+                tone === 'success' &&
+                    'bg-emerald-100 text-emerald-800 dark:bg-emerald-500/15 dark:text-emerald-300',
+                tone === 'warning' &&
+                    'bg-amber-100 text-amber-800 dark:bg-amber-500/15 dark:text-amber-300',
+                tone === 'danger' &&
+                    'bg-rose-100 text-rose-800 dark:bg-rose-500/15 dark:text-rose-300',
+                tone === 'info' &&
+                    'bg-sky-100 text-sky-800 dark:bg-sky-500/15 dark:text-sky-300',
                 tone === 'neutral' && 'bg-muted text-muted-foreground'
             )}
         >
@@ -162,7 +166,7 @@ export function ErrorState({
     return (
         <div className="grid min-h-52 place-items-center p-8 text-center">
             <div className="max-w-sm">
-                <div className="mx-auto grid size-14 place-items-center rounded-full bg-rose-100">
+                <div className="mx-auto grid size-14 place-items-center rounded-full bg-rose-100 dark:bg-rose-500/15">
                     <AlertCircle className="text-destructive size-7" />
                 </div>
                 <h2 className="mt-4 font-bold">{title}</h2>

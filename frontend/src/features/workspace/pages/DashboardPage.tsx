@@ -82,10 +82,10 @@ export function DashboardPage() {
 
     return (
         <div className="space-y-6">
-            <section className="bg-brand-forest relative overflow-hidden rounded-3xl text-white">
+            <section className="bg-brand-deep relative overflow-hidden rounded-3xl text-white">
                 <div className="grid items-center gap-6 p-6 sm:p-8 md:grid-cols-[minmax(0,1fr)_minmax(0,300px)] lg:p-10">
                     <div className="min-w-0">
-                        <p className="text-brand-lime text-xs font-bold tracking-wide uppercase">
+                        <p className="text-brand-highlight text-xs font-bold tracking-wide uppercase">
                             Dữ liệu hôm nay
                         </p>
                         <h1 className="mt-2 text-2xl leading-tight font-extrabold sm:text-3xl">
@@ -102,7 +102,7 @@ export function DashboardPage() {
                             {canSell ? (
                                 <Link
                                     to="/admin/sales"
-                                    className="bg-brand-lime text-brand-forest inline-flex h-10 items-center gap-2 rounded-full px-5 text-sm font-bold transition-opacity outline-none hover:opacity-90 focus-visible:ring-2 focus-visible:ring-white"
+                                    className="bg-brand-highlight text-brand-deep inline-flex h-10 items-center gap-2 rounded-full px-5 text-sm font-bold transition-opacity outline-none hover:opacity-90 focus-visible:ring-2 focus-visible:ring-white"
                                 >
                                     <ShoppingCart className="size-4" />
                                     Tạo đơn bán
@@ -125,10 +125,10 @@ export function DashboardPage() {
                 {metrics.map(({ label, value, detail, icon: Icon, tone }) => (
                     <div
                         key={label}
-                        className={`text-brand-forest rounded-2xl p-5 ${tone}`}
+                        className={`text-foreground rounded-2xl p-5 ${tone}`}
                     >
                         <div className="flex items-center gap-3">
-                            <div className="grid size-10 shrink-0 place-items-center rounded-full bg-white/85 shadow-sm">
+                            <div className="bg-card/85 grid size-10 shrink-0 place-items-center rounded-full shadow-sm">
                                 <Icon className="size-[1.125rem]" />
                             </div>
                             <p className="min-w-0 text-sm leading-5 font-bold">
@@ -161,7 +161,7 @@ export function DashboardPage() {
                             search={{ alert: 'low' }}
                             className="hover:bg-muted/45 flex items-center gap-3 px-4 py-4 transition-colors sm:px-5"
                         >
-                            <div className="bg-brand-butter text-brand-forest grid size-10 place-items-center rounded-full">
+                            <div className="bg-brand-butter text-foreground grid size-10 place-items-center rounded-full">
                                 <PackageCheck className="size-4" />
                             </div>
                             <div className="min-w-0 flex-1">
@@ -178,7 +178,7 @@ export function DashboardPage() {
                             search={{ alert: 'expiring' }}
                             className="hover:bg-muted/45 flex items-center gap-3 px-4 py-4 transition-colors sm:px-5"
                         >
-                            <div className="grid size-10 place-items-center rounded-full bg-rose-100 text-rose-700">
+                            <div className="grid size-10 place-items-center rounded-full bg-rose-100 text-rose-700 dark:bg-rose-500/15 dark:text-rose-300">
                                 <AlertTriangle className="size-4" />
                             </div>
                             <div className="min-w-0 flex-1">

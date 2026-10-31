@@ -64,7 +64,7 @@ export function LoginForm() {
   }
 
   return (
-    <Card className="w-full max-w-[27.5rem] rounded-3xl border-border/70 bg-card py-8 shadow-2xl shadow-brand-forest/10">
+    <Card className="w-full max-w-[27.5rem] rounded-3xl border-border/70 bg-card py-8 shadow-2xl shadow-brand-deep/10">
       <CardHeader className="space-y-3 px-6 pb-2 text-left sm:px-8">
         <div className="inline-flex w-fit items-center rounded-full bg-secondary px-3 py-1 text-xs font-bold text-secondary-foreground">
           Đăng nhập nhân sự

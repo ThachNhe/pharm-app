@@ -105,7 +105,7 @@ export function ReportsPage() {
                                     reportQuery.data.totals.revenue
                                 ),
                                 icon: Banknote,
-                                tone: 'bg-emerald-100 text-emerald-700',
+                                tone: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-300',
                             },
                             {
                                 label: 'Lãi gộp',
@@ -113,7 +113,7 @@ export function ReportsPage() {
                                     reportQuery.data.totals.grossProfit
                                 ),
                                 icon: TrendingUp,
-                                tone: 'bg-sky-100 text-sky-700',
+                                tone: 'bg-sky-100 text-sky-700 dark:bg-sky-500/15 dark:text-sky-300',
                             },
                             {
                                 label: 'Đơn hoàn tất',
@@ -121,7 +121,7 @@ export function ReportsPage() {
                                     reportQuery.data.totals.orders
                                 ),
                                 icon: ReceiptText,
-                                tone: 'bg-brand-mint text-brand-forest',
+                                tone: 'bg-brand-mint text-foreground',
                             },
                             {
                                 label: 'Giá trị tồn',
@@ -129,7 +129,7 @@ export function ReportsPage() {
                                     reportQuery.data.totals.inventoryValue
                                 ),
                                 icon: Boxes,
-                                tone: 'bg-amber-100 text-amber-800',
+                                tone: 'bg-amber-100 text-amber-800 dark:bg-amber-500/15 dark:text-amber-300',
                             },
                         ].map(({ label, value, icon: Icon, tone }) => (
                             <Panel key={label} className="p-4">
@@ -250,7 +250,7 @@ export function ReportsPage() {
                                     </div>
                                     <div className="bg-muted h-2 overflow-hidden rounded-full">
                                         <div
-                                            className="bg-brand-forest h-full"
+                                            className="bg-brand-deep dark:bg-primary h-full"
                                             style={{
                                                 width: `${
                                                     reportQuery.data.totals

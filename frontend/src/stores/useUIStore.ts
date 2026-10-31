@@ -1,12 +1,15 @@
 import { create } from 'zustand'
 import { devtools, persist } from 'zustand/middleware'
 
-type Theme = 'light' | 'dark' | 'system'
+export type Theme = 'light' | 'dark' | 'system'
+export type Palette = 'green' | 'blue'
 
 interface UIState {
   // Theme
   theme: Theme
   setTheme: (theme: Theme) => void
+  palette: Palette
+  setPalette: (palette: Palette) => void
 
   // Sidebar
   isSidebarOpen: boolean
@@ -26,8 +29,10 @@ export const useUIStore = create<UIState>()(
     persist(
       (set) => ({
         // Theme
-        theme: 'system',
+        theme: 'light',
         setTheme: (theme) => set({ theme }, false, 'ui/setTheme'),
+        palette: 'green',
+        setPalette: (palette) => set({ palette }, false, 'ui/setPalette'),
 
         // Sidebar
         isSidebarOpen: true,
@@ -55,9 +60,18 @@ export const useUIStore = create<UIState>()(
       }),
       {
         name: 'ui-storage',
-        // Chỉ persist theme và sidebar collapse state
+        // v0 stored an unused 'system' default; start everyone on light until they choose.
+        version: 1,
+        migrate: (persisted) => {
+          const saved = typeof persisted === 'object' && persisted !== null ? persisted : {}
+          const palette: Palette = 'palette' in saved && saved.palette === 'blue' ? 'blue' : 'green'
+          const isSidebarCollapsed = 'isSidebarCollapsed' in saved && saved.isSidebarCollapsed === true
+          return { theme: 'light' as const, palette, isSidebarCollapsed }
+        },
+        // Chỉ persist theme, màu chủ đạo và sidebar collapse state
         partialize: (state) => ({
           theme: state.theme,
+          palette: state.palette,
           isSidebarCollapsed: state.isSidebarCollapsed,
         }),
       },

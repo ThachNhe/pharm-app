@@ -547,8 +547,8 @@ export function InventoryPage({
                                                         className={`px-4 py-3 text-right font-semibold ${
                                                             movement.quantityDelta >
                                                             0
-                                                                ? 'text-emerald-700'
-                                                                : 'text-sky-700'
+                                                                ? 'text-emerald-700 dark:text-emerald-400'
+                                                                : 'text-sky-700 dark:text-sky-400'
                                                         }`}
                                                     >
                                                         {movement.quantityDelta >

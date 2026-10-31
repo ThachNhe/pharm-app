@@ -13,6 +13,21 @@
     rel="stylesheet" />
   <meta name="description" content="PharmApp — phần mềm quản lý nhà thuốc, tồn kho và bán hàng." />
   <title>PharmApp — Quản lý nhà thuốc</title>
+  <script>
+    // Apply the saved theme before first paint; ThemeBootstrap keeps it in sync afterwards.
+    (function () {
+      try {
+        var saved = JSON.parse(localStorage.getItem('ui-storage') || '{}');
+        var state = saved.version === 1 && saved.state ? saved.state : {};
+        var dark = state.theme === 'dark' ||
+          (state.theme === 'system' && window.matchMedia('(prefers-color-scheme: dark)').matches);
+        document.documentElement.classList.toggle('dark', dark);
+        document.documentElement.dataset.palette = state.palette === 'blue' ? 'blue' : 'green';
+      } catch (error) {
+        document.documentElement.dataset.palette = 'green';
+      }
+    })();
+  </script>
 </head>
 
 <body>

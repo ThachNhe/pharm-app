@@ -7,3 +7,4 @@ export {
   useIsDesktop,
   useIsDarkMode,
 } from './useMediaQuery'
+export { useResolvedTheme } from './useResolvedTheme'
