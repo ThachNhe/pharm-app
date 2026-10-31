@@ -181,7 +181,21 @@ describe('Store operations flow', () => {
         isLowStock: false,
       });
       expect(inventoryBeforeSale.body.results[0]).not.toHaveProperty('inventoryValue');
+      expect(inventoryBeforeSale.body.results[0]).not.toHaveProperty('averageImportPrice');
+      expect(inventoryBeforeSale.body.results[0].saleValue).toBe(200000);
       expect(inventoryBeforeSale.body.results[0].batches[0]).not.toHaveProperty('importPrice');
+      expect(inventoryBeforeSale.body.summary).toEqual({ totalStock: 100, saleValue: 200000 });
+
+      const ownerInventoryRes = await request(app)
+        .get(`/v1/stores/${store.id}/inventory`)
+        .set('Authorization', `Bearer ${ownerToken}`)
+        .expect(httpStatus.OK);
+      expect(ownerInventoryRes.body.results[0]).toMatchObject({
+        inventoryValue: 94000,
+        averageImportPrice: 940,
+        saleValue: 200000,
+      });
+      expect(ownerInventoryRes.body.summary).toEqual({ totalStock: 100, saleValue: 200000, inventoryValue: 94000 });
 
       const staffDashboard = await request(app)
         .get(`/v1/stores/${store.id}/dashboard`)

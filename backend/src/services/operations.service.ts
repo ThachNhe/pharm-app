@@ -541,12 +541,16 @@ const buildInventoryRows = async (storeId: string, search?: string) => {
       (sum, batch) => sum.plus(batch.quantityRemaining.mul(batch.importPrice)),
       new PrismaRuntime.Decimal(0),
     );
+    const averageImportPrice = totalStock.gt(0) ? inventoryValue.div(totalStock).toDecimalPlaces(2) : null;
+    const saleValue = totalStock.mul(storeMedicine.sellingPrice);
     const nearestExpiry = medicineBatches.find((batch) => batch.expiryDate >= today)?.expiryDate ?? null;
     const hasExpiringBatch = medicineBatches.some((batch) => batch.expiryDate >= today && batch.expiryDate <= expiringLimit);
 
     return {
       ...serializeMedicine(storeMedicine, { total: totalStock, available: availableStock }),
       inventoryValue: Number(inventoryValue),
+      averageImportPrice: averageImportPrice === null ? null : Number(averageImportPrice),
+      saleValue: Number(saleValue),
       nearestExpiry,
       isLowStock: availableStock.lte(LOW_STOCK_THRESHOLD),
       hasExpiringBatch,
@@ -566,6 +570,7 @@ const hideInventoryCosts = (rows: Awaited<ReturnType<typeof buildInventoryRows>>
   rows.map((item) => ({
     ...item,
     inventoryValue: undefined,
+    averageImportPrice: undefined,
     batches: item.batches.map((batch) => ({
       ...batch,
       importPrice: undefined,
@@ -1595,7 +1600,17 @@ const queryInventory = async (actor: Actor, storeId: string, query: PageQuery & 
   if (query.alert === 'low') rows = rows.filter((item) => item.isLowStock);
   if (query.alert === 'expiring') rows = rows.filter((item) => item.hasExpiringBatch);
   const canViewCosts = access.user.isSystemAdmin || access.role === 'owner' || access.role === 'manager';
-  return paginateRows(canViewCosts ? rows : hideInventoryCosts(rows), page, limit);
+  // Totals cover every filtered row, not only the current page.
+  const sum = (pick: (item: (typeof rows)[number]) => number) =>
+    Number(rows.reduce((total, item) => total.plus(pick(item)), new PrismaRuntime.Decimal(0)));
+  return {
+    ...paginateRows(canViewCosts ? rows : hideInventoryCosts(rows), page, limit),
+    summary: {
+      totalStock: sum((item) => item.totalStock),
+      saleValue: sum((item) => item.saleValue),
+      inventoryValue: canViewCosts ? sum((item) => item.inventoryValue) : undefined,
+    },
+  };
 };
 
 const queryInventoryMovements = async (actor: Actor, storeId: string, query: DateQuery) => {

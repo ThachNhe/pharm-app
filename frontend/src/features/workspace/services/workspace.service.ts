@@ -4,6 +4,7 @@ import type {
     ImportPayload,
     ImportReceipt,
     InventoryMedicine,
+    InventoryList,
     InventoryMovement,
     Medicine,
     MedicinePayload,
@@ -115,7 +116,7 @@ export const workspaceService = {
         ),
 
     getInventory: (storeId: string, params?: Record<string, unknown>) =>
-        apiGet<Paginated<InventoryMedicine>>(
+        apiGet<InventoryList>(
             API_ENDPOINTS.OPERATIONS.INVENTORY(storeId),
             cleanParams(params)
         ),

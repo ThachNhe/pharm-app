@@ -1,7 +1,10 @@
+import type { Paginated } from './common.types';
 import type { Medicine } from './medicine.types';
 
 export interface InventoryMedicine extends Medicine {
     inventoryValue?: number;
+    averageImportPrice?: number | null;
+    saleValue: number;
     nearestExpiry?: string | null;
     isLowStock: boolean;
     hasExpiringBatch: boolean;
@@ -13,6 +16,14 @@ export interface InventoryMedicine extends Medicine {
         quantityRemaining: number;
         isExpired: boolean;
     }>;
+}
+
+export interface InventoryList extends Paginated<InventoryMedicine> {
+    summary: {
+        totalStock: number;
+        saleValue: number;
+        inventoryValue?: number;
+    };
 }
 
 export interface InventoryMovement {

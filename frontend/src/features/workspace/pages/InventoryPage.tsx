@@ -232,26 +232,49 @@ export function InventoryPage({
                     ) : (
                         <>
                             <div className="overflow-x-auto">
-                                <table className="w-full min-w-[920px] text-left text-sm">
+                                <table
+                                    className={`w-full text-left text-sm ${
+                                        canViewCosts
+                                            ? 'min-w-[1280px]'
+                                            : 'min-w-[1040px]'
+                                    }`}
+                                >
                                     <thead className="bg-muted/55 text-muted-foreground text-xs uppercase">
                                         <tr>
                                             <RowNumberHead />
-                                            <th className="px-4 py-3 font-medium">
-                                                Mặt hàng
-                                            </th>
-                                            <th className="px-4 py-3 text-right font-medium">
-                                                Tồn khả dụng
+                                            <th className="px-4 py-3 font-medium whitespace-nowrap">
+                                                Mã SP
                                             </th>
                                             <th className="px-4 py-3 font-medium">
-                                                Hạn gần nhất
+                                                Tên sản phẩm
+                                            </th>
+                                            <th className="px-4 py-3 font-medium">
+                                                ĐVT
+                                            </th>
+                                            <th className="px-4 py-3 text-right font-medium whitespace-nowrap">
+                                                Tồn kho
                                             </th>
                                             {canViewCosts ? (
-                                                <th className="px-4 py-3 text-right font-medium">
-                                                    Giá trị tồn
+                                                <th className="px-4 py-3 text-right font-medium whitespace-nowrap">
+                                                    Giá nhập
                                                 </th>
                                             ) : null}
-                                            <th className="px-4 py-3 font-medium">
-                                                Cảnh báo
+                                            <th className="px-4 py-3 text-right font-medium whitespace-nowrap">
+                                                Giá bán
+                                            </th>
+                                            {canViewCosts ? (
+                                                <th className="px-4 py-3 text-right font-medium whitespace-nowrap">
+                                                    Thành tiền nhập
+                                                </th>
+                                            ) : null}
+                                            <th className="px-4 py-3 text-right font-medium whitespace-nowrap">
+                                                Thành tiền bán
+                                            </th>
+                                            <th className="px-4 py-3 font-medium whitespace-nowrap">
+                                                Nhóm sản phẩm
+                                            </th>
+                                            <th className="px-4 py-3 font-medium whitespace-nowrap">
+                                                Vị trí
                                             </th>
                                             <th className="w-16 px-4 py-3 text-right font-medium">
                                                 Lô
@@ -259,6 +282,40 @@ export function InventoryPage({
                                         </tr>
                                     </thead>
                                     <tbody className="divide-border divide-y">
+                                        <tr className="bg-muted/30 font-semibold">
+                                            <td />
+                                            <td />
+                                            <td className="px-4 py-3 uppercase">
+                                                Tổng cộng
+                                            </td>
+                                            <td />
+                                            <td className="px-4 py-3 text-right tabular-nums">
+                                                {formatNumber(
+                                                    inventoryQuery.data.summary
+                                                        .totalStock
+                                                )}
+                                            </td>
+                                            {canViewCosts ? <td /> : null}
+                                            <td />
+                                            {canViewCosts ? (
+                                                <td className="px-4 py-3 text-right tabular-nums">
+                                                    {formatNumber(
+                                                        inventoryQuery.data
+                                                            .summary
+                                                            .inventoryValue ?? 0
+                                                    )}
+                                                </td>
+                                            ) : null}
+                                            <td className="px-4 py-3 text-right tabular-nums">
+                                                {formatNumber(
+                                                    inventoryQuery.data.summary
+                                                        .saleValue
+                                                )}
+                                            </td>
+                                            <td />
+                                            <td />
+                                            <td />
+                                        </tr>
                                         {inventoryQuery.data.results.map(
                                             (medicine, index) => (
                                                 <Fragment key={medicine.id}>
@@ -269,78 +326,76 @@ export function InventoryPage({
                                                                 inventoryQuery.data
                                                             }
                                                         />
+                                                        <td className="text-muted-foreground px-4 py-3 whitespace-nowrap">
+                                                            {medicine.code}
+                                                        </td>
                                                         <td className="px-4 py-3">
                                                             <p className="font-medium">
                                                                 {medicine.name}
                                                             </p>
-                                                            <p className="text-muted-foreground mt-0.5 text-xs">
-                                                                {medicine.barcode ||
-                                                                    'Không có mã vạch'}{' '}
-                                                                ·{' '}
-                                                                {
-                                                                    medicine
-                                                                        .batches
-                                                                        .length
-                                                                }{' '}
-                                                                lô còn tồn
-                                                            </p>
+                                                            {medicine.isLowStock ||
+                                                            medicine.hasExpiringBatch ? (
+                                                                <div className="mt-1 flex flex-wrap gap-1.5">
+                                                                    {medicine.isLowStock ? (
+                                                                        <StatusBadge tone="neutral">
+                                                                            Tồn
+                                                                            thấp
+                                                                        </StatusBadge>
+                                                                    ) : null}
+                                                                    {medicine.hasExpiringBatch ? (
+                                                                        <StatusBadge tone="danger">
+                                                                            Cận
+                                                                            hạn
+                                                                        </StatusBadge>
+                                                                    ) : null}
+                                                                </div>
+                                                            ) : null}
                                                         </td>
-                                                        <td className="px-4 py-3 text-right">
-                                                            <span
-                                                                className={
-                                                                    medicine.isLowStock
-                                                                        ? 'text-muted-foreground font-semibold'
-                                                                        : 'font-semibold'
-                                                                }
-                                                            >
-                                                                {formatNumber(
-                                                                    medicine.availableStock
-                                                                )}
-                                                            </span>{' '}
-                                                            <span className="text-muted-foreground">
-                                                                {medicine.baseUnitName.toLowerCase()}
-                                                            </span>
-                                                        </td>
-                                                        <td
-                                                            className={
-                                                                medicine.hasExpiringBatch
-                                                                    ? 'text-destructive px-4 py-3 font-medium'
-                                                                    : 'px-4 py-3'
+                                                        <td className="px-4 py-3 whitespace-nowrap">
+                                                            {
+                                                                medicine.baseUnitName
                                                             }
-                                                        >
-                                                            {medicine.nearestExpiry
-                                                                ? formatDate(
-                                                                      medicine.nearestExpiry
-                                                                  )
-                                                                : '—'}
+                                                        </td>
+                                                        <td className="px-4 py-3 text-right font-semibold tabular-nums">
+                                                            {formatNumber(
+                                                                medicine.totalStock
+                                                            )}
                                                         </td>
                                                         {canViewCosts ? (
-                                                            <td className="px-4 py-3 text-right font-medium">
-                                                                {formatCurrency(
+                                                            <td className="px-4 py-3 text-right tabular-nums">
+                                                                {medicine.averageImportPrice ==
+                                                                null
+                                                                    ? '—'
+                                                                    : formatNumber(
+                                                                          medicine.averageImportPrice
+                                                                      )}
+                                                            </td>
+                                                        ) : null}
+                                                        <td className="px-4 py-3 text-right tabular-nums">
+                                                            {formatNumber(
+                                                                medicine.sellingPrice
+                                                            )}
+                                                        </td>
+                                                        {canViewCosts ? (
+                                                            <td className="px-4 py-3 text-right tabular-nums">
+                                                                {formatNumber(
                                                                     medicine.inventoryValue ??
                                                                         0
                                                                 )}
                                                             </td>
                                                         ) : null}
-                                                        <td className="px-4 py-3">
-                                                            <div className="flex flex-wrap gap-1.5">
-                                                                {medicine.isLowStock ? (
-                                                                    <StatusBadge tone="neutral">
-                                                                        Tồn thấp
-                                                                    </StatusBadge>
-                                                                ) : null}
-                                                                {medicine.hasExpiringBatch ? (
-                                                                    <StatusBadge tone="danger">
-                                                                        Cận hạn
-                                                                    </StatusBadge>
-                                                                ) : null}
-                                                                {!medicine.isLowStock &&
-                                                                !medicine.hasExpiringBatch ? (
-                                                                    <StatusBadge tone="success">
-                                                                        Ổn định
-                                                                    </StatusBadge>
-                                                                ) : null}
-                                                            </div>
+                                                        <td className="px-4 py-3 text-right tabular-nums">
+                                                            {formatNumber(
+                                                                medicine.saleValue
+                                                            )}
+                                                        </td>
+                                                        <td className="px-4 py-3 whitespace-nowrap">
+                                                            {medicine.category ||
+                                                                '—'}
+                                                        </td>
+                                                        <td className="text-muted-foreground px-4 py-3">
+                                                            {medicine.positionName ||
+                                                                '—'}
                                                         </td>
                                                         <td className="px-4 py-3 text-right">
                                                             <Button
@@ -380,8 +435,8 @@ export function InventoryPage({
                                                             <td
                                                                 colSpan={
                                                                     canViewCosts
-                                                                        ? 7
-                                                                        : 6
+                                                                        ? 12
+                                                                        : 10
                                                                 }
                                                             >
                                                                 {renderBatchDetails(
