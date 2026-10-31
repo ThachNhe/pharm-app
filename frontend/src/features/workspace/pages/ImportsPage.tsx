@@ -234,7 +234,7 @@ function ImportReview({
                         {values.items.length} dòng hàng
                     </p>
                 </div>
-                <p className="text-brand-navy text-2xl font-semibold">
+                <p className="text-brand-forest text-2xl font-semibold">
                     {formatCurrency(total)}
                 </p>
             </div>
@@ -769,7 +769,7 @@ function CreateImportDialog({
                             <p className="text-muted-foreground text-sm">
                                 Tổng tiền nhập
                             </p>
-                            <p className="text-brand-navy mt-2 text-2xl font-semibold">
+                            <p className="text-brand-forest mt-2 text-2xl font-semibold">
                                 {formatCurrency(total)}
                             </p>
                             <p className="text-muted-foreground mt-1 text-xs">

@@ -9,6 +9,7 @@ import {
 import { useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import { BrandLogo } from '@/components/BrandLogo';
+import { CapsuleIllustration } from '@/components/illustrations';
 import { Button } from '@/components/ui/button';
 import { ROUTES } from '@/lib/constants';
 import { cn, getInitials } from '@/lib/utils';
@@ -115,13 +116,13 @@ function WorkspaceShellContent() {
                         key={to}
                         to={to}
                         className={cn(
-                            'flex h-10 items-center gap-3 rounded-md px-3 text-sm font-medium transition-colors',
+                            'focus-visible:ring-sidebar-ring flex h-11 items-center gap-3 rounded-xl px-3 text-sm font-semibold transition-colors outline-none focus-visible:ring-2',
                             active
-                                ? 'bg-sidebar-accent text-sidebar-accent-foreground'
-                                : 'text-sidebar-foreground/70 hover:bg-sidebar-accent/60 hover:text-sidebar-foreground'
+                                ? 'bg-sidebar-primary text-sidebar-primary-foreground shadow-sm'
+                                : 'text-sidebar-foreground/75 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground'
                         )}
                     >
-                        <Icon className="size-4" />
+                        <Icon className="size-[1.125rem]" />
                         <span>{label}</span>
                     </Link>
                 );
@@ -130,14 +131,26 @@ function WorkspaceShellContent() {
     );
 
     return (
-        <div className="bg-background text-foreground min-h-screen lg:grid lg:grid-cols-[248px_minmax(0,1fr)]">
-            <aside className="border-sidebar-border bg-sidebar hidden min-h-screen border-r px-4 py-5 lg:block">
+        <div className="bg-background text-foreground min-h-screen lg:grid lg:grid-cols-[264px_minmax(0,1fr)]">
+            <aside className="bg-sidebar text-sidebar-foreground sticky top-0 hidden h-screen flex-col overflow-y-auto px-4 py-5 lg:flex">
                 <BrandLogo
-                    className="mb-7 h-11 px-2"
-                    markClassName="size-9"
+                    className="mb-8 h-11 px-2"
+                    markClassName="size-10"
                     subtitle="Quản lý nhà thuốc"
+                    tone="inverse"
                 />
                 {navigation}
+                <div className="mt-auto pt-6">
+                    <div className="bg-sidebar-accent relative overflow-hidden rounded-2xl p-4">
+                        <CapsuleIllustration className="absolute top-3 right-3 size-12" />
+                        <p className="text-brand-lime text-xs font-bold tracking-wide uppercase">
+                            FEFO
+                        </p>
+                        <p className="mt-1 pr-12 text-sm leading-5 font-semibold text-white">
+                            Hàng gần hết hạn luôn được bán trước.
+                        </p>
+                    </div>
+                </div>
             </aside>
 
             {mobileMenuOpen ? (
@@ -148,12 +161,13 @@ function WorkspaceShellContent() {
                         onClick={() => setMobileMenuOpen(false)}
                         aria-label="Đóng menu"
                     />
-                    <aside className="border-sidebar-border bg-sidebar relative h-full w-[min(82vw,300px)] border-r p-4 shadow-xl">
+                    <aside className="bg-sidebar text-sidebar-foreground relative h-full w-[min(82vw,300px)] overflow-y-auto p-4 shadow-xl">
                         <div className="mb-6 flex h-11 items-center justify-between">
-                            <BrandLogo markClassName="size-9" />
+                            <BrandLogo markClassName="size-9" tone="inverse" />
                             <Button
                                 size="icon"
                                 variant="ghost"
+                                className="text-white hover:bg-white/10 hover:text-white"
                                 onClick={() => setMobileMenuOpen(false)}
                                 aria-label="Đóng menu"
                             >
@@ -194,7 +208,7 @@ function WorkspaceShellContent() {
                                         queryKey: ['workspace'],
                                     });
                                 }}
-                                className="border-input bg-input-background focus:border-ring focus:ring-ring/20 h-9 max-w-full rounded-md border px-3 text-sm font-medium outline-none focus:ring-3 sm:w-72"
+                                className="border-input bg-input-background focus:border-ring focus:ring-ring/20 h-10 max-w-full rounded-full border px-4 text-sm font-semibold outline-none focus:ring-3 sm:w-72"
                             >
                                 {contextQuery.data.stores.map((store) => (
                                     <option key={store.id} value={store.id}>
@@ -233,11 +247,11 @@ function WorkspaceShellContent() {
                         </div>
 
                         <div className="border-border hidden min-w-0 items-center gap-2 border-l pl-3 md:flex">
-                            <div className="bg-brand-navy grid size-8 shrink-0 place-items-center rounded-full text-xs font-semibold text-white">
+                            <div className="bg-brand-forest ring-brand-mint grid size-9 shrink-0 place-items-center rounded-full text-xs font-bold text-white ring-2">
                                 {getInitials(contextQuery.data.user.name)}
                             </div>
                             <div className="min-w-0">
-                                <p className="max-w-36 truncate text-sm font-medium">
+                                <p className="max-w-36 truncate text-sm font-bold">
                                     {contextQuery.data.user.name}
                                 </p>
                                 <p className="text-muted-foreground max-w-36 truncate text-xs">

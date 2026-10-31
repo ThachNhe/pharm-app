@@ -188,7 +188,7 @@ export function SaleReturnDialog({
                             thống tính
                         </p>
                     </div>
-                    <p className="text-brand-navy text-2xl font-semibold">
+                    <p className="text-brand-forest text-2xl font-semibold">
                         {formatCurrency(estimatedRefund)}
                     </p>
                 </div>

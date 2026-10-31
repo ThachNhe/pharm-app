@@ -64,12 +64,12 @@ export function LoginForm() {
   }
 
   return (
-    <Card className="w-full max-w-[27.5rem] rounded-lg border-border/70 bg-card/95 py-7 shadow-2xl shadow-brand-navy/10 backdrop-blur">
+    <Card className="w-full max-w-[27.5rem] rounded-3xl border-border/70 bg-card py-8 shadow-2xl shadow-brand-forest/10">
       <CardHeader className="space-y-3 px-6 pb-2 text-left sm:px-8">
-        <div className="inline-flex w-fit items-center rounded-full bg-secondary px-3 py-1 text-xs font-medium text-secondary-foreground">
+        <div className="inline-flex w-fit items-center rounded-full bg-secondary px-3 py-1 text-xs font-bold text-secondary-foreground">
           Đăng nhập nhân sự
         </div>
-        <CardTitle className="text-2xl font-semibold leading-tight sm:text-3xl">
+        <CardTitle className="text-2xl font-extrabold leading-tight sm:text-3xl">
           <h1>{challenge ? 'Xác minh đăng nhập' : 'Chào mừng trở lại'}</h1>
         </CardTitle>
         <CardDescription className="max-w-sm leading-6">

@@ -3,12 +3,12 @@ import {
     AlertCircle,
     ChevronLeft,
     ChevronRight,
-    Inbox,
     LoaderCircle,
     Search,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { CapsuleIllustration } from '@/components/illustrations';
 import { cn } from '@/lib/utils';
 
 export function PageHeader({
@@ -23,7 +23,7 @@ export function PageHeader({
     return (
         <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
             <div className="min-w-0">
-                <h1 className="text-foreground text-2xl font-semibold">
+                <h1 className="text-foreground text-2xl font-extrabold sm:text-[1.75rem]">
                     {title}
                 </h1>
                 {description ? (
@@ -51,7 +51,7 @@ export function Panel({
     return (
         <section
             className={cn(
-                'border-border bg-card rounded-lg border shadow-[0_1px_2px_rgba(10,61,82,0.04)]',
+                'border-border bg-card rounded-xl border shadow-[0_1px_3px_rgba(46,79,50,0.06)]',
                 className
             )}
         >
@@ -70,8 +70,8 @@ export function StatusBadge({
     return (
         <span
             className={cn(
-                'inline-flex min-h-6 items-center rounded-full px-2 py-0.5 text-xs font-medium',
-                tone === 'success' && 'bg-emerald-100 text-emerald-800',
+                'inline-flex min-h-6 items-center rounded-full px-2.5 py-0.5 text-xs font-semibold',
+                tone === 'success' && 'bg-brand-mint text-green-800',
                 tone === 'warning' && 'bg-amber-100 text-amber-800',
                 tone === 'danger' && 'bg-rose-100 text-rose-800',
                 tone === 'info' && 'bg-sky-100 text-sky-800',
@@ -135,8 +135,8 @@ export function EmptyState({
     return (
         <div className="grid min-h-52 place-items-center p-8 text-center">
             <div className="max-w-sm">
-                <Inbox className="text-muted-foreground/70 mx-auto size-8" />
-                <h2 className="mt-3 font-medium">{title}</h2>
+                <CapsuleIllustration className="mx-auto" />
+                <h2 className="mt-4 font-bold">{title}</h2>
                 {description ? (
                     <p className="text-muted-foreground mt-1 text-sm leading-6">
                         {description}
@@ -162,8 +162,10 @@ export function ErrorState({
     return (
         <div className="grid min-h-52 place-items-center p-8 text-center">
             <div className="max-w-sm">
-                <AlertCircle className="text-destructive mx-auto size-8" />
-                <h2 className="mt-3 font-medium">{title}</h2>
+                <div className="mx-auto grid size-14 place-items-center rounded-full bg-rose-100">
+                    <AlertCircle className="text-destructive size-7" />
+                </div>
+                <h2 className="mt-4 font-bold">{title}</h2>
                 <p className="text-muted-foreground mt-1 text-sm leading-6">
                     {description ?? 'Vui lòng thử lại sau ít phút.'}
                 </p>
@@ -196,7 +198,7 @@ export function Field({
 }) {
     return (
         <label className={cn('grid gap-1.5 text-sm', className)}>
-            <span className="font-medium">
+            <span className="font-semibold">
                 {label}
                 {required ? (
                     <span className="text-destructive ml-1">*</span>

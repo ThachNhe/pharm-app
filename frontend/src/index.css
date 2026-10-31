@@ -4,6 +4,12 @@
 
 @custom-variant dark (&:is(.dark *));
 
+@theme {
+    --font-sans:
+        'Nunito', ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont,
+        'Segoe UI', sans-serif;
+}
+
 @theme inline {
     --radius-sm: calc(var(--radius) - 4px);
     --radius-md: calc(var(--radius) - 2px);
@@ -32,11 +38,13 @@
     --color-input: var(--input);
     --color-input-background: var(--input-background);
     --color-ring: var(--ring);
-    --color-brand-navy: var(--brand-navy);
-    --color-brand-teal: var(--brand-teal);
+    --color-brand-forest: var(--brand-forest);
+    --color-brand-green: var(--brand-green);
+    --color-brand-lime: var(--brand-lime);
     --color-brand-mint: var(--brand-mint);
-    --color-brand-sky: var(--brand-sky);
-    --color-brand-amber: var(--brand-amber);
+    --color-brand-butter: var(--brand-butter);
+    --color-brand-lavender: var(--brand-lavender);
+    --color-brand-pistachio: var(--brand-pistachio);
     --color-success: var(--success);
     --color-success-foreground: var(--success-foreground);
     --color-warning: var(--warning);
@@ -60,98 +68,102 @@
 
 :root {
     --font-size: 16px;
-    --radius: 0.5rem;
-    --background: #f4f8fa;
-    --foreground: #0e1e26;
+    --radius: 0.75rem;
+    --background: #f5f8f3;
+    --foreground: #16261a;
     --card: #ffffff;
-    --card-foreground: #0e1e26;
+    --card-foreground: #16261a;
     --popover: #ffffff;
-    --popover-foreground: #0e1e26;
-    --primary: #0d8c6a;
+    --popover-foreground: #16261a;
+    --primary: #15803d;
     --primary-foreground: #ffffff;
-    --secondary: #e3f4ef;
-    --secondary-foreground: #0a3d52;
-    --muted: #eaf2f6;
-    --muted-foreground: #5a7a8a;
-    --accent: #f5c96a;
-    --accent-foreground: #30220a;
+    --secondary: #e4f4e6;
+    --secondary-foreground: #1f4a28;
+    --muted: #eef3eb;
+    --muted-foreground: #5c6b60;
+    --accent: #e9f5e9;
+    --accent-foreground: #1f4a28;
     --destructive: #d4183d;
     --destructive-foreground: #ffffff;
-    --border: rgba(10, 61, 82, 0.14);
-    --input: rgba(10, 61, 82, 0.16);
-    --input-background: #f7fbfc;
-    --ring: #4bbfa0;
-    --brand-navy: #0a3d52;
-    --brand-teal: #0d8c6a;
-    --brand-mint: #4bbfa0;
-    --brand-sky: #d9edf4;
-    --brand-amber: #f5c96a;
-    --success: #0d8c6a;
+    --border: rgba(46, 79, 50, 0.13);
+    --input: rgba(46, 79, 50, 0.18);
+    --input-background: #fbfdfa;
+    --ring: #4cb769;
+    --brand-forest: #2e4f32;
+    --brand-green: #15803d;
+    --brand-lime: #7ed957;
+    --brand-mint: #d8f0dc;
+    --brand-butter: #fbefcc;
+    --brand-lavender: #efe4fb;
+    --brand-pistachio: #e3f5c4;
+    --success: #15803d;
     --success-foreground: #ffffff;
     --warning: #f2a93b;
     --warning-foreground: #30220a;
     --info: #2d7da3;
     --info-foreground: #ffffff;
-    --chart-1: #0d8c6a;
-    --chart-2: #2d7da3;
+    --chart-1: #15803d;
+    --chart-2: #7ed957;
     --chart-3: #f2a93b;
-    --chart-4: #4bbfa0;
+    --chart-4: #2e4f32;
     --chart-5: #d4183d;
-    --sidebar: #ffffff;
-    --sidebar-foreground: #0e1e26;
-    --sidebar-primary: #0d8c6a;
-    --sidebar-primary-foreground: #ffffff;
-    --sidebar-accent: #e3f4ef;
-    --sidebar-accent-foreground: #0a3d52;
-    --sidebar-border: rgba(10, 61, 82, 0.14);
-    --sidebar-ring: #4bbfa0;
+    --sidebar: #2e4f32;
+    --sidebar-foreground: #f1f7ef;
+    --sidebar-primary: #7ed957;
+    --sidebar-primary-foreground: #16261a;
+    --sidebar-accent: rgba(255, 255, 255, 0.1);
+    --sidebar-accent-foreground: #ffffff;
+    --sidebar-border: rgba(255, 255, 255, 0.12);
+    --sidebar-ring: #7ed957;
 }
 
 .dark {
-    --background: #071c26;
-    --foreground: #edf7f8;
-    --card: #0d2a36;
-    --card-foreground: #edf7f8;
-    --popover: #0d2a36;
-    --popover-foreground: #edf7f8;
-    --primary: #4bbfa0;
-    --primary-foreground: #05221a;
-    --secondary: #123747;
-    --secondary-foreground: #d9edf4;
-    --muted: #123747;
-    --muted-foreground: #a8c8d2;
-    --accent: #f5c96a;
-    --accent-foreground: #30220a;
+    --background: #0f1a11;
+    --foreground: #eef6ec;
+    --card: #17271a;
+    --card-foreground: #eef6ec;
+    --popover: #17271a;
+    --popover-foreground: #eef6ec;
+    --primary: #4cb769;
+    --primary-foreground: #0b1f10;
+    --secondary: #1f3a24;
+    --secondary-foreground: #d8f0dc;
+    --muted: #1f3a24;
+    --muted-foreground: #a9c2ac;
+    --accent: #1f3a24;
+    --accent-foreground: #d8f0dc;
     --destructive: #ff5c75;
     --destructive-foreground: #2d0710;
-    --border: rgba(217, 237, 244, 0.16);
-    --input: rgba(217, 237, 244, 0.2);
-    --input-background: #0b2430;
-    --ring: #4bbfa0;
-    --brand-navy: #0a3d52;
-    --brand-teal: #0d8c6a;
-    --brand-mint: #4bbfa0;
-    --brand-sky: #d9edf4;
-    --brand-amber: #f5c96a;
-    --success: #4bbfa0;
-    --success-foreground: #05221a;
+    --border: rgba(216, 240, 220, 0.14);
+    --input: rgba(216, 240, 220, 0.2);
+    --input-background: #132216;
+    --ring: #4cb769;
+    --brand-forest: #24402a;
+    --brand-green: #4cb769;
+    --brand-lime: #7ed957;
+    --brand-mint: #1f3a24;
+    --brand-butter: #3a3220;
+    --brand-lavender: #2e2640;
+    --brand-pistachio: #2b3a1c;
+    --success: #4cb769;
+    --success-foreground: #0b1f10;
     --warning: #f5c96a;
     --warning-foreground: #30220a;
     --info: #6db8d6;
     --info-foreground: #061923;
-    --chart-1: #4bbfa0;
-    --chart-2: #6db8d6;
+    --chart-1: #4cb769;
+    --chart-2: #7ed957;
     --chart-3: #f5c96a;
-    --chart-4: #76d7bd;
+    --chart-4: #a9c2ac;
     --chart-5: #ff5c75;
-    --sidebar: #0d2a36;
-    --sidebar-foreground: #edf7f8;
-    --sidebar-primary: #4bbfa0;
-    --sidebar-primary-foreground: #05221a;
-    --sidebar-accent: #123747;
-    --sidebar-accent-foreground: #d9edf4;
-    --sidebar-border: rgba(217, 237, 244, 0.16);
-    --sidebar-ring: #4bbfa0;
+    --sidebar: #132216;
+    --sidebar-foreground: #eef6ec;
+    --sidebar-primary: #7ed957;
+    --sidebar-primary-foreground: #0b1f10;
+    --sidebar-accent: rgba(255, 255, 255, 0.08);
+    --sidebar-accent-foreground: #ffffff;
+    --sidebar-border: rgba(216, 240, 220, 0.12);
+    --sidebar-ring: #7ed957;
 }
 
 @layer base {
@@ -166,14 +178,13 @@
         margin: 0;
         min-width: 320px;
         min-height: 100vh;
-        font-family:
-            Inter,
-            ui-sans-serif,
-            system-ui,
-            -apple-system,
-            BlinkMacSystemFont,
-            'Segoe UI',
-            sans-serif;
+        font-family: var(--font-sans);
+        -webkit-font-smoothing: antialiased;
+    }
+    h1,
+    h2,
+    h3 {
+        letter-spacing: -0.01em;
     }
     button,
     input,

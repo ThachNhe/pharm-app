@@ -11,6 +11,7 @@ type BrandLogoProps = {
   markClassName?: string
   nameClassName?: string
   subtitle?: string
+  tone?: 'default' | 'inverse'
 }
 
 const appSuffix = APP_NAME.endsWith('App') ? 'App' : ''
@@ -26,7 +27,7 @@ export function BrandMark({ className, decorative = false }: BrandMarkProps) {
       aria-hidden={decorative || undefined}
       aria-label={decorative ? undefined : `Biểu tượng ${APP_NAME}`}
     >
-      <rect x="2" y="2" width="44" height="44" rx="13" fill="#0A3D52" />
+      <rect x="2" y="2" width="44" height="44" rx="13" fill="#15803D" />
       <path
         d="M13.5 10.5h13.75c6.9 0 11.25 3.94 11.25 9.85 0 5.97-4.35 9.9-11.25 9.9H21V38h-7.5V10.5Z"
         fill="#F8FCFD"
@@ -37,7 +38,7 @@ export function BrandMark({ className, decorative = false }: BrandMarkProps) {
         width="12.2"
         height="9.9"
         rx="4.95"
-        fill="#4BBFA0"
+        fill="#7ED957"
       />
       <path
         d="M27.1 15.85v8.8"
@@ -54,22 +55,29 @@ export function BrandLogo({
   markClassName,
   nameClassName,
   subtitle,
+  tone = 'default',
 }: BrandLogoProps) {
+  const inverse = tone === 'inverse'
   return (
     <div className={cn('flex min-w-0 items-center gap-3', className)}>
       <BrandMark className={markClassName} decorative />
       <div className="min-w-0">
         <p
           className={cn(
-            'truncate text-base font-semibold tracking-[-0.025em] text-brand-navy dark:text-foreground',
+            'truncate text-lg font-extrabold tracking-[-0.02em]',
+            inverse ? 'text-white' : 'text-brand-forest dark:text-foreground',
             nameClassName,
           )}
         >
           <span>{brandName}</span>
-          {appSuffix ? <span className="text-primary">{appSuffix}</span> : null}
+          {appSuffix ? (
+            <span className={inverse ? 'text-brand-lime' : 'text-primary'}>{appSuffix}</span>
+          ) : null}
         </p>
         {subtitle ? (
-          <p className="truncate text-xs text-muted-foreground">{subtitle}</p>
+          <p className={cn('truncate text-xs', inverse ? 'text-white/65' : 'text-muted-foreground')}>
+            {subtitle}
+          </p>
         ) : null}
       </div>
     </div>

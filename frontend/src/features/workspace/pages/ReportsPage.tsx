@@ -121,7 +121,7 @@ export function ReportsPage() {
                                     reportQuery.data.totals.orders
                                 ),
                                 icon: ReceiptText,
-                                tone: 'bg-brand-sky text-brand-navy',
+                                tone: 'bg-brand-mint text-brand-forest',
                             },
                             {
                                 label: 'Giá trị tồn',
@@ -199,7 +199,7 @@ export function ReportsPage() {
                                                         )}
                                                     </span>
                                                     <div
-                                                        className="bg-brand-sky relative w-full max-w-12 overflow-hidden rounded-t-sm"
+                                                        className="bg-brand-mint relative w-full max-w-12 overflow-hidden rounded-t-sm"
                                                         style={{
                                                             height: `${revenueHeight}px`,
                                                         }}
@@ -250,7 +250,7 @@ export function ReportsPage() {
                                     </div>
                                     <div className="bg-muted h-2 overflow-hidden rounded-full">
                                         <div
-                                            className="bg-brand-navy h-full"
+                                            className="bg-brand-forest h-full"
                                             style={{
                                                 width: `${
                                                     reportQuery.data.totals
