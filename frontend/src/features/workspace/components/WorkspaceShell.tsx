@@ -12,6 +12,12 @@ import { BrandLogo } from '@/components/BrandLogo';
 import { CapsuleIllustration } from '@/components/illustrations';
 import { ThemeSwitcher } from '@/components/ThemeSwitcher';
 import { Button } from '@/components/ui/button';
+import {
+    Sheet,
+    SheetClose,
+    SheetContent,
+    SheetTitle,
+} from '@/components/ui/sheet';
 import { ROUTES } from '@/lib/constants';
 import { cn, getInitials } from '@/lib/utils';
 import { authService } from '@/features/auths/services/auth.service';
@@ -131,17 +137,27 @@ function WorkspaceShellContent() {
         </nav>
     );
 
+    // Only the link list scrolls; brand and footer stay pinned so short viewports never scroll the whole sidebar.
+    const navScrollArea = cn(
+        'min-h-0 flex-1 overflow-y-auto overscroll-contain',
+        '[scrollbar-color:var(--sidebar-border)_transparent] [scrollbar-width:thin]'
+    );
+
     return (
-        <div className="bg-background text-foreground min-h-screen lg:grid lg:grid-cols-[264px_minmax(0,1fr)]">
-            <aside className="bg-sidebar text-sidebar-foreground sticky top-0 hidden h-screen flex-col overflow-y-auto px-4 py-5 lg:flex">
-                <BrandLogo
-                    className="mb-8 h-11 px-2"
-                    markClassName="size-10"
-                    subtitle="Quản lý nhà thuốc"
-                    tone="inverse"
-                />
-                {navigation}
-                <div className="mt-auto pt-6">
+        <div className="bg-background text-foreground min-h-dvh lg:grid lg:grid-cols-[264px_minmax(0,1fr)]">
+            <aside className="bg-sidebar text-sidebar-foreground sticky top-0 hidden h-dvh flex-col overflow-hidden lg:flex">
+                <div className="shrink-0 px-4 pt-5 pb-4">
+                    <BrandLogo
+                        className="h-11 px-2"
+                        markClassName="size-10"
+                        subtitle="Quản lý nhà thuốc"
+                        tone="inverse"
+                    />
+                </div>
+                <div className={cn(navScrollArea, 'px-4 py-2')}>
+                    {navigation}
+                </div>
+                <div className="shrink-0 px-4 pt-4 pb-5 [@media(max-height:640px)]:hidden">
                     <div className="bg-sidebar-accent relative overflow-hidden rounded-2xl p-4">
                         <CapsuleIllustration className="absolute top-3 right-3 size-12" />
                         <p className="text-brand-highlight text-xs font-bold tracking-wide uppercase">
@@ -154,31 +170,36 @@ function WorkspaceShellContent() {
                 </div>
             </aside>
 
-            {mobileMenuOpen ? (
-                <div className="fixed inset-0 z-50 lg:hidden">
-                    <button
-                        type="button"
-                        className="absolute inset-0 bg-black/45"
-                        onClick={() => setMobileMenuOpen(false)}
-                        aria-label="Đóng menu"
-                    />
-                    <aside className="bg-sidebar text-sidebar-foreground relative h-full w-[min(82vw,300px)] overflow-y-auto p-4 shadow-xl">
-                        <div className="mb-6 flex h-11 items-center justify-between">
-                            <BrandLogo markClassName="size-9" tone="inverse" />
+            <Sheet open={mobileMenuOpen} onOpenChange={setMobileMenuOpen}>
+                <SheetContent
+                    side="left"
+                    aria-describedby={undefined}
+                    className="bg-sidebar text-sidebar-foreground w-[min(82vw,300px)] lg:hidden"
+                >
+                    <SheetTitle className="sr-only">Menu điều hướng</SheetTitle>
+                    <div className="border-sidebar-border flex h-16 shrink-0 items-center justify-between border-b px-4">
+                        <BrandLogo markClassName="size-9" tone="inverse" />
+                        <SheetClose asChild>
                             <Button
                                 size="icon"
                                 variant="ghost"
                                 className="text-white hover:bg-white/10 hover:text-white"
-                                onClick={() => setMobileMenuOpen(false)}
                                 aria-label="Đóng menu"
                             >
                                 <X />
                             </Button>
-                        </div>
+                        </SheetClose>
+                    </div>
+                    <div
+                        className={cn(
+                            navScrollArea,
+                            'p-4 pb-[max(1rem,env(safe-area-inset-bottom))]'
+                        )}
+                    >
                         {navigation}
-                    </aside>
-                </div>
-            ) : null}
+                    </div>
+                </SheetContent>
+            </Sheet>
 
             <div className="min-w-0">
                 <header className="border-border bg-card/95 sticky top-0 z-30 border-b backdrop-blur">
